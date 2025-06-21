@@ -1,0 +1,9 @@
+# *
+User-agent: *
+Allow: /
+
+# Host
+Host: https://www.bookloop.site
+
+# Sitemaps
+Sitemap: https://www.bookloop.site/sitemap.xml
