@@ -23,7 +23,6 @@ export default withAuth(
 export const config = {
   matcher: [
     "/bookings/:path*",
-    "/listings/:path*",
     "/favourites/:path*",
     "/approvals/:path*",
     "/my-listings/:path*",
