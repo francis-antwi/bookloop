@@ -27,7 +27,6 @@ export const config = {
     "/approvals/:path*",
     "/my-listings/:path*",
     "/notifications/:path*",
-    "/contact/:path*",
     "/admin/:path*",
   
   ],
