@@ -1,39 +1,47 @@
 import nodemailer from "nodemailer";
 
+/**
+ * Sends a password reset email to the specified user.
+ *
+ * @param to - Recipient's email address
+ * @param resetUrl - Password reset link
+ */
 export async function sendPasswordResetEmail(to: string, resetUrl: string) {
-  // Log environment variables to ensure they are loaded
-  console.log("📧 Email Configuration:", {
-    EMAIL_HOST: process.env.EMAIL_HOST,
-    EMAIL_PORT: process.env.EMAIL_PORT,
-    EMAIL_USER: process.env.EMAIL_USER,
-    EMAIL_PASS: process.env.EMAIL_PASS ? "***" : undefined,
-  });
 
   try {
     const transporter = nodemailer.createTransport({
       host: process.env.EMAIL_HOST,
       port: Number(process.env.EMAIL_PORT),
-      secure: false,
+      secure: false, // use TLS: false for Mailtrap
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
       },
     });
 
-    // Send the email
     const info = await transporter.sendMail({
-      from: `"Bookloop Services" <${process.env.EMAIL_USER}>`,
+      from: `"Bookloop Services" <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`,
       to,
-      subject: "Reset Your Password",
+      subject: "🔐 Reset Your Password - Bookloop",
       html: `
-        <p>We received a request to reset your password.</p>
-        <p><a href="${resetUrl}">Click here to reset it</a>. This link expires in 1 hour.</p>
+        <div style="font-family:Arial, sans-serif; font-size:15px; color:#333;">
+          <h2>Password Reset Requested</h2>
+          <p>We received a request to reset your password.</p>
+          <p>
+            <a href="${resetUrl}" style="background:#0070f3; color:white; padding:10px 15px; border-radius:5px; text-decoration:none;">
+              Reset Password
+            </a>
+          </p>
+          <p>If you did not request this, please ignore this email.</p>
+          <hr />
+          <p style="font-size:12px; color:#888;">Bookloop Team</p>
+        </div>
       `,
     });
 
-    console.log("✅ Password reset email sent:", info.messageId);
+    console.log("✅ Email sent successfully:", info.messageId);
   } catch (error) {
-    console.error("❌ Error sending password reset email:", error);
+    console.error("❌ Email sending failed:", error);
     throw error;
   }
 }
