@@ -223,15 +223,7 @@ const UserMenu:React.FC<UserMenuProps> = ({
                                             }
                                         />
                                     </div>
-                                    <MenuItem 
-                                            onClick={() => {router.push('/contact'); setIsOpen(false);}}
-                                            label="Contact Us"
-                                            icon={
-                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-                                                </svg>
-                                            }
-                                        />
+                                    
 
                                     <hr className="my-2 border-slate-200" />
 
@@ -253,6 +245,7 @@ const UserMenu:React.FC<UserMenuProps> = ({
                                 </div>
                             </>
                         ) : (
+                            
                             <div className="py-2">
                                 <div className="px-6 py-4 border-b border-slate-200">
                                     <h3 className="font-semibold text-slate-900">Welcome!</h3>
@@ -279,6 +272,15 @@ const UserMenu:React.FC<UserMenuProps> = ({
                                         }
                                         className="text-green-600 hover:bg-green-50"
                                     />
+                                    <MenuItem 
+                                            onClick={() => {router.push('/contact'); setIsOpen(false);}}
+                                            label="Contact Us"
+                                            icon={
+                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+                                                </svg>
+                                            }
+                                        />
                                 </div>
                                                 <div className="px-2 space-y-1">
                                     
