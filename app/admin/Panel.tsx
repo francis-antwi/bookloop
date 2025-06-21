@@ -407,17 +407,19 @@ const BookingDashboard = () => {
                         {listing.address}
                       </div>
                     </td>
-                    <td className="py-4 px-6 font-semibold text-gray-900">${listing.price}</td>
+                    <td className="py-4 px-6 font-semibold text-gray-900">₵{listing.price}</td>
                     <td className="py-4 px-6">
                       <StatusBadge status={listing.status} />
                     </td>
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-2 justify-end">
-                        <ActionButton variant="secondary" onClick={() => {}}>
-                          <Eye size={14} className="inline mr-1" />
-                          View
-                        </ActionButton>
-                        {listing.status === 'PENDING' && (
+                              <ActionButton
+                      variant="secondary"
+                      onClick={() => router.push(`/listings/${listing.id}`)}
+                    >
+                      <Eye size={14} className="inline mr-1" />
+                      View
+                    </ActionButton>       {listing.status === 'PENDING' && (
                           <>
                             <ActionButton 
                               variant="success" 
