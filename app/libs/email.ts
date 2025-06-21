@@ -46,7 +46,7 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string) {
       `,
     });
 
-    console.log("✅ Email sent successfully:", info.messageId);
+    console.log("Email sent successfully:", info.messageId);
   } catch (error) {
     console.error("❌ Email sending failed:", error);
     throw new Error("Could not send email. Please try again later.");
