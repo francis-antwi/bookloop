@@ -8,18 +8,18 @@ import nodemailer from "nodemailer";
  */
 export async function sendPasswordResetEmail(to: string, resetUrl: string) {
   console.log("📧 Email Configuration:", {
-  EMAIL_HOST: process.env.EMAIL_HOST,
-  EMAIL_PORT: process.env.EMAIL_PORT,
-  EMAIL_USER: process.env.EMAIL_USER,
-  EMAIL_PASS: process.env.EMAIL_PASS ? "***" : undefined,
-});
-
+    EMAIL_HOST: process.env.EMAIL_HOST,
+    EMAIL_PORT: process.env.EMAIL_PORT,
+    EMAIL_USER: process.env.EMAIL_USER,
+    EMAIL_PASS: process.env.EMAIL_PASS ? "***" : undefined,
+    EMAIL_FROM: process.env.EMAIL_FROM,
+  });
 
   try {
     const transporter = nodemailer.createTransport({
       host: process.env.EMAIL_HOST,
       port: Number(process.env.EMAIL_PORT),
-      secure: false, // use TLS: false for Mailtrap
+      secure: false, // Gmail with port 587 should use secure: false + TLS
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
@@ -41,7 +41,7 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string) {
           </p>
           <p>If you did not request this, please ignore this email.</p>
           <hr />
-          <p style="font-size:12px; color:#888;">Bookloop Team</p>
+          <p style="font-size:12px; color:#888;">— Bookloop Team</p>
         </div>
       `,
     });
@@ -49,6 +49,6 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string) {
     console.log("✅ Email sent successfully:", info.messageId);
   } catch (error) {
     console.error("❌ Email sending failed:", error);
-    throw error;
+    throw new Error("Could not send email. Please try again later.");
   }
 }
