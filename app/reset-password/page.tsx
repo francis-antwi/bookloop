@@ -21,12 +21,21 @@ export default function ResetPasswordPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!token) {
+      toast.error("Missing reset token.");
+      return;
+    }
+
     try {
-      await axios.post("/api/auth/reset-password", { token, newPassword: password });
+      await axios.post("/api/auth/reset-password", {
+        token,
+        newPassword: password,
+      });
       toast.success("Password reset successful");
       router.push("/");
-    } catch {
-      toast.error("Reset failed");
+    } catch (err: any) {
+      console.error("❌ Reset password error:", err.response?.data || err.message);
+      toast.error(err.response?.data?.error || "Reset failed");
     }
   };
 
