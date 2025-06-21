@@ -19,7 +19,7 @@ export default function ForgotPasswordPage() {
       const response = await axios.post("/api/auth/forgot-password", data);
 
       if (response.status === 200) {
-        toast.success("✅ Reset link sent to your email.");
+        toast.success("Reset link sent to your email.");
       } else {
         toast.error("Unexpected response from server.");
       }
