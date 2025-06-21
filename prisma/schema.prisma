@@ -1,0 +1,156 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String         @id @default(uuid())
+  name           String?
+  email          String?        @unique
+  emailVerified  DateTime?
+  contactPhone   String?
+  image          String?
+  hashedPassword String?
+  role           UserRole       @default(CUSTOMER)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  favouriteIds   String[]
+  resetToken     String?        // ✅ Add this
+  resetTokenExpiry DateTime?    // ✅ Add this
+
+  accounts       Account[]
+  listings       Listing[]
+  reservations   Reservation[]
+  notifications  Notification[]
+}
+
+enum UserRole {
+  CUSTOMER
+  PROVIDER
+  ADMIN
+}
+
+model Account {
+  id                 String   @id @default(uuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?
+  access_token       String?
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+model Listing {
+  id               String         @id @default(uuid())
+  title            String
+  description      String
+  imageSrc         String[]
+  createdAt        DateTime       @default(now())
+  category         String
+  userId           String
+  price            Int
+  email            String?
+  contactPhone     String?
+  address          String?
+  status           ListingStatus  @default(PENDING)
+
+  // Apartment-specific fields
+  bedrooms         Int?
+  bathrooms        Int?
+  furnished        Boolean?
+  floor            Int?
+
+  // Car-specific fields
+  make             String?
+  model            String?
+  year             Int?
+  seats            Int?
+  fuelType         String?
+
+  // Event Center-specific fields
+  capacity         Int?
+  rooms            Int?
+  hasStage         Boolean?
+  parkingAvailable Boolean?
+
+  // Restaurant-specific fields
+  cuisineType       String?
+  seatingCapacity   Int?
+  openingHours      String?
+  deliveryAvailable Boolean?
+  menuHighlights    String?
+
+  // Appointment-specific fields
+  serviceType       String?
+  availableDates    String?
+  duration          Int?
+  requiresBooking   Boolean?
+  serviceProvider   String?
+
+  // Relations
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reservations     Reservation[]
+}
+
+
+enum ListingStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Reservation {
+  id           String      @id @default(uuid())
+  userId       String
+  listingId    String
+  startDate    DateTime
+  endDate      DateTime
+  totalPrice   Int
+  createdAt    DateTime    @default(now())
+  email String?
+  contactPhone String?
+  status       ReservationStatus @default(PENDING)
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing      Listing     @relation(fields: [listingId], references: [id], onDelete: Cascade)
+}
+
+enum ReservationStatus {
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  PENDING
+}
+
+
+
+model Notification {
+  id             String            @id @default(uuid())
+  userId         String?           // Made optional
+  message        String
+  type           NotificationType
+  read           Boolean           @default(false)
+  adminOnly      Boolean           @default(false) // New field
+  createdAt      DateTime          @default(now())
+  email          String?
+  contactPhone   String?
+
+  user           User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum NotificationType {
+  BOOKING
+  SYSTEM
+}
+

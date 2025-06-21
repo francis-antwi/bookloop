@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+:root {
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.leaflet-top, 
+.leaflet-bottom,
+.leaflet-pane {
+  z-index: 10 !important; 
+}
+
+.leaflet-control {
+  z-index: 1000 !important;
+}
+
+.rdrMonth { 
+  width: 100% !important;
+}
+
+.rdrCalendarWrapper { 
+  width: 100% !important;
+  font-size: 16px !important;
+}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+:root {
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.leaflet-top, 
+.leaflet-bottom,
+.leaflet-pane {
+  z-index: 10 !important; 
+}
+
+.leaflet-control {
+  z-index: 1000 !important;
+}
+
+
+.rdrMonth { 
+  width: 100% !important;
+}
+
+.rdrCalendarWrapper { 
+  width: 100% !important;
+  font-size: 16px !important;
+}
