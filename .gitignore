@@ -11,3 +11,4 @@ public
 yarn-error.log
 npm-debug.log
 .env
+.env.production
