@@ -15,8 +15,8 @@ export const authOptions: AuthOptions = {
     CredentialsProvider({
       name: "credentials",
       credentials: {
-        email: { label: "email", type: "text" },
-        password: { label: "password", type: "password" },
+        email: { label: "Email", type: "text" },
+        password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
@@ -27,7 +27,7 @@ export const authOptions: AuthOptions = {
           where: { email: credentials.email },
         });
 
-        if (!user || !user?.hashedPassword) {
+        if (!user || !user.hashedPassword) {
           throw new Error("Invalid credentials");
         }
 
@@ -45,22 +45,38 @@ export const authOptions: AuthOptions = {
     }),
   ],
   pages: {
-    signIn: "/",
+    signIn: "/", // Redirect to your login page
   },
-  debug: process.env.NODE_ENV === "development",
   session: {
     strategy: "jwt",
   },
   secret: process.env.NEXTAUTH_SECRET,
+  debug: process.env.NODE_ENV === "development",
 
-  // ✅ FIX: comma was missing before this line
   callbacks: {
+    async signIn({ user, account }) {
+      if (account?.provider === "google") {
+        const existingUser = await prisma.user.findUnique({
+          where: { email: user.email || "" },
+        });
+
+        if (existingUser?.hashedPassword) {
+          throw new Error(
+            "Email already registered with a password. Please sign in using your email and password."
+          );
+        }
+      }
+
+      return true;
+    },
+
     async jwt({ token, user }) {
       if (user) {
         token.role = user.role;
       }
       return token;
     },
+
     async session({ session, token }) {
       if (session.user && token.role) {
         session.user.role = token.role;
