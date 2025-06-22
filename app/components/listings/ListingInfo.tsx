@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Calendar, MapPin, Phone, Mail, Tag, Clock, Users, Car, Home, Building, Utensils, Settings, X } from "lucide-react";
+import { Calendar, MapPin, Phone, Mail, Tag, Clock, Users, Car, Home, Building, Utensils, Settings, X, ChevronDown, ChevronUp } from "lucide-react";
 
 interface ListingInfoProps {
   listing?: {
@@ -119,24 +119,24 @@ const InfoItem: React.FC<{
   isClickable?: boolean;
 }> = ({ icon, label, value, onClick, isClickable }) => (
   <div 
-    className={`flex items-center gap-3 p-3 bg-gray-50 rounded-lg transition-colors ${
+    className={`flex items-start gap-3 p-4 bg-white rounded-xl border transition-all duration-200 ${
       isClickable 
-        ? 'hover:bg-blue-50 hover:border-blue-200 border border-transparent cursor-pointer' 
-        : 'hover:bg-gray-100'
+        ? 'hover:bg-blue-50 hover:border-blue-200 border-gray-200 cursor-pointer hover:shadow-md active:scale-95' 
+        : 'border-gray-100 hover:border-gray-200'
     }`}
     onClick={onClick}
   >
-    <div className={`flex-shrink-0 ${isClickable ? 'text-blue-600' : 'text-gray-600'}`}>
+    <div className={`flex-shrink-0 mt-0.5 ${isClickable ? 'text-blue-600' : 'text-gray-500'}`}>
       {icon}
     </div>
     <div className="flex-1 min-w-0">
-      <p className="text-sm font-medium text-gray-900">{label}</p>
-      <p className={`text-sm truncate ${isClickable ? 'text-blue-600' : 'text-gray-600'}`}>
+      <p className="text-sm font-medium text-gray-900 leading-tight">{label}</p>
+      <p className={`text-sm mt-1 ${isClickable ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
         {value.toString()}
       </p>
     </div>
     {isClickable && (
-      <div className="text-blue-600 opacity-50">
+      <div className="text-blue-500 opacity-60 flex-shrink-0">
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
         </svg>
@@ -145,14 +145,81 @@ const InfoItem: React.FC<{
   </div>
 );
 
+const CollapsibleSection: React.FC<{
+  title: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}> = ({ title, icon, children, defaultOpen = true }) => {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <button
+        className="w-full flex items-center justify-between p-4 sm:p-6 bg-gradient-to-r from-gray-50 to-gray-100 hover:from-gray-100 hover:to-gray-200 transition-all duration-200"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <div className="flex items-center gap-3">
+          <div className="text-gray-600">
+            {icon}
+          </div>
+          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+        </div>
+        <div className="text-gray-400">
+          {isOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+        </div>
+      </button>
+      
+      <div className={`transition-all duration-300 ease-in-out ${
+        isOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+      } overflow-hidden`}>
+        <div className="p-4 sm:p-6">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const QuickContactButtons: React.FC<{ listing: any }> = ({ listing }) => (
+  <div className="sticky bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 sm:hidden">
+    <div className="flex gap-3">
+      {listing.contactPhone && (
+        <button
+          onClick={() => window.open(`tel:${listing.contactPhone}`, '_self')}
+          className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 px-4 rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+        >
+          <Phone className="w-4 h-4" />
+          Call
+        </button>
+      )}
+      {listing.email && (
+        <button
+          onClick={() => window.open(`mailto:${listing.email}`, '_self')}
+          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+        >
+          <Mail className="w-4 h-4" />
+          Email
+        </button>
+      )}
+    </div>
+  </div>
+);
+
 const ListingInfo: React.FC<ListingInfoProps> = ({ listing }) => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   
   if (!listing) {
     return (
-      <div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-gray-200 rounded-full mx-auto mb-4 flex items-center justify-center">
+            <Tag className="w-8 h-8 text-gray-400" />
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No listing data available</h3>
+          <p className="text-gray-500">Please check back later or contact support.</p>
         </div>
-     
+      </div>
     );
   }
 
@@ -163,15 +230,15 @@ const ListingInfo: React.FC<ListingInfoProps> = ({ listing }) => {
       {/* Image Modal */}
       {selectedImage && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-2 sm:p-4"
           onClick={() => setSelectedImage(null)}
         >
-          <div className="relative max-w-4xl max-h-full">
+          <div className="relative max-w-full max-h-full">
             <button
-              className="absolute -top-12 right-0 text-white hover:text-gray-300 transition-colors"
+              className="absolute -top-10 sm:-top-12 right-0 text-white hover:text-gray-300 transition-colors z-10"
               onClick={() => setSelectedImage(null)}
             >
-              <X className="w-8 h-8" />
+              <X className="w-6 h-6 sm:w-8 sm:h-8" />
             </button>
             <img
               src={selectedImage}
@@ -183,116 +250,128 @@ const ListingInfo: React.FC<ListingInfoProps> = ({ listing }) => {
         </div>
       )}
 
-      <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden">
-        {/* Header Section */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <h1 className="text-2xl font-bold mb-2">{listing.title || "Untitled Listing"}</h1>
-              <div className="flex items-center gap-2 text-blue-100">
-                {getCategoryIcon(listing.category)}
-                <span className="text-lg">{listing.category || "Uncategorized"}</span>
+      <div className="min-h-screen bg-gray-50 pb-20 sm:pb-0">
+        <div className="max-w-4xl mx-auto">
+          {/* Header Section - Mobile Optimized */}
+          <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 text-white shadow-xl">
+            <div className="p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 text-blue-100 mb-2">
+                    {getCategoryIcon(listing.category)}
+                    <span className="text-sm sm:text-base font-medium">{listing.category || "Uncategorized"}</span>
+                  </div>
+                  <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-2 leading-tight">
+                    {listing.title || "Untitled Listing"}
+                  </h1>
+                </div>
+                <div className="flex flex-row sm:flex-col items-start sm:items-end sm:text-right gap-2 sm:gap-1">
+                  <div className="text-2xl sm:text-3xl font-bold text-yellow-300">
+                    GH₵ {listing.price || 'N/A'}
+                  </div>
+                  <div className="text-blue-200 text-xs sm:text-sm">
+                    Updated {formatDate(listing.updatedAt)}
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="text-right">
-              <div className="text-3xl font-bold">GH₵ {(listing.price)}</div>
-              <div className="text-blue-200 text-sm mt-1">
-                Updated {formatDate(listing.updatedAt)}
-              </div>
-            </div>
           </div>
-        </div>
 
-     
-
-        {/* Description Section */}
-        {listing.description && (
-          <div className="p-6 border-b">
-            <h2 className="text-lg font-semibold mb-3">Description</h2>
-            <p className="text-gray-700 leading-relaxed">{listing.description}</p>
-          </div>
-        )}
-
-        {/* Contact Information */}
-        <div className="p-6 border-b bg-gray-50">
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <Phone className="w-5 h-5 text-gray-600" />
-            Contact Information
-          </h2>
-          <div className="grid md:grid-cols-3 gap-4">
-            {listing.contactPhone && (
-              <InfoItem
-                icon={<Phone className="w-4 h-4" />}
-                label="Phone"
-                value={listing.contactPhone}
-                isClickable={true}
-                onClick={() => window.open(`tel:${listing.contactPhone}`, '_self')}
-              />
+          <div className="p-4 sm:p-6 space-y-6">
+            {/* Description Section */}
+            {listing.description && (
+              <CollapsibleSection
+                title="Description"
+                icon={<Tag className="w-5 h-5" />}
+                defaultOpen={true}
+              >
+                <p className="text-gray-700 leading-relaxed text-sm sm:text-base">{listing.description}</p>
+              </CollapsibleSection>
             )}
-            {listing.email && (
-              <InfoItem
-                icon={<Mail className="w-4 h-4" />}
-                label="Email"
-                value={listing.email}
-                isClickable={true}
-                onClick={() => window.open(`mailto:${listing.email}`, '_self')}
-              />
-            )}
-            {listing.address && (
-              <InfoItem
-                icon={<MapPin className="w-4 h-4" />}
-                label="Address"
-                value={listing.address}
-                isClickable={true}
-                onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(listing.address)}`, '_blank')}
-              />
-            )}
-          </div>
-        </div>
 
-        {/* Category-specific Details */}
-        {extraFields && (
-          <div className="p-6">
-            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              {getCategoryIcon(listing.category)}
-              {listing.category} Details
-            </h2>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {Object.entries(extraFields).map(([fieldName, { label, icon }]) => {
-                const value = (listing as any)[fieldName];
-
-                if (
-                  value === null ||
-                  value === undefined ||
-                  value === false ||
-                  value === "" ||
-                  value === 0
-                ) {
-                  return null;
-                }
-
-                return (
+            {/* Contact Information */}
+            <CollapsibleSection
+              title="Contact Information"
+              icon={<Phone className="w-5 h-5" />}
+              defaultOpen={true}
+            >
+              <div className="grid gap-3 sm:gap-4">
+                {listing.contactPhone && (
                   <InfoItem
-                    key={fieldName}
-                    icon={icon || <Tag className="w-4 h-4" />}
-                    label={label}
-                    value={typeof value === 'boolean' ? (value ? 'Yes' : 'No') : value}
+                    icon={<Phone className="w-4 h-4" />}
+                    label="Phone"
+                    value={listing.contactPhone}
+                    isClickable={true}
+                    onClick={() => window.open(`tel:${listing.contactPhone}`, '_self')}
                   />
-                );
-              })}
+                )}
+                {listing.email && (
+                  <InfoItem
+                    icon={<Mail className="w-4 h-4" />}
+                    label="Email"
+                    value={listing.email}
+                    isClickable={true}
+                    onClick={() => window.open(`mailto:${listing.email}`, '_self')}
+                  />
+                )}
+                {listing.address && (
+                  <InfoItem
+                    icon={<MapPin className="w-4 h-4" />}
+                    label="Address"
+                    value={listing.address}
+                    isClickable={true}
+                    onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(listing.address)}`, '_blank')}
+                  />
+                )}
+              </div>
+            </CollapsibleSection>
+
+            {/* Category-specific Details */}
+            {extraFields && (
+              <CollapsibleSection
+                title={`${listing.category} Details`}
+                icon={getCategoryIcon(listing.category)}
+                defaultOpen={false}
+              >
+                <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
+                  {Object.entries(extraFields).map(([fieldName, { label, icon }]) => {
+                    const value = (listing as any)[fieldName];
+
+                    if (
+                      value === null ||
+                      value === undefined ||
+                      value === false ||
+                      value === "" ||
+                      value === 0
+                    ) {
+                      return null;
+                    }
+
+                    return (
+                      <InfoItem
+                        key={fieldName}
+                        icon={icon || <Tag className="w-4 h-4" />}
+                        label={label}
+                        value={typeof value === 'boolean' ? (value ? 'Yes' : 'No') : value}
+                      />
+                    );
+                  })}
+                </div>
+              </CollapsibleSection>
+            )}
+
+            {/* Footer Info */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-6">
+              <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+                <Calendar className="w-4 h-4" />
+                <span>Listed on {formatDate(listing.createdAt)}</span>
+              </div>
             </div>
           </div>
-        )}
-
-        {/* Footer */}
-        <div className="px-6 py-4 bg-gray-50 border-t text-center text-sm text-gray-500">
-          <div className="flex items-center justify-center gap-4">
-            <span className="flex items-center gap-1">
-              <Calendar className="w-4 h-4" />
-              Listed on {formatDate(listing.createdAt)}
-            </span>
-          </div>
         </div>
+
+        {/* Mobile Quick Contact Bar */}
+        <QuickContactButtons listing={listing} />
       </div>
     </>
   );
