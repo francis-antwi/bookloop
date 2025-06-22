@@ -1,7 +1,6 @@
 'use client';
 
 import { useSearchParams, usePathname } from "next/navigation";
-import { useState } from "react";
 import Container from "../Container";
 import CategoryBox from "../CategoryBox";
 import { FaHome, FaCar, FaUtensils } from 'react-icons/fa';
@@ -59,14 +58,13 @@ const Categories = () => {
   const pathname = usePathname();
   const isMainPage = pathname === '/';
 
-  const [activeLabel, setActiveLabel] = useState<string | null>(null);
-
   if (!isMainPage) return null;
 
   return (
     <div className="bg-gradient-to-b from-white via-gray-50/30 to-white">
       <Container>
         <div className="py-4 md:py-6">
+          {/* Header Section */}
           <div className="mb-4 md:mb-6 text-center">
             <h2 className="text-lg md:text-xl font-bold text-gray-900 mb-1">
               What are you looking for?
@@ -76,26 +74,59 @@ const Categories = () => {
             </p>
           </div>
 
-          <div className="overflow-x-auto scrollbar-hide scroll-smooth">
-            <div className="flex justify-center w-max mx-auto gap-2 md:gap-3 px-2">
+          {/* Categories Horizontal Scroll (for all screen sizes) */}
+          <div className="overflow-x-auto scrollbar-hide scroll-smooth -mx-1 px-1">
+            <div className="flex gap-2 md:gap-3">
               {categories.map((item) => (
                 <div key={item.label} className="flex-shrink-0 w-20 md:w-20 lg:w-24">
                   <CategoryBox
                     label={item.label}
                     selected={category === item.label}
                     icon={item.icon}
-                    description={item.description}
-                    isActive={activeLabel === item.label}
-                    onActivate={() =>
-                      setActiveLabel((prev) => (prev === item.label ? null : item.label))
-                    }
                   />
                 </div>
               ))}
             </div>
           </div>
+
+          {/* Selected Category Description */}
+          {category && (
+            <div className="mt-4 md:mt-6 p-3 md:p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-lg">
+                  {categories.find(cat => cat.label === category)?.icon && (
+                    <div className="w-4 h-4 md:w-5 md:h-5 text-blue-600">
+                      {(() => {
+                        const IconComponent = categories.find(cat => cat.label === category)?.icon;
+                        return IconComponent ? <IconComponent size={16} className="md:w-5 md:h-5" /> : null;
+                      })()}
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-base md:text-lg text-blue-900 mb-1">
+                    {category}
+                  </h3>
+                  <p className="text-sm text-gray-700">
+                    {categories.find(cat => cat.label === category)?.description}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </Container>
+
+      {/* Scrollbar hide styles */}
+      <style jsx>{`
+        .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+        }
+      `}</style>
     </div>
   );
 };
