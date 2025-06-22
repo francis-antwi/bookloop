@@ -3,7 +3,7 @@
 import { useSearchParams, usePathname } from "next/navigation";
 import Container from "../Container";
 import CategoryBox from "../CategoryBox";
-import { FaHome, FaCar, FaUtensils} from 'react-icons/fa';
+import { FaHome, FaCar, FaUtensils } from 'react-icons/fa';
 import { GiCommercialAirplane, GiTheaterCurtains } from 'react-icons/gi';
 import { SiAirbnb } from 'react-icons/si';
 import { MdEvent } from 'react-icons/md';
@@ -53,98 +53,38 @@ export const categories = [
 ];
 
 const Categories = () => {
-    const params = useSearchParams();
-    const category = params?.get('category');
-    const pathname = usePathname();
-    const isMainPage = pathname === '/';
-    
-    if (!isMainPage) {
-        return null;
-    }
+  const params = useSearchParams();
+  const category = params?.get('category');
+  const pathname = usePathname();
+  const isMainPage = pathname === '/';
+  
+  if (!isMainPage) {
+    return null;
+  }
 
-    return (
-        <div className="bg-gradient-to-b from-white via-gray-50/30 to-white">
-            <Container>
-                <div className="py-4">
-                    {/* Header Section */}
-                    <div className="mb-4 text-center">
-                        <h2 className="text-lg font-bold text-gray-900 mb-1">
-                            What are you looking for?
-                        </h2>
-                        <p className="text-xs text-gray-600 max-w-2xl mx-auto">
-                            Discover and book from our wide range of services
-                        </p>
-                    </div>
-
-                    {/* Categories - Single horizontal line for all screens */}
-                    <div className="relative">
-                        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide scroll-smooth">
-                            <div className="flex gap-2 px-1">
-                                {categories.map((item) => (
-                                    <div key={item.label} className="flex-shrink-0 w-16">
-                                        <CategoryBox
-                                            label={item.label}
-                                            selected={category === item.label}
-                                            icon={item.icon}
-                                        />
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                        
-                        {/* Scroll indicator for all screens */}
-                        <div className="flex justify-center mt-1">
-                            <div className="flex gap-0.5">
-                                {Array.from({ length: Math.ceil(categories.length / 4) }).map((_, index) => (
-                                    <div
-                                        key={index}
-                                        className="w-1.5 h-1.5 rounded-full bg-gray-300"
-                                    />
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Selected Category Info */}
-                    {category && (
-                        <div className="mt-4 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
-                            <div className="flex items-start gap-3">
-                                <div className="p-2 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-lg">
-                                    {categories.find(cat => cat.label === category)?.icon && (
-                                        <div className="w-4 h-4 text-blue-600">
-                                            {(() => {
-                                                const IconComponent = categories.find(cat => cat.label === category)?.icon;
-                                                return IconComponent ? <IconComponent size={16} /> : null;
-                                            })()}
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="flex-1">
-                                    <h3 className="font-semibold text-base text-blue-900 mb-1">
-                                        {category}
-                                    </h3>
-                                    <p className="text-xs text-blue-700 leading-relaxed">
-                                        {categories.find(cat => cat.label === category)?.description}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </Container>
-
-            {/* Custom scrollbar styles */}
-            <style jsx>{`
-                .scrollbar-hide {
-                    -ms-overflow-style: none;
-                    scrollbar-width: none;
-                }
-                .scrollbar-hide::-webkit-scrollbar {
-                    display: none;
-                }
-            `}</style>
-        </div>
-    );
-}
+  return (
+    <Container>
+      <div className="mb-4 md:mb-6 text-center">
+        <h2 className="text-lg md:text-xl font-bold text-gray-900 mb-1">
+          What are you looking for?
+        </h2>
+        <p className="text-xs md:text-sm text-gray-600 max-w-2xl mx-auto">
+          Discover and book from our wide range of services
+        </p>
+      </div>
+      
+      <div className="pt-4 flex flex-row items-center justify-between overflow-x-auto">
+        {categories.map((item) => (
+          <CategoryBox
+            key={item.label}
+            label={item.label}
+            selected={category === item.label}
+            icon={item.icon}
+          />
+        ))}
+      </div>
+    </Container>
+  );
+};
 
 export default Categories;

@@ -1,4 +1,5 @@
 'use client';
+
 import qs from 'query-string';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback } from 'react';
@@ -10,7 +11,11 @@ interface CategoryBoxProps {
   selected?: boolean;
 }
 
-const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }) => {
+const CategoryBox: React.FC<CategoryBoxProps> = ({ 
+  icon: Icon, 
+  label, 
+  selected 
+}) => {
   const router = useRouter();
   const params = useSearchParams();
 
