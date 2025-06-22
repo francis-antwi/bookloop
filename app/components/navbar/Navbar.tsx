@@ -12,10 +12,9 @@ interface NavbarProps {
 const Navbar: React.FC<NavbarProps> = ({
   currentUser
 }) => {
-
   return (
     <div className="fixed w-full bg-white/80 backdrop-blur-md z-10 shadow-lg border-b border-gray-100">
-      <div className="py-5">
+      <div className="py-2.5"> {/* Reduced height: from py-5 to py-2.5 */}
         <Container>
           <div className="
             flex
