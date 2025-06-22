@@ -78,7 +78,7 @@ const Favourites: React.FC<FavouriteProps> = ({
                         <div className="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center mx-auto mb-6">
                             <Heart className="w-8 h-8 text-gray-400" />
                         </div>
-                        <h3 className="text-2xl font-semibold text-gray-900 mb-3">No favourites yet</h3>
+                        <h3 className="text-2xl font-semibold text-gray-900 mb-3 z-0">No favourites yet</h3>
                         <p className="text-gray-500 mb-8 max-w-md mx-auto">
                             Start exploring and save places you love by clicking the heart icon
                         </p>
