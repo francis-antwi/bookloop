@@ -63,7 +63,7 @@ const Categories = () => {
   return (
     <div className="bg-gradient-to-b from-white via-gray-50/30 to-white">
       <Container>
-        <div className="py-4 md:py-6">
+        <div className="py-2 md:py-2">
           {/* Header Section */}
           <div className="mb-4 md:mb-6 text-center">
             <h2 className="text-lg md:text-xl font-bold text-gray-900 mb-1">
@@ -75,7 +75,7 @@ const Categories = () => {
           </div>
 
           {/* Categories Horizontal Scroll (for all screen sizes) */}
-          <div className="overflow-x-auto scrollbar-hide scroll-smooth -mx-1 px-1">
+          <div className="overflow-x-auto scrollbar-hide scroll-smooth mb-0 -mx-1 px-1">
             <div className="flex gap-2 md:gap-3">
               {categories.map((item) => (
                 <div key={item.label} className="flex-shrink-0 w-20 md:w-20 lg:w-24">

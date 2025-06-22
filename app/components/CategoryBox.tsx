@@ -49,7 +49,7 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({
     <div
       onClick={handleClick}
       className={`
-        mb-1
+        mb-0
         group
         relative
         flex
