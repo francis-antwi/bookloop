@@ -14,11 +14,11 @@ interface CategoriesContainerProps {
   children: React.ReactNode;
 }
 
-// Container component for horizontal layout
+// Container component for horizontal layout - works perfectly on all screen sizes
 export const CategoriesContainer: React.FC<CategoriesContainerProps> = ({ children }) => {
   return (
-    <div className="w-full overflow-x-auto pb-2">
-      <div className="flex items-center justify-center gap-3 md:gap-4 lg:gap-5 min-w-max px-4">
+    <div className="w-full px-2 sm:px-4 py-4 overflow-x-auto">
+      <div className="flex items-center justify-center gap-1 xs:gap-2 sm:gap-3 md:gap-4 lg:gap-5 xl:gap-6 min-w-max">
         {children}
       </div>
     </div>
@@ -64,94 +64,72 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
         items-center
         justify-center
         gap-1
-        md:gap-1.5
-        lg:gap-2
-        px-2
-        py-3
-        md:px-2.5
-        md:py-3
-        lg:px-3
-        lg:py-3.5
+        sm:gap-1.5
+        md:gap-2
+        p-2
+        sm:p-3
+        md:p-4
         rounded-lg
-        md:rounded-xl
+        sm:rounded-xl
         border
         cursor-pointer
         transition-all
-        duration-300
+        duration-200
         ease-out
         hover:scale-[1.02]
-        hover:shadow-lg
-        hover:shadow-black/5
+        hover:shadow-md
         active:scale-[0.98]
-        touch-manipulation
-        aspect-square
-        w-[70px]
-        h-[70px]
-        md:w-[65px]
-        md:h-[65px]
-        lg:w-[70px]
-        lg:h-[70px]
-        xl:w-[75px]
-        xl:h-[75px]
+        w-[60px]
+        h-[60px]
+        xs:w-[65px]
+        xs:h-[65px]
+        sm:w-[70px]
+        sm:h-[70px]
+        md:w-[75px]
+        md:h-[75px]
+        lg:w-[80px]
+        lg:h-[80px]
+        xl:w-[85px]
+        xl:h-[85px]
         flex-shrink-0
         ${
           selected
-            ? 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200 text-blue-700 shadow-md shadow-blue-100'
-            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300'
+            ? 'bg-blue-50 border-blue-200 shadow-sm'
+            : 'bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300 hover:shadow-sm'
         }
       `}
     >
-      {/* Background glow effect for selected state */}
-      {selected && (
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-400/10 to-indigo-400/10 rounded-lg md:rounded-xl blur-xl" />
-      )}
-      
-      {/* Icon container with animated background */}
-      <div
+      {/* Icon */}
+      <Icon 
+        size={16}
         className={`
-          relative
-          p-1.5
-          md:p-1.5
-          lg:p-2
-          rounded-md
-          md:rounded-lg
-          transition-all
-          duration-300
-          ${
-            selected
-              ? 'bg-gradient-to-br from-blue-100 to-indigo-100 shadow-sm'
-              : 'bg-gray-100 group-hover:bg-gray-200'
-          }
+          sm:w-5 sm:h-5
+          md:w-6 md:h-6
+          lg:w-7 lg:h-7
+          xl:w-8 xl:h-8
+          transition-colors
+          mb-0.5
+          sm:mb-1
+          ${selected ? 'text-blue-600' : 'text-gray-600 group-hover:text-gray-700'}
         `}
-      >
-        <Icon 
-          size={16}
-          className={`
-            md:w-4
-            md:h-4
-            lg:w-5
-            lg:h-5
-            transition-all
-            duration-300
-            ${selected ? 'text-blue-600' : 'text-gray-500 group-hover:text-gray-700'}
-          `}
-        />
-      </div>
+      />
 
-      {/* Label with improved typography */}
+      {/* Label */}
       <div
         className={`
+          text-[8px]
+          xs:text-[9px]
+          sm:text-[10px]
+          md:text-xs
+          lg:text-sm
           font-medium
-          md:font-semibold
-          text-[10px]
-          md:text-[10px]
-          lg:text-xs
           leading-tight
+          text-center
           max-w-full
           overflow-hidden
           text-ellipsis
           whitespace-nowrap
-          text-center
+          px-1
           ${
             selected
               ? 'text-blue-700'
@@ -160,35 +138,6 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
         `}
       >
         {label}
-      </div>
-
-      {/* Selection indicator dot */}
-      <div
-        className={`
-          absolute
-          -bottom-0.5
-          md:-bottom-1
-          left-1/2
-          transform
-          -translate-x-1/2
-          w-1
-          h-1
-          md:w-1.5
-          md:h-1.5
-          rounded-full
-          transition-all
-          duration-300
-          ${
-            selected
-              ? 'bg-gradient-to-r from-blue-500 to-indigo-500 opacity-100 scale-100'
-              : 'bg-gray-400 opacity-0 scale-75'
-          }
-        `}
-      />
-
-      {/* Ripple effect on click */}
-      <div className="absolute inset-0 rounded-lg md:rounded-xl overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-blue-400/0 via-blue-400/10 to-blue-400/0 transform -translate-x-full group-active:translate-x-full transition-transform duration-700 ease-out" />
       </div>
     </div>
   );
