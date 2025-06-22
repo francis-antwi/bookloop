@@ -138,9 +138,7 @@ const Categories = () => {
                                     <h3 className="font-semibold text-base md:text-lg text-blue-900 mb-1">
                                         {category}
                                     </h3>
-                                    <p className="text-xs md:text-sm text-blue-700 leading-relaxed">
-                                        {categories.find(cat => cat.label === category)?.description}
-                                    </p>
+                                  
                                 </div>
                             </div>
                         </div>
