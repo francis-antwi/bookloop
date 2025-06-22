@@ -9,10 +9,6 @@ import Button from "../Button";
 import Image from "next/image";
 import HeartButton from "../HeartButton";
 
-// ============================================================================
-// TYPES & INTERFACES
-// ============================================================================
-
 interface ListingCardProps {
   data: SafeListing;
   reservation?: Reservation;
@@ -24,10 +20,6 @@ interface ListingCardProps {
   currentUser?: SafeUser | null;
 }
 
-// ============================================================================
-// COMPONENT
-// ============================================================================
-
 const ListingCard: React.FC<ListingCardProps> = ({
   data,
   reservation,
@@ -38,18 +30,19 @@ const ListingCard: React.FC<ListingCardProps> = ({
   actionId = "",
   currentUser,
 }) => {
-  // --------------------------------------------------------------------------
-  // HOOKS & STATE
-  // --------------------------------------------------------------------------
-  
   const router = useRouter();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isImageLoading, setIsImageLoading] = useState(true);
   const [isHovered, setIsHovered] = useState(false);
 
-  // --------------------------------------------------------------------------
-  // COMPUTED VALUES
-  // --------------------------------------------------------------------------
+  const handleCancel = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      e.stopPropagation();
+      if (disabled) return;
+      onAction?.(actionId);
+    },
+    [onAction, actionId, disabled]
+  );
 
   const price = useMemo(() => {
     return reservation ? reservation.totalPrice : data.price;
@@ -62,326 +55,204 @@ const ListingCard: React.FC<ListingCardProps> = ({
     return `${format(start, 'PP')} - ${format(end, 'PP')}`;
   }, [reservation]);
 
-  const currentImageSrc = data.imageSrc[currentImageIndex];
-  const hasMultipleImages = data.imageSrc.length > 1;
-  const hasImages = data.imageSrc.length > 0;
-  const isAppointment = data.category === 'Appointments';
-  const hasAvailableDates = isAppointment && data.availableDates?.length > 0;
-
-  // --------------------------------------------------------------------------
-  // EVENT HANDLERS
-  // --------------------------------------------------------------------------
-
-  const handleCancel = useCallback(
-    (e: React.MouseEvent<HTMLButtonElement>) => {
-      e.stopPropagation();
-      if (disabled) return;
-      onAction?.(actionId);
-    },
-    [onAction, actionId, disabled]
-  );
-
-  const handleCardClick = useCallback(() => {
-    router.push(`/listings/${data.id}`);
-  }, [router, data.id]);
-
-  const handleMouseEnter = useCallback(() => {
-    setIsHovered(true);
-  }, []);
-
-  const handleMouseLeave = useCallback(() => {
-    setIsHovered(false);
-  }, []);
-
-  const handleNextImage = useCallback((e: React.MouseEvent) => {
+  const handleNextImage = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!hasImages) return;
+    if (data.imageSrc.length === 0) return;
     setCurrentImageIndex((prevIndex) => (prevIndex + 1) % data.imageSrc.length);
-  }, [hasImages, data.imageSrc.length]);
+  };
 
-  const handlePrevImage = useCallback((e: React.MouseEvent) => {
+  const handlePrevImage = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!hasImages) return;
+    if (data.imageSrc.length === 0) return;
     setCurrentImageIndex((prevIndex) =>
       prevIndex === 0 ? data.imageSrc.length - 1 : prevIndex - 1
     );
-  }, [hasImages, data.imageSrc.length]);
-
-  const handleEditClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    onEdit?.(data);
-  }, [onEdit, data]);
-
-  const handleImageLoad = useCallback(() => {
-    setIsImageLoading(false);
-  }, []);
-
-  // --------------------------------------------------------------------------
-  // RENDER HELPERS
-  // --------------------------------------------------------------------------
-
-  const renderImagePlaceholder = () => (
-    <div className="flex flex-col justify-center items-center w-full h-full text-gray-400 bg-gradient-to-br from-gray-50 to-gray-100">
-      <svg 
-        width="48" 
-        height="48" 
-        viewBox="0 0 24 24" 
-        fill="none" 
-        stroke="currentColor" 
-        strokeWidth="1" 
-        strokeLinecap="round" 
-        strokeLinejoin="round" 
-        className="mb-3 opacity-60"
-      >
-        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-        <circle cx="8.5" cy="8.5" r="1.5" />
-        <polyline points="21,15 16,10 5,21" />
-      </svg>
-      <span className="text-sm font-medium text-gray-500">No Images Available</span>
-    </div>
-  );
-
-  const renderNavigationButton = (direction: 'prev' | 'next', onClick: (e: React.MouseEvent) => void) => {
-    const isNext = direction === 'next';
-    const translateClass = isNext ? 'translate-x-2' : '-translate-x-2';
-    
-    return (
-      <button
-        onClick={onClick}
-        className={`absolute top-1/2 ${isNext ? 'right-3' : 'left-3'} transform -translate-y-1/2 
-          bg-white/95 backdrop-blur-sm hover:bg-white hover:scale-110 
-          text-gray-800 w-10 h-10 rounded-full shadow-lg 
-          transition-all duration-300 ease-out flex items-center justify-center
-          hover:shadow-xl border border-white/20
-          ${isHovered ? 'opacity-100 translate-x-0' : `opacity-0 ${translateClass}`}`}
-        aria-label={`${direction === 'next' ? 'Next' : 'Previous'} image`}
-      >
-        <svg 
-          width="18" 
-          height="18" 
-          viewBox="0 0 24 24" 
-          fill="none" 
-          stroke="currentColor" 
-          strokeWidth="2.5" 
-          strokeLinecap="round" 
-          strokeLinejoin="round"
-        >
-          <polyline points={isNext ? "9,18 15,12 9,6" : "15,18 9,12 15,6"} />
-        </svg>
-      </button>
-    );
   };
 
-  const renderImageCounter = () => (
-    <div className={`absolute bottom-4 left-4 bg-black/80 backdrop-blur-sm text-white 
-      px-3 py-1.5 rounded-full text-xs font-semibold tracking-wide
-      transition-all duration-300 border border-white/10
-      ${isHovered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
-      {currentImageIndex + 1} / {data.imageSrc.length}
-    </div>
-  );
-
-  const renderCategoryBadge = () => (
-    <div className="absolute top-4 left-4 z-10">
-      <span className="bg-gradient-to-r from-blue-500 to-blue-600 backdrop-blur-sm 
-        text-white px-3 py-1.5 rounded-full text-xs font-bold tracking-wide
-        shadow-lg border border-blue-400/20">
-        {data.category}
-      </span>
-    </div>
-  );
-
-  const renderAvailableDates = () => (
-    <div className="mb-5 p-4 bg-gradient-to-r from-emerald-50 to-green-50 
-      rounded-xl border border-emerald-200/50 shadow-sm">
-      <div className="flex items-start space-x-3">
-        <div className="flex-shrink-0 w-5 h-5 bg-emerald-100 rounded-full flex items-center justify-center mt-0.5">
-          <svg 
-            width="12" 
-            height="12" 
-            viewBox="0 0 24 24" 
-            fill="none" 
-            stroke="currentColor" 
-            strokeWidth="3" 
-            strokeLinecap="round" 
-            strokeLinejoin="round" 
-            className="text-emerald-600"
-          >
-            <path d="M9 11l3 3l8-8" />
-          </svg>
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-bold text-emerald-800 mb-2">Available Dates</div>
-          <div className="flex flex-wrap gap-2">
-            {data.availableDates!.slice(0, 3).map((date, index) => (
-              <span 
-                key={index} 
-                className="inline-flex items-center bg-white px-3 py-1.5 rounded-lg 
-                  text-xs font-semibold text-emerald-700 border border-emerald-200
-                  shadow-sm hover:shadow-md transition-shadow duration-200"
-              >
-                {format(new Date(date), 'MMM dd')}
-              </span>
-            ))}
-            {data.availableDates!.length > 3 && (
-              <span className="inline-flex items-center px-3 py-1.5 text-xs 
-                text-emerald-600 font-bold bg-emerald-100/50 rounded-lg">
-                +{data.availableDates!.length - 3} more
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderActionButtons = () => (
-    <div className="flex gap-3 pt-4 border-t border-gray-100">
-      {onEdit && (
-        <Button
-          disabled={disabled}
-          small
-          label="Edit Listing"
-          onClick={handleEditClick}
-          className="flex-1 bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200
-            hover:border-gray-300 transition-all duration-200 font-medium"
-        />
-      )}
-      {onAction && actionLabel && (
-        <Button
-          disabled={disabled}
-          small
-          label={actionLabel}
-          onClick={handleCancel}
-          className="flex-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700
-            text-white border-0 shadow-sm hover:shadow-md transition-all duration-200 font-medium"
-        />
-      )}
-    </div>
-  );
-
-  // --------------------------------------------------------------------------
-  // MAIN RENDER
-  // --------------------------------------------------------------------------
+  const currentImageSrc = data.imageSrc[currentImageIndex];
 
   return (
     <div
-      onClick={handleCardClick}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      className="group cursor-pointer transition-all duration-500 ease-out
-        hover:scale-[1.03] hover:shadow-2xl hover:-translate-y-1 
-        mt-6 relative z-0"
+      onClick={() => router.push(`/listings/${data.id}`)}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      className="group cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl mt-20 z-0"
     >
-      <div className="bg-white rounded-3xl overflow-hidden shadow-lg hover:shadow-2xl 
-        transition-all duration-500 border border-gray-100 hover:border-gray-200
-        backdrop-blur-sm">
-        
-        {/* ===== IMAGE SECTION ===== */}
+      <div className="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100">
+        {/* Image Section */}
         <div className="relative aspect-[4/3] overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200">
-          {hasImages ? (
+          {currentImageSrc ? (
             <>
               {/* Loading State */}
               {isImageLoading && (
                 <div className="absolute inset-0 bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 animate-pulse" />
               )}
               
-              {/* Main Image */}
               <Image
                 src={currentImageSrc}
                 alt={`${data.address} - Image ${currentImageIndex + 1}`}
                 fill
-                className={`object-cover transition-all duration-700 ease-out
-                  ${isImageLoading ? 'opacity-0 scale-110' : 'opacity-100 scale-100'} 
-                  group-hover:scale-110`}
-                onLoad={handleImageLoad}
-                priority={currentImageIndex === 0}
+                className={`object-cover transition-all duration-500 ${
+                  isImageLoading ? 'opacity-0' : 'opacity-100'
+                } group-hover:scale-110`}
+                onLoad={() => setIsImageLoading(false)}
               />
 
-              {/* Navigation Buttons */}
-              {hasMultipleImages && (
+              {/* Image Navigation - Only show on hover and if multiple images */}
+              {data.imageSrc.length > 1 && (
                 <>
-                  {renderNavigationButton('prev', handlePrevImage)}
-                  {renderNavigationButton('next', handleNextImage)}
+                  <button
+                    onClick={handlePrevImage}
+                    className={`absolute top-1/2 left-3 transform -translate-y-1/2 bg-white/90 backdrop-blur-sm hover:bg-white text-gray-800 w-9 h-9 rounded-full shadow-lg transition-all duration-200 flex items-center justify-center ${
+                      isHovered ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'
+                    }`}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="15,18 9,12 15,6"></polyline>
+                    </svg>
+                  </button>
+                  <button
+                    onClick={handleNextImage}
+                    className={`absolute top-1/2 right-3 transform -translate-y-1/2 bg-white/90 backdrop-blur-sm hover:bg-white text-gray-800 w-9 h-9 rounded-full shadow-lg transition-all duration-200 flex items-center justify-center ${
+                      isHovered ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2'
+                    }`}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="9,18 15,12 9,6"></polyline>
+                    </svg>
+                  </button>
                 </>
               )}
 
               {/* Image Counter */}
-              {hasMultipleImages && renderImageCounter()}
+              {data.imageSrc.length > 1 && (
+                <div className={`absolute bottom-3 left-3 bg-black/70 backdrop-blur-sm text-white px-2.5 py-1 rounded-full text-xs font-medium transition-all duration-200 ${
+                  isHovered ? 'opacity-100' : 'opacity-0'
+                }`}>
+                  {currentImageIndex + 1}/{data.imageSrc.length}
+                </div>
+              )}
             </>
           ) : (
-            renderImagePlaceholder()
+            <div className="flex flex-col justify-center items-center w-full h-full text-gray-400">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="mb-2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                <polyline points="21,15 16,10 5,21"></polyline>
+              </svg>
+              <span className="text-sm font-medium">No Images</span>
+            </div>
           )}
 
           {/* Heart Button */}
-          <div className="absolute top-4 right-4 z-20">
-            <div className="bg-white/90 backdrop-blur-md rounded-full p-2 shadow-lg 
-              hover:bg-white hover:scale-110 transition-all duration-300 border border-white/20">
+          <div className="absolute top-3 right-3 z-10">
+            <div className="bg-white/80 backdrop-blur-sm rounded-full p-1 shadow-lg">
               <HeartButton listingId={data.id} currentUser={currentUser} />
             </div>
           </div>
 
           {/* Category Badge */}
-          {data.category && renderCategoryBadge()}
+          {data.category && (
+            <div className="absolute top-3 left-3 z-10">
+              <span className="bg-blue-500/90 backdrop-blur-sm text-white px-3 py-1 rounded-full text-xs font-semibold">
+                {data.category}
+              </span>
+            </div>
+          )}
         </div>
 
-        {/* ===== CONTENT SECTION ===== */}
-        <div className="p-6">
-          {/* Address/Title */}
-          <div className="mb-4">
-            <h3 className="font-bold text-xl text-gray-900 line-clamp-2 leading-tight 
-              group-hover:text-blue-600 transition-colors duration-300">
+        {/* Content Section */}
+        <div className="p-5">
+          {/* Address */}
+          <div className="mb-3">
+            <h3 className="font-bold text-lg text-gray-900 line-clamp-2 leading-tight group-hover:text-blue-600 transition-colors duration-200">
               {data.address}
             </h3>
           </div>
 
           {/* Reservation Date or Category */}
-          <div className="mb-5">
+          <div className="mb-4">
             {reservationDate ? (
-              <div className="flex items-center text-sm text-gray-600 bg-gray-50 
-                px-3 py-2 rounded-lg border border-gray-100">
-                <svg 
-                  width="16" 
-                  height="16" 
-                  viewBox="0 0 24 24" 
-                  fill="none" 
-                  stroke="currentColor" 
-                  strokeWidth="2" 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  className="mr-2 text-gray-500"
-                >
-                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                  <line x1="16" y1="2" x2="16" y2="6" />
-                  <line x1="8" y1="2" x2="8" y2="6" />
-                  <line x1="3" y1="10" x2="21" y2="10" />
+              <div className="flex items-center text-sm text-gray-600">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                  <line x1="16" y1="2" x2="16" y2="6"></line>
+                  <line x1="8" y1="2" x2="8" y2="6"></line>
+                  <line x1="3" y1="10" x2="21" y2="10"></line>
                 </svg>
-                <span className="font-semibold">{reservationDate}</span>
+                <span className="font-medium">{reservationDate}</span>
               </div>
             ) : (
-              <div className="text-sm text-gray-500 font-medium uppercase tracking-wide">
+              <div className="text-sm text-gray-500">
                 {data.category}
               </div>
             )}
           </div>
 
           {/* Available Dates for Appointments */}
-          {hasAvailableDates && renderAvailableDates()}
+          {data.category === 'Appointments' && data.availableDates?.length > 0 && (
+            <div className="mb-4 p-3 bg-green-50 rounded-lg border border-green-100">
+              <div className="flex items-start">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 mt-0.5 text-green-600 flex-shrink-0">
+                  <path d="M9 11l3 3l8-8"></path>
+                  <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9s4.03-9 9-9c1.59 0 3.07.41 4.36 1.14"></path>
+                </svg>
+                <div>
+                  <div className="text-sm font-semibold text-green-800 mb-1">Available Dates</div>
+                  <div className="flex flex-wrap gap-1">
+                    {data.availableDates.slice(0, 3).map((date, index) => (
+                      <span key={index} className="inline-block bg-white px-2 py-1 rounded text-xs font-medium text-green-700 border border-green-200">
+                        {format(new Date(date), 'MMM dd')}
+                      </span>
+                    ))}
+                    {data.availableDates.length > 3 && (
+                      <span className="inline-block px-2 py-1 text-xs text-green-600 font-medium">
+                        +{data.availableDates.length - 3} more
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Price */}
-          <div className="mb-5">
-            <div className="flex items-baseline space-x-1">
-              <span className="text-3xl font-bold text-gray-900 tracking-tight">
-                GH₵{price.toFixed(2)}
-              </span>
+          <div className="mb-4">
+            <div className="flex items-baseline">
+              <span className="text-2xl font-bold text-gray-900">GH₵{price.toFixed(2)}</span>
               {!reservation && (
-                <span className="text-sm text-gray-500 font-medium">per night</span>
+                <span className="text-sm text-gray-500 ml-1"></span>
               )}
             </div>
           </div>
 
           {/* Action Buttons */}
-          {(onEdit || (onAction && actionLabel)) && renderActionButtons()}
+          {(onEdit || (onAction && actionLabel)) && (
+            <div className="flex gap-2 pt-3 border-t border-gray-100">
+              {onEdit && (
+                <Button
+                  disabled={disabled}
+                  small
+                  label="Edit Listing"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit(data);
+                  }}
+                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 border-0"
+                />
+              )}
+
+              {onAction && actionLabel && (
+                <Button
+                  disabled={disabled}
+                  small
+                  label={actionLabel}
+                  onClick={handleCancel}
+                  className="flex-1"
+                />
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
