@@ -74,9 +74,9 @@ const Categories = () => {
             </p>
           </div>
 
-          {/* Categories Horizontal Scroll (for all screen sizes) */}
-          <div className="overflow-x-auto scrollbar-hide scroll-smooth -mx-1 px-1">
-            <div className="flex gap-2 md:gap-3">
+          {/* Centered Horizontal Scrollable Categories */}
+          <div className="overflow-x-auto scrollbar-hide scroll-smooth">
+            <div className="flex justify-center w-max mx-auto gap-2 md:gap-3 px-2">
               {categories.map((item) => (
                 <div key={item.label} className="flex-shrink-0 w-20 md:w-20 lg:w-24">
                   <CategoryBox
@@ -117,7 +117,7 @@ const Categories = () => {
         </div>
       </Container>
 
-      {/* Scrollbar hide styles */}
+      {/* Custom scrollbar styles */}
       <style jsx>{`
         .scrollbar-hide {
           -ms-overflow-style: none;
