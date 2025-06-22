@@ -13,42 +13,42 @@ export const categories = [
   {
     label: 'Apartments',
     icon: FaHome,
-    description: 'Browse and reserve apartments for short-term or long-term stays, suitable for business, vacation, or personal use.',
+    description: 'Browse and reserve apartments for short- or long-term stays.',
   },
   {
     label: 'Cars',
     icon: FaCar,
-    description: 'Book a wide range of rental cars for travel, business, or leisure — available by the hour, day, or week.',
+    description: 'Book rental cars by the hour, day, or week.',
   },
   {
     label: 'Event Centers',
     icon: MdEvent,
-    description: 'Reserve venues for weddings, conferences, parties, and other special events with customizable time slots and capacities.',
+    description: 'Reserve venues for weddings, conferences, and parties.',
   },
   {
     label: 'Hotel Rooms',
     icon: SiAirbnb,
-    description: 'Find and reserve hotel accommodations that suit your travel needs with filters for price, location, and amenities.',
+    description: 'Find and reserve hotel accommodations that suit your needs.',
   },
   {
     label: 'Tour Services',
     icon: GiCommercialAirplane,
-    description: 'Book guided tour services for city tours, adventure trips, or cultural experiences, complete with transport and itineraries.',
+    description: 'Book guided tours for cultural or adventure experiences.',
   },
   {
     label: 'Event Tickets',
     icon: GiTheaterCurtains,
-    description: 'Secure tickets for concerts, theater shows, sports events, and more — including seat selection where applicable.',
+    description: 'Secure tickets for concerts, shows, and sports events.',
   },
   {
     label: 'Restaurants',
     icon: FaUtensils,
-    description: 'Make dining reservations at popular restaurants, choose your preferred time, and receive confirmation instantly.',
+    description: 'Make dining reservations at your favorite spots.',
   },
   {
     label: 'Appointments',
     icon: AiOutlineCalendar,
-    description: 'Book appointments for services like salons, spas, doctor visits, and consultations with flexible scheduling options.',
+    description: 'Book appointments with professionals or services.',
   },
 ];
 
@@ -64,7 +64,7 @@ const Categories = () => {
     <div className="bg-gradient-to-b from-white via-gray-50/30 to-white">
       <Container>
         <div className="py-4 md:py-6">
-          {/* Header Section */}
+          {/* Header */}
           <div className="mb-4 md:mb-6 text-center">
             <h2 className="text-lg md:text-xl font-bold text-gray-900 mb-1">
               What are you looking for?
@@ -74,7 +74,7 @@ const Categories = () => {
             </p>
           </div>
 
-          {/* Centered Horizontal Scrollable Categories */}
+          {/* Centered Horizontal Category Scroll */}
           <div className="overflow-x-auto scrollbar-hide scroll-smooth">
             <div className="flex justify-center w-max mx-auto gap-2 md:gap-3 px-2">
               {categories.map((item) => (
@@ -83,41 +83,16 @@ const Categories = () => {
                     label={item.label}
                     selected={category === item.label}
                     icon={item.icon}
+                    description={item.description}
                   />
                 </div>
               ))}
             </div>
           </div>
-
-          {/* Selected Category Description */}
-          {category && (
-            <div className="mt-4 md:mt-6 p-3 md:p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
-              <div className="flex items-start gap-3">
-                <div className="p-2 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-lg">
-                  {categories.find(cat => cat.label === category)?.icon && (
-                    <div className="w-4 h-4 md:w-5 md:h-5 text-blue-600">
-                      {(() => {
-                        const IconComponent = categories.find(cat => cat.label === category)?.icon;
-                        return IconComponent ? <IconComponent size={16} className="md:w-5 md:h-5" /> : null;
-                      })()}
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-base md:text-lg text-blue-900 mb-1">
-                    {category}
-                  </h3>
-                  <p className="text-sm text-gray-700">
-                    {categories.find(cat => cat.label === category)?.description}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </Container>
 
-      {/* Custom scrollbar styles */}
+      {/* Hide native scrollbars */}
       <style jsx>{`
         .scrollbar-hide {
           -ms-overflow-style: none;
