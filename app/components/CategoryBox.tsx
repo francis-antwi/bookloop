@@ -141,17 +141,7 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({
           ${selected ? 'text-blue-700' : 'text-gray-600 group-hover:text-gray-800'}
         `}
       >
-        {label}
-
-        {/* Tooltip Popup */}
-        {selected && description && (
-          <div className="absolute z-50 left-1/2 -translate-x-1/2 top-full mt-2 w-44 px-3 py-2 text-[10px] text-gray-700 bg-white border border-gray-200 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-            <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 rotate-45 bg-white border-l border-t border-gray-200" />
-            <span className="block text-center leading-snug">
-              {description}
-            </span>
-          </div>
-        )}
+       
       </div>
 
       {/* Selection indicator dot */}
@@ -176,10 +166,7 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({
         `}
       />
 
-      {/* Ripple effect */}
-      <div className="absolute inset-0 rounded-lg md:rounded-xl overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-blue-400/0 via-blue-400/10 to-blue-400/0 transform -translate-x-full group-active:translate-x-full transition-transform duration-700 ease-out" />
-      </div>
+     
     </div>
   );
 };
