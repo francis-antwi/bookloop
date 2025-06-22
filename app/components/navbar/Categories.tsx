@@ -76,20 +76,22 @@ const Categories = () => {
             </p>
           </div>
 
-          {/* Responsive Category Section */}
-          <div className="flex flex-wrap justify-center gap-3 overflow-x-auto sm:overflow-x-visible scrollbar-hide scroll-smooth px-1">
-            {categories.map((item) => (
-              <div
-                key={item.label}
-                className="flex-shrink-0 w-[140px]"
-              >
-                <CategoryBox
-                  label={item.label}
-                  selected={category === item.label}
-                  icon={item.icon}
-                />
-              </div>
-            ))}
+          {/* Horizontally Scrollable Category List */}
+          <div className="overflow-x-auto scrollbar-hide scroll-smooth">
+            <div className="flex flex-nowrap justify-start sm:justify-center gap-3 px-1">
+              {categories.map((item) => (
+                <div
+                  key={item.label}
+                  className="flex-shrink-0 w-[140px]"
+                >
+                  <CategoryBox
+                    label={item.label}
+                    selected={category === item.label}
+                    icon={item.icon}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Selected Category Info */}
@@ -120,7 +122,7 @@ const Categories = () => {
         </div>
       </Container>
 
-      {/* Custom scrollbar styles */}
+      {/* Hide scrollbars */}
       <style jsx>{`
         .scrollbar-hide {
           -ms-overflow-style: none;
