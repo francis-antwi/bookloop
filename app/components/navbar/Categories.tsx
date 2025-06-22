@@ -65,9 +65,9 @@ const Categories = () => {
   return (
     <div className="bg-gradient-to-b from-white via-gray-50/30 to-white">
       <Container>
-        <div className="py-4">
+        <div className="py-2">
           {/* Header */}
-          <div className="mb-4 text-center">
+          <div className="mb-2 text-center">
             <h2 className="text-lg font-bold text-gray-900 mb-1">
               What are you looking for?
             </h2>
@@ -96,7 +96,7 @@ const Categories = () => {
 
           {/* Selected Category Info */}
           {category && (
-            <div className="mt-4 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
+            <div className="mt-2 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
               <div className="flex items-start gap-3">
                 <div className="p-2 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-lg">
                   {categories.find(cat => cat.label === category)?.icon && (
