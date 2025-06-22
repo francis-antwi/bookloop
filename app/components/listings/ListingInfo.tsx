@@ -210,9 +210,7 @@ const ListingInfo: React.FC<ListingInfoProps> = ({ listing }) => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   
   if (!listing) {
-    return (
-      <div></div>
-    );
+    return null;
   }
 
   const extraFields = listing.category ? categorySpecificFields[listing.category] : null;
