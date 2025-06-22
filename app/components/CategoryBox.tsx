@@ -49,10 +49,13 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
         flex-col
         items-center
         justify-center
-        gap-3
-        px-4
-        py-6
-        rounded-2xl
+        gap-2
+        px-3
+        py-4
+        sm:px-4
+        sm:py-5
+        rounded-xl
+        sm:rounded-2xl
         border
         cursor-pointer
         transition-all
@@ -62,6 +65,8 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
         hover:shadow-lg
         hover:shadow-black/5
         active:scale-[0.98]
+        min-h-[75px]
+        sm:min-h-[85px]
         ${
           selected
             ? 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200 text-blue-700 shadow-md shadow-blue-100'
@@ -71,15 +76,17 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
     >
       {/* Background glow effect for selected state */}
       {selected && (
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-400/10 to-indigo-400/10 rounded-2xl blur-xl" />
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-400/10 to-indigo-400/10 rounded-xl sm:rounded-2xl blur-xl" />
       )}
       
       {/* Icon container with animated background */}
       <div
         className={`
           relative
-          p-3
-          rounded-xl
+          p-2
+          sm:p-3
+          rounded-lg
+          sm:rounded-xl
           transition-all
           duration-300
           ${
@@ -90,8 +97,9 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
         `}
       >
         <Icon 
-          size={24} 
+          size={18} 
           className={`
+            sm:w-6 sm:h-6
             transition-all
             duration-300
             ${selected ? 'text-blue-600' : 'text-gray-500 group-hover:text-gray-700'}
@@ -102,11 +110,14 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
       {/* Label with improved typography */}
       <div
         className={`
-          font-semibold
-          text-sm
+          font-medium
+          text-xs
+          sm:text-sm
           text-center
           transition-all
           duration-300
+          leading-tight
+          max-w-full
           ${
             selected
               ? 'text-blue-700'
@@ -121,12 +132,15 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
       <div
         className={`
           absolute
-          -bottom-1
+          -bottom-0.5
+          sm:-bottom-1
           left-1/2
           transform
           -translate-x-1/2
-          w-2
-          h-2
+          w-1.5
+          h-1.5
+          sm:w-2
+          sm:h-2
           rounded-full
           transition-all
           duration-300
@@ -139,7 +153,7 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
       />
 
       {/* Ripple effect on click */}
-      <div className="absolute inset-0 rounded-2xl overflow-hidden">
+      <div className="absolute inset-0 rounded-xl sm:rounded-2xl overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-blue-400/0 via-blue-400/10 to-blue-400/0 transform -translate-x-full group-active:translate-x-full transition-transform duration-700 ease-out" />
       </div>
     </div>
