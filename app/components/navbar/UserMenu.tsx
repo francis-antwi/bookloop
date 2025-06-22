@@ -145,13 +145,13 @@ const UserMenu: React.FC<UserMenuProps> = ({
                 <>
                     {/* Solid backdrop - completely opaque */}
                     <div 
-                        className="fixed inset-0 z-30 bg-black/20"
+                        className="fixed inset-0 z-[9998] bg-black/40"
                         onClick={closeMenu}
                     />
                     
                     <div className="
                         absolute
-                        z-40
+                        z-[9999]
                         right-0
                         top-16
                         w-80
@@ -159,20 +159,25 @@ const UserMenu: React.FC<UserMenuProps> = ({
                         rounded-3xl
                         shadow-2xl
                         border-2
-                        border-slate-200/50
+                        border-slate-200
                         overflow-hidden
                         animate-in
                         slide-in-from-top-4
                         fade-in-0
                         duration-300
                         ring-1
-                        ring-black/5
+                        ring-black/10
+                        before:absolute
+                        before:inset-0
+                        before:bg-white
+                        before:z-[-1]
                     ">
                         {currentUser ? (
                             <>
                                 {/* Enhanced User Info Header */}
-                                <div className="px-6 py-5 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-slate-200">
-                                    <div className="flex items-center gap-4">
+                                <div className="px-6 py-5 bg-white border-b border-slate-200 relative z-10">
+                                    <div className="absolute inset-0 bg-gradient-to-r from-slate-50 to-blue-50"></div>
+                                    <div className="relative flex items-center gap-4">
                                         <div className="relative">
                                             <div className="ring-3 ring-blue-100 rounded-full p-1">
                                                 <Avatar src={currentUser?.image} />
@@ -195,7 +200,7 @@ const UserMenu: React.FC<UserMenuProps> = ({
                                 </div>
 
                                 {/* Enhanced Navigation Items */}
-                                <div className="py-3">
+                                <div className="py-3 bg-white relative z-10">
                                     <div className="px-3 space-y-1">
                                         <MenuItem 
                                             onClick={() => navigateAndClose('/')}
@@ -290,8 +295,9 @@ const UserMenu: React.FC<UserMenuProps> = ({
                         ) : (
                             <>
                                 {/* Enhanced Guest Welcome Section */}
-                                <div className="px-6 py-5 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-                                    <div className="text-center">
+                                <div className="px-6 py-5 border-b border-slate-200 bg-white relative z-10">
+                                    <div className="absolute inset-0 bg-gradient-to-r from-blue-50 to-indigo-50"></div>
+                                    <div className="relative text-center">
                                         <div className="w-16 h-16 mx-auto mb-3 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full flex items-center justify-center">
                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="white" className="w-8 h-8">
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
@@ -302,7 +308,7 @@ const UserMenu: React.FC<UserMenuProps> = ({
                                     </div>
                                 </div>
                                 
-                                <div className="py-3">
+                                <div className="py-3 bg-white relative z-10">
                                     <div className="px-3 space-y-2">
                                         <MenuItem 
                                             onClick={() => {
