@@ -137,7 +137,7 @@ const EmptyState: React.FC<EmptyStateProps> = ({
                 </div>
 
                 {/* Content */}
-                <div className={`relative z-10 space-y-4 ${asBackground ? 'opacity-50' : ''}`}>
+                <div className={`relative z-10 space-y-4`}>
                     <Heading
                         center
                         title={title}
