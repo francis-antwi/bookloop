@@ -92,6 +92,7 @@ const EmptyState: React.FC<EmptyStateProps> = ({
             <div 
                 className={`
                     relative
+                    z-0
                     ${asBackground ? 'absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2' : ''}
                     max-w-md
                     w-full
@@ -137,7 +138,7 @@ const EmptyState: React.FC<EmptyStateProps> = ({
                 </div>
 
                 {/* Content */}
-                <div className={`relative z-10 space-y-4`}>
+                <div className={`relative z-10 space-y-4 ${asBackground ? 'opacity-20' : ''}`}>
                     <Heading
                         center
                         title={title}
