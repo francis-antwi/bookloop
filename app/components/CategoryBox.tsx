@@ -50,13 +50,9 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
         items-center
         justify-center
         gap-1
-        md:gap-2
         px-2
         py-3
-        md:px-3
-        md:py-4
         rounded-lg
-        md:rounded-xl
         border
         cursor-pointer
         transition-all
@@ -78,7 +74,7 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
     >
       {/* Background glow effect for selected state */}
       {selected && (
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-400/10 to-indigo-400/10 rounded-lg md:rounded-xl blur-xl" />
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-400/10 to-indigo-400/10 rounded-lg blur-xl" />
       )}
       
       {/* Icon container with animated background */}
@@ -86,9 +82,7 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
         className={`
           relative
           p-1.5
-          md:p-2
           rounded-md
-          md:rounded-lg
           transition-all
           duration-300
           ${
@@ -101,8 +95,6 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
         <Icon 
           size={16}
           className={`
-            md:w-5
-            md:h-5
             transition-all
             duration-300
             ${selected ? 'text-blue-600' : 'text-gray-500 group-hover:text-gray-700'}
@@ -114,9 +106,7 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
       <div
         className={`
           font-medium
-          md:font-semibold
           text-[10px]
-          md:text-xs
           leading-tight
           max-w-full
           overflow-hidden
@@ -143,8 +133,6 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
           -translate-x-1/2
           w-1
           h-1
-          md:w-1.5
-          md:h-1.5
           rounded-full
           transition-all
           duration-300
@@ -157,7 +145,7 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
       />
 
       {/* Ripple effect on click */}
-      <div className="absolute inset-0 rounded-lg md:rounded-xl overflow-hidden">
+      <div className="absolute inset-0 rounded-lg overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-blue-400/0 via-blue-400/10 to-blue-400/0 transform -translate-x-full group-active:translate-x-full transition-transform duration-700 ease-out" />
       </div>
     </div>
