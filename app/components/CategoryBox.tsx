@@ -42,7 +42,7 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
     <div
       onClick={handleClick}
       className={`
-        mb-1
+        mb-0
         group
         relative
         flex
@@ -52,7 +52,7 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
         gap-1
         md:gap-2
         px-2
-        py-3
+        py-2
         md:px-3
         md:py-4
         rounded-lg
