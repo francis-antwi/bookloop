@@ -9,22 +9,12 @@ interface NavbarProps {
   currentUser?: User | null;
 }
 
-const Navbar: React.FC<NavbarProps> = ({
-  currentUser
-}) => {
-
+const Navbar: React.FC<NavbarProps> = ({ currentUser }) => {
   return (
     <div className="fixed w-full bg-white/80 backdrop-blur-md z-10 shadow-lg border-b border-gray-100">
-      <div className="py-5">
+      <div className="py-2 md:py-3">
         <Container>
-          <div className="
-            flex
-            flex-row
-            items-center
-            justify-between
-            gap-4
-            md:gap-8
-          ">
+          <div className="flex flex-row items-center justify-between gap-4 md:gap-8">
             <Logo />
             <Search />
             <UserMenu currentUser={currentUser} />
