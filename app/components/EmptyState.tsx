@@ -11,6 +11,7 @@ interface EmptyStateProps {
     showReset?: boolean;
     icon?: React.ReactNode;
     variant?: 'default' | 'search' | 'error' | 'success';
+    asBackground?: boolean; // New prop to control background behavior
 }
 
 const EmptyState: React.FC<EmptyStateProps> = ({
@@ -18,7 +19,8 @@ const EmptyState: React.FC<EmptyStateProps> = ({
     subtitle = "Try changing or removing some of your filters",
     showReset,
     icon,
-    variant = 'default'
+    variant = 'default',
+    asBackground = false
 }) => {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
@@ -80,11 +82,17 @@ const EmptyState: React.FC<EmptyStateProps> = ({
         </svg>
     );
 
+    // Background positioning classes
+    const backgroundClasses = asBackground 
+        ? "fixed inset-0 z-[-1] pointer-events-none opacity-30" 
+        : "min-h-[60vh] flex items-center justify-center p-8 mt-40 z-0";
+
     return (
-        <div className="min-h-[60vh] flex items-center justify-center p-8 mt-40 z-0">
+        <div className={backgroundClasses}>
             <div 
                 className={`
                     relative
+                    ${asBackground ? 'absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2' : ''}
                     max-w-md
                     w-full
                     rounded-3xl
@@ -96,6 +104,7 @@ const EmptyState: React.FC<EmptyStateProps> = ({
                     p-8
                     text-center
                     animate-fadeIn
+                    ${asBackground ? 'scale-125' : ''}
                 `}
             >
                 {/* Decorative background elements */}
@@ -128,14 +137,14 @@ const EmptyState: React.FC<EmptyStateProps> = ({
                 </div>
 
                 {/* Content */}
-                <div className="relative z-10 space-y-4 z-0">
+                <div className="relative z-10 space-y-4">
                     <Heading
                         center
                         title={title}
                         subtitle={subtitle}
                     />
                     
-                    {showReset && (
+                    {showReset && !asBackground && (
                         <div className="pt-6">
                             <Button
                                 outline
@@ -156,7 +165,7 @@ const EmptyState: React.FC<EmptyStateProps> = ({
                 </div>
 
                 {/* Loading spinner overlay */}
-                {isLoading && (
+                {isLoading && !asBackground && (
                     <div className="absolute inset-0 bg-white/50 backdrop-blur-sm rounded-3xl flex items-center justify-center">
                         <div className="w-8 h-8 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
                     </div>
