@@ -66,8 +66,8 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
         hover:shadow-black/5
         active:scale-[0.98]
         touch-manipulation
-        min-h-[80px]
-        sm:min-h-[100px]
+        aspect-square
+        w-full
         ${
           selected
             ? 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200 text-blue-700 shadow-md shadow-blue-100'
