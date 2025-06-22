@@ -1,7 +1,9 @@
 'use client';
+
 import { useState } from "react";
 import { BiSearch } from "react-icons/bi";
-import useSearchModal from "@/app/hooks/useSearchModal"
+import useSearchModal from "@/app/hooks/useSearchModal";
+
 const Search = () => {
   const searchModal = useSearchModal();
   const [isHovered, setIsHovered] = useState(false);
@@ -12,13 +14,12 @@ const Search = () => {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       className={`
-        onClick={searchModal.onOpen}
         relative
         w-full
         md:w-auto
-        py-3
+        py-1.5
         px-1
-        rounded-2xl
+        rounded-xl
         transition-all
         duration-300
         cursor-pointer
@@ -27,7 +28,7 @@ const Search = () => {
         border
         border-gray-200/50
         hover:border-gray-300/70
-        hover:shadow-xl
+        hover:shadow-lg
         hover:shadow-gray-100/50
         hover:-translate-y-0.5
         group
@@ -35,24 +36,24 @@ const Search = () => {
       `}
     >
       {/* Subtle gradient background on hover */}
-      <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-blue-50/0 via-purple-50/0 to-pink-50/0 group-hover:from-blue-50/30 group-hover:via-purple-50/20 group-hover:to-pink-50/30 transition-all duration-500" />
+      <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-blue-50/0 via-purple-50/0 to-pink-50/0 group-hover:from-blue-50/30 group-hover:via-purple-50/20 group-hover:to-pink-50/30 transition-all duration-500" />
       
       <div className="relative flex flex-row items-center justify-between">
-        <div className="text-sm font-medium px-5 text-gray-700 group-hover:text-gray-900 transition-colors">
+        <div className="text-xs font-medium px-3 text-gray-700 group-hover:text-gray-900 transition-colors">
           Anywhere
         </div>
         
-        <div className="hidden sm:block text-sm font-medium px-5 border-x border-gray-200/60 flex-1 text-center text-gray-700 group-hover:text-gray-900 transition-colors">
+        <div className="hidden sm:block text-xs font-medium px-3 border-x border-gray-200/60 flex-1 text-center text-gray-700 group-hover:text-gray-900 transition-colors">
           Any Week
         </div>
         
-        <div className="text-sm pl-5 pr-3 text-gray-500 flex flex-row items-center gap-3">
+        <div className="text-xs pl-3 pr-2 text-gray-500 flex flex-row items-center gap-2">
           <div className="hidden sm:block group-hover:text-gray-700 transition-colors">
             Anyday
           </div>
           
           <div className={`
-            p-2.5
+            p-1.5
             rounded-full
             text-white
             transition-all
@@ -64,13 +65,13 @@ const Search = () => {
               : 'bg-gradient-to-r from-rose-400 to-pink-400'
             }
           `}>
-            <BiSearch size={16} className="transition-transform group-hover:rotate-12" />
+            <BiSearch size={14} className="transition-transform group-hover:rotate-12" />
           </div>
         </div>
       </div>
       
       {/* Animated underline effect */}
-      <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-0 h-0.5 bg-gradient-to-r from-rose-400 to-pink-400 group-hover:w-16 transition-all duration-500 rounded-full" />
+      <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-0 h-0.5 bg-gradient-to-r from-rose-400 to-pink-400 group-hover:w-12 transition-all duration-500 rounded-full" />
     </div>
   );
 };
