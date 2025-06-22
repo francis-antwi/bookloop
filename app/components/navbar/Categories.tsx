@@ -3,11 +3,13 @@
 import { useSearchParams, usePathname } from "next/navigation";
 import Container from "../Container";
 import CategoryBox from "../CategoryBox";
-import { FaHome, FaCar, FaUtensils} from 'react-icons/fa';
+   import { FaHome, FaCar, FaUtensils} from 'react-icons/fa';
 import { GiCommercialAirplane, GiTheaterCurtains } from 'react-icons/gi';
 import { SiAirbnb } from 'react-icons/si';
+
 import { MdEvent } from 'react-icons/md';
 import { AiOutlineCalendar } from 'react-icons/ai';
+
 
 export const categories = [
   {
@@ -52,6 +54,8 @@ export const categories = [
   },
 ];
 
+
+   
 const Categories = () => {
     const params = useSearchParams();
     const category = params?.get('category');
@@ -63,102 +67,18 @@ const Categories = () => {
     }
 
     return (
-        <div className="bg-gradient-to-b from-white via-gray-50/30 to-white">
-            <Container>
-                <div className="py-6 md:py-8">
-                    {/* Header Section */}
-                    <div className="mb-6 md:mb-8 text-center">
-                        <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">
-                            What are you looking for?
-                        </h2>
-                        <p className="text-sm md:text-base text-gray-600 max-w-2xl mx-auto">
-                            Discover and book from our wide range of services and accommodations
-                        </p>
-                    </div>
-
-                    {/* Categories Grid */}
-                    <div className="relative">
-                        {/* Mobile: Horizontal scroll */}
-                        <div className="md:hidden">
-                            <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide scroll-smooth">
-                                <div className="flex gap-3 px-1">
-                                    {categories.map((item) => (
-                                        <div key={item.label} className="flex-shrink-0 w-20">
-                                            <CategoryBox
-                                                label={item.label}
-                                                selected={category === item.label}
-                                                icon={item.icon}
-                                            />
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                            
-                            {/* Scroll indicator */}
-                            <div className="flex justify-center mt-2">
-                                <div className="flex gap-1">
-                                    {Array.from({ length: Math.ceil(categories.length / 4) }).map((_, index) => (
-                                        <div
-                                            key={index}
-                                            className="w-2 h-2 rounded-full bg-gray-300"
-                                        />
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Desktop: Grid */}
-                        <div className="hidden md:grid md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-4 gap-4 lg:gap-6">
-                            {categories.map((item) => (
-                                <CategoryBox
-                                    key={item.label}
-                                    label={item.label}
-                                    selected={category === item.label}
-                                    icon={item.icon}
-                                />
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Selected Category Info */}
-                    {category && (
-                        <div className="mt-6 md:mt-8 p-4 md:p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-100">
-                            <div className="flex items-start gap-4">
-                                <div className="p-3 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-xl">
-                                    {categories.find(cat => cat.label === category)?.icon && (
-                                        <div className="w-6 h-6 text-blue-600">
-                                            {(() => {
-                                                const IconComponent = categories.find(cat => cat.label === category)?.icon;
-                                                return IconComponent ? <IconComponent size={24} /> : null;
-                                            })()}
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="flex-1">
-                                    <h3 className="font-semibold text-lg text-blue-900 mb-2">
-                                        {category}
-                                    </h3>
-                                    <p className="text-sm md:text-base text-blue-700 leading-relaxed">
-                                        {categories.find(cat => cat.label === category)?.description}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </Container>
-
-            {/* Custom scrollbar styles */}
-            <style jsx>{`
-                .scrollbar-hide {
-                    -ms-overflow-style: none;
-                    scrollbar-width: none;
-                }
-                .scrollbar-hide::-webkit-scrollbar {
-                    display: none;
-                }
-            `}</style>
-        </div>
+        <Container>
+            <div className="pt-4 flex flex-row items-center justify-between overflow-x-auto">
+                {categories.map((item) => (
+                    <CategoryBox
+                        key={item.label}
+                        label={item.label}
+                        selected={category === item.label}
+                        icon={item.icon}
+                    />
+                ))}
+            </div>
+        </Container>
     );
 }
 
