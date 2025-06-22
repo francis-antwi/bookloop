@@ -84,7 +84,7 @@ const EmptyState: React.FC<EmptyStateProps> = ({
 
     // Background positioning classes
     const backgroundClasses = asBackground 
-        ? "fixed inset-0 z-[-1] pointer-events-none opacity-30" 
+        ? "fixed inset-0 z-[-1] pointer-events-none opacity-10" 
         : "min-h-[60vh] flex items-center justify-center p-8 mt-40 z-0";
 
     return (
@@ -112,7 +112,7 @@ const EmptyState: React.FC<EmptyStateProps> = ({
                 <div className="absolute bottom-4 left-4 w-16 h-16 bg-white/30 rounded-full blur-xl" />
                 
                 {/* Icon container */}
-                <div className="relative mb-6">
+                <div className={`relative mb-6 ${asBackground ? 'opacity-15' : ''}`}>
                     <div 
                         className={`
                             inline-flex
@@ -137,7 +137,7 @@ const EmptyState: React.FC<EmptyStateProps> = ({
                 </div>
 
                 {/* Content */}
-                <div className="relative z-10 space-y-4">
+                <div className={`relative z-10 space-y-4 ${asBackground ? 'opacity-50' : ''}`}>
                     <Heading
                         center
                         title={title}
