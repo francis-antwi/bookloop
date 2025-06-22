@@ -76,47 +76,32 @@ const Categories = () => {
                         </p>
                     </div>
 
-                    {/* Categories Grid */}
+                    {/* Categories - Single horizontal line for all screens */}
                     <div className="relative">
-                        {/* Mobile: Horizontal scroll */}
-                        <div className="sm:hidden">
-                            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide scroll-smooth">
-                                <div className="flex gap-2 px-1">
-                                    {categories.map((item) => (
-                                        <div key={item.label} className="flex-shrink-0 w-16">
-                                            <CategoryBox
-                                                label={item.label}
-                                                selected={category === item.label}
-                                                icon={item.icon}
-                                            />
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                            
-                            {/* Scroll indicator */}
-                            <div className="flex justify-center mt-1">
-                                <div className="flex gap-0.5">
-                                    {Array.from({ length: Math.ceil(categories.length / 4) }).map((_, index) => (
-                                        <div
-                                            key={index}
-                                            className="w-1.5 h-1.5 rounded-full bg-gray-300"
+                        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide scroll-smooth">
+                            <div className="flex gap-2 px-1">
+                                {categories.map((item) => (
+                                    <div key={item.label} className="flex-shrink-0 w-16">
+                                        <CategoryBox
+                                            label={item.label}
+                                            selected={category === item.label}
+                                            icon={item.icon}
                                         />
-                                    ))}
-                                </div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
-
-                        {/* Desktop: Grid */}
-                        <div className="hidden sm:grid sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-4 gap-3">
-                            {categories.map((item) => (
-                                <CategoryBox
-                                    key={item.label}
-                                    label={item.label}
-                                    selected={category === item.label}
-                                    icon={item.icon}
-                                />
-                            ))}
+                        
+                        {/* Scroll indicator for all screens */}
+                        <div className="flex justify-center mt-1">
+                            <div className="flex gap-0.5">
+                                {Array.from({ length: Math.ceil(categories.length / 4) }).map((_, index) => (
+                                    <div
+                                        key={index}
+                                        className="w-1.5 h-1.5 rounded-full bg-gray-300"
+                                    />
+                                ))}
+                            </div>
                         </div>
                     </div>
 
