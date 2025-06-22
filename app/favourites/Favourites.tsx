@@ -43,7 +43,7 @@ const Favourites: React.FC<FavouriteProps> = ({
         <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-blue-50/20">
             <Container>
                 {/* Enhanced Header Section */}
-                <div className="pt-8 pb-6">
+                <div className="pt-3 pb-2">
                     <div className="flex items-center gap-4 mb-6">
                         <div className="p-4 bg-gradient-to-br from-red-500 to-pink-600 rounded-2xl shadow-lg">
                             <Heart className="w-7 h-7 text-white fill-white" />

@@ -81,7 +81,7 @@ const EmptyState: React.FC<EmptyStateProps> = ({
     );
 
     return (
-        <div className="min-h-[60vh] flex items-center justify-center p-8 mt-40">
+        <div className="min-h-[60vh] flex items-center justify-center p-8 mt-40 z-0">
             <div 
                 className={`
                     relative
