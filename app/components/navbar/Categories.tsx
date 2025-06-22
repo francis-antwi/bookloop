@@ -76,13 +76,13 @@ const Categories = () => {
             </p>
           </div>
 
-          {/* Horizontally Scrollable Category List */}
+          {/* Scrollable Categories */}
           <div className="overflow-x-auto scrollbar-hide scroll-smooth">
-            <div className="flex flex-nowrap justify-start sm:justify-center gap-3 px-1">
+            <div className="flex flex-nowrap justify-start sm:justify-center gap-2 px-1">
               {categories.map((item) => (
                 <div
                   key={item.label}
-                  className="flex-shrink-0 w-[140px]"
+                  className="flex-shrink-0 w-[70px]" // 50% reduced size
                 >
                   <CategoryBox
                     label={item.label}
