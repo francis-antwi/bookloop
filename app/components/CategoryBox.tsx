@@ -10,6 +10,21 @@ interface CategoryBoxProps {
   selected?: boolean;
 }
 
+interface CategoriesContainerProps {
+  children: React.ReactNode;
+}
+
+// Container component for horizontal layout
+export const CategoriesContainer: React.FC<CategoriesContainerProps> = ({ children }) => {
+  return (
+    <div className="w-full overflow-x-auto pb-2">
+      <div className="flex items-center justify-center gap-3 md:gap-4 lg:gap-5 min-w-max px-4">
+        {children}
+      </div>
+    </div>
+  );
+};
+
 const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }) => {
   const router = useRouter();
   const params = useSearchParams();
@@ -42,7 +57,6 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
     <div
       onClick={handleClick}
       className={`
-        mb-1
         group
         relative
         flex
@@ -71,11 +85,15 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
         active:scale-[0.98]
         touch-manipulation
         aspect-square
-        w-full
-        max-w-[80px]
-        md:max-w-[70px]
-        lg:max-w-[75px]
-        xl:max-w-[80px]
+        w-[70px]
+        h-[70px]
+        md:w-[65px]
+        md:h-[65px]
+        lg:w-[70px]
+        lg:h-[70px]
+        xl:w-[75px]
+        xl:h-[75px]
+        flex-shrink-0
         ${
           selected
             ? 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200 text-blue-700 shadow-md shadow-blue-100'
