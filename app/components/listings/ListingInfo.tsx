@@ -211,15 +211,7 @@ const ListingInfo: React.FC<ListingInfoProps> = ({ listing }) => {
   
   if (!listing) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="text-center">
-          <div className="w-16 h-16 bg-gray-200 rounded-full mx-auto mb-4 flex items-center justify-center">
-            <Tag className="w-8 h-8 text-gray-400" />
-          </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No listing data available</h3>
-          <p className="text-gray-500">Please check back later or contact support.</p>
-        </div>
-      </div>
+      <div></div>
     );
   }
 
