@@ -50,8 +50,8 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
         items-center
         justify-center
         gap-1
-        px-2
-        py-3
+        px-1.5
+        py-2
         rounded-lg
         border
         cursor-pointer
@@ -81,8 +81,8 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
       <div
         className={`
           relative
-          p-1.5
-          rounded-md
+          p-1
+          rounded-sm
           transition-all
           duration-300
           ${
@@ -93,7 +93,7 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
         `}
       >
         <Icon 
-          size={16}
+          size={14}
           className={`
             transition-all
             duration-300
@@ -106,7 +106,7 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
       <div
         className={`
           font-medium
-          text-[10px]
+          text-[9px]
           leading-tight
           max-w-full
           overflow-hidden
