@@ -140,44 +140,33 @@ const UserMenu: React.FC<UserMenuProps> = ({
                 </button>
             </div>
 
-            {/* Enhanced Dropdown Menu */}
+            {/* Completely Solid Dropdown Menu */}
             {isOpen && (
                 <>
-                    {/* Solid backdrop - completely opaque */}
+                    {/* Solid black backdrop */}
                     <div 
-                        className="fixed inset-0 z-[9998] bg-black/40"
+                        className="fixed inset-0 bg-black bg-opacity-50"
+                        style={{ zIndex: 9998 }}
                         onClick={closeMenu}
                     />
                     
-                    <div className="
-                        absolute
-                        z-[9999]
-                        right-0
-                        top-16
-                        w-80
-                        bg-white
-                        rounded-3xl
-                        shadow-2xl
-                        border-2
-                        border-slate-200
-                        overflow-hidden
-                        animate-in
-                        slide-in-from-top-4
-                        fade-in-0
-                        duration-300
-                        ring-1
-                        ring-black/10
-                        before:absolute
-                        before:inset-0
-                        before:bg-white
-                        before:z-[-1]
-                    ">
+                    {/* Completely solid dropdown */}
+                    <div 
+                        className="absolute right-0 top-16 w-80 bg-white rounded-3xl shadow-2xl border-2 border-gray-300 overflow-hidden"
+                        style={{ 
+                            zIndex: 9999,
+                            backgroundColor: '#ffffff',
+                            opacity: 1
+                        }}
+                    >
                         {currentUser ? (
                             <>
-                                {/* Enhanced User Info Header */}
-                                <div className="px-6 py-5 bg-white border-b border-slate-200 relative z-10">
-                                    <div className="absolute inset-0 bg-gradient-to-r from-slate-50 to-blue-50"></div>
-                                    <div className="relative flex items-center gap-4">
+                                {/* User Info Header - Completely Solid */}
+                                <div 
+                                    className="px-6 py-5 border-b border-gray-300"
+                                    style={{ backgroundColor: '#f8fafc' }}
+                                >
+                                    <div className="flex items-center gap-4">
                                         <div className="relative">
                                             <div className="ring-3 ring-blue-100 rounded-full p-1">
                                                 <Avatar src={currentUser?.image} />
@@ -199,8 +188,11 @@ const UserMenu: React.FC<UserMenuProps> = ({
                                     </div>
                                 </div>
 
-                                {/* Enhanced Navigation Items */}
-                                <div className="py-3 bg-white relative z-10">
+                                {/* Navigation Items - Completely Solid */}
+                                <div 
+                                    className="py-3"
+                                    style={{ backgroundColor: '#ffffff' }}
+                                >
                                     <div className="px-3 space-y-1">
                                         <MenuItem 
                                             onClick={() => navigateAndClose('/')}
@@ -267,12 +259,12 @@ const UserMenu: React.FC<UserMenuProps> = ({
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                                                 </svg>
                                             }
-                                            className="bg-gradient-to-r from-rose-50 to-pink-50 text-rose-700 border border-rose-200 hover:from-rose-100 hover:to-pink-100"
+                                            className="bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100"
                                         />
                                     </div>
                                     
                                     <div className="my-3 mx-3">
-                                        <hr className="border-slate-200/70" />
+                                        <hr className="border-gray-300" />
                                     </div>
 
                                     <div className="px-3">
@@ -294,10 +286,12 @@ const UserMenu: React.FC<UserMenuProps> = ({
                             </>
                         ) : (
                             <>
-                                {/* Enhanced Guest Welcome Section */}
-                                <div className="px-6 py-5 border-b border-slate-200 bg-white relative z-10">
-                                    <div className="absolute inset-0 bg-gradient-to-r from-blue-50 to-indigo-50"></div>
-                                    <div className="relative text-center">
+                                {/* Guest Welcome Section - Completely Solid */}
+                                <div 
+                                    className="px-6 py-5 border-b border-gray-300"
+                                    style={{ backgroundColor: '#eff6ff' }}
+                                >
+                                    <div className="text-center">
                                         <div className="w-16 h-16 mx-auto mb-3 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full flex items-center justify-center">
                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="white" className="w-8 h-8">
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
@@ -308,7 +302,10 @@ const UserMenu: React.FC<UserMenuProps> = ({
                                     </div>
                                 </div>
                                 
-                                <div className="py-3 bg-white relative z-10">
+                                <div 
+                                    className="py-3"
+                                    style={{ backgroundColor: '#ffffff' }}
+                                >
                                     <div className="px-3 space-y-2">
                                         <MenuItem 
                                             onClick={() => {
@@ -321,7 +318,7 @@ const UserMenu: React.FC<UserMenuProps> = ({
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
                                                 </svg>
                                             }
-                                            className="text-blue-600 hover:bg-blue-50 border border-blue-200 hover:border-blue-300 bg-blue-50/30"
+                                            className="text-blue-600 hover:bg-blue-50 border border-blue-200 hover:border-blue-300 bg-blue-50"
                                         />
                                         <MenuItem 
                                             onClick={() => {
@@ -334,7 +331,7 @@ const UserMenu: React.FC<UserMenuProps> = ({
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 019.374 21c-2.331 0-4.512-.645-6.374-1.766z" />
                                                 </svg>
                                             }
-                                            className="text-green-600 hover:bg-green-50 border border-green-200 hover:border-green-300 bg-green-50/30"
+                                            className="text-green-600 hover:bg-green-50 border border-green-200 hover:border-green-300 bg-green-50"
                                         />
                                         <MenuItem 
                                             onClick={() => navigateAndClose('/contact')}
