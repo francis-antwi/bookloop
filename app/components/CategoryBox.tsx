@@ -42,6 +42,7 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
     <div
       onClick={handleClick}
       className={`
+        mb-1
         group
         relative
         flex
@@ -61,9 +62,6 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
         hover:shadow-lg
         hover:shadow-black/5
         active:scale-[0.98]
-        touch-manipulation
-        aspect-square
-        w-full
         ${
           selected
             ? 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200 text-blue-700 shadow-md shadow-blue-100'
@@ -76,7 +74,7 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
         <div className="absolute inset-0 bg-gradient-to-br from-blue-400/10 to-indigo-400/10 rounded-2xl blur-xl" />
       )}
       
-      {/* Icon container with responsive sizing */}
+      {/* Icon container with animated background */}
       <div
         className={`
           relative
@@ -101,7 +99,7 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
         />
       </div>
 
-      {/* Label with responsive typography */}
+      {/* Label with improved typography */}
       <div
         className={`
           font-semibold
@@ -109,12 +107,6 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
           text-center
           transition-all
           duration-300
-          leading-tight
-          max-w-full
-          overflow-hidden
-          text-ellipsis
-          whitespace-nowrap
-          px-1
           ${
             selected
               ? 'text-blue-700'
@@ -125,19 +117,16 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
         {label}
       </div>
 
-      {/* Selection indicator - more subtle on mobile */}
+      {/* Selection indicator dot */}
       <div
         className={`
           absolute
-          -bottom-0.5
-          sm:-bottom-1
+          -bottom-1
           left-1/2
           transform
           -translate-x-1/2
-          w-1.5
-          h-1.5
-          sm:w-2
-          sm:h-2
+          w-2
+          h-2
           rounded-full
           transition-all
           duration-300
