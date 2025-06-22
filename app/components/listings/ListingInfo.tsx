@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Calendar, MapPin, Phone, Mail, Tag, Clock, Users, Car, Home, Building, Utensils, Settings, X, Star, Heart, Share2, Eye } from "lucide-react";
+import { Calendar, MapPin, Phone, Mail, Tag, Clock, Users, Car, Home, Building, Utensils, Settings, X } from "lucide-react";
 
 interface ListingInfoProps {
   listing?: {
@@ -91,41 +91,6 @@ const getCategoryIcon = (category?: string) => {
   }
 };
 
-const getCategoryColors = (category?: string) => {
-  switch (category) {
-    case 'Apartments': return { 
-      bg: 'from-emerald-500 to-teal-600', 
-      accent: 'emerald',
-      shadow: 'shadow-emerald-500/20'
-    };
-    case 'Cars': return { 
-      bg: 'from-blue-500 to-indigo-600', 
-      accent: 'blue',
-      shadow: 'shadow-blue-500/20'
-    };
-    case 'Event Centers': return { 
-      bg: 'from-purple-500 to-pink-600', 
-      accent: 'purple',
-      shadow: 'shadow-purple-500/20'
-    };
-    case 'Restaurants': return { 
-      bg: 'from-orange-500 to-red-600', 
-      accent: 'orange',
-      shadow: 'shadow-orange-500/20'
-    };
-    case 'Appointments': return { 
-      bg: 'from-cyan-500 to-blue-600', 
-      accent: 'cyan',
-      shadow: 'shadow-cyan-500/20'
-    };
-    default: return { 
-      bg: 'from-gray-500 to-slate-600', 
-      accent: 'gray',
-      shadow: 'shadow-gray-500/20'
-    };
-  }
-};
-
 const formatDate = (dateStr?: string | null) => {
   if (!dateStr) return "N/A";
   const date = new Date(dateStr);
@@ -138,9 +103,9 @@ const formatDate = (dateStr?: string | null) => {
 
 const formatPrice = (price?: number) => {
   if (price === undefined || price === null) return "Contact for price";
-  return new Intl.NumberFormat('en-GH', {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: 'GHS',
+    currency: 'USD',
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(price);
@@ -152,91 +117,58 @@ const InfoItem: React.FC<{
   value: string | number | boolean;
   onClick?: () => void;
   isClickable?: boolean;
-  accent?: string;
-}> = ({ icon, label, value, onClick, isClickable, accent = 'blue' }) => (
+}> = ({ icon, label, value, onClick, isClickable }) => (
   <div 
-    className={`group relative overflow-hidden bg-white rounded-xl border border-gray-100 p-4 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 ${
+    className={`flex items-center gap-3 p-3 bg-gray-50 rounded-lg transition-colors ${
       isClickable 
-        ? `cursor-pointer hover:border-${accent}-200 hover:shadow-${accent}-500/10` 
-        : 'hover:border-gray-200'
+        ? 'hover:bg-blue-50 hover:border-blue-200 border border-transparent cursor-pointer' 
+        : 'hover:bg-gray-100'
     }`}
     onClick={onClick}
   >
-    {/* Gradient overlay on hover */}
-    <div className={`absolute inset-0 bg-gradient-to-br from-${accent}-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
-    
-    <div className="relative flex items-center gap-3">
-      <div className={`flex-shrink-0 p-2 rounded-lg bg-${accent}-50 text-${accent}-600 group-hover:bg-${accent}-100 transition-colors duration-300`}>
-        {icon}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-600 mb-1">{label}</p>
-        <p className={`text-base font-semibold truncate ${isClickable ? `text-${accent}-700` : 'text-gray-900'}`}>
-          {value.toString()}
-        </p>
-      </div>
-      {isClickable && (
-        <div className={`text-${accent}-400 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0`}>
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-          </svg>
-        </div>
-      )}
+    <div className={`flex-shrink-0 ${isClickable ? 'text-blue-600' : 'text-gray-600'}`}>
+      {icon}
     </div>
+    <div className="flex-1 min-w-0">
+      <p className="text-sm font-medium text-gray-900">{label}</p>
+      <p className={`text-sm truncate ${isClickable ? 'text-blue-600' : 'text-gray-600'}`}>
+        {value.toString()}
+      </p>
+    </div>
+    {isClickable && (
+      <div className="text-blue-600 opacity-50">
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+        </svg>
+      </div>
+    )}
   </div>
-);
-
-const ActionButton: React.FC<{ 
-  icon: React.ReactNode; 
-  label: string; 
-  onClick: () => void;
-  variant?: 'primary' | 'secondary';
-}> = ({ icon, label, onClick, variant = 'secondary' }) => (
-  <button
-    onClick={onClick}
-    className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all duration-300 hover:scale-105 active:scale-95 ${
-      variant === 'primary' 
-        ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg hover:shadow-xl hover:shadow-blue-500/25' 
-        : 'bg-white text-gray-700 border border-gray-200 hover:border-gray-300 hover:shadow-md'
-    }`}
-  >
-    {icon}
-    <span className="text-sm">{label}</span>
-  </button>
 );
 
 const ListingInfo: React.FC<ListingInfoProps> = ({ listing }) => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [isFavorite, setIsFavorite] = useState(false);
   
   if (!listing) {
     return (
-      <div className="max-w-4xl mx-auto p-8">
-        <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-12 text-center">
-          <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Tag className="w-8 h-8 text-gray-400" />
-          </div>
-          <h3 className="text-xl font-semibold text-gray-600 mb-2">No listing data available</h3>
-          <p className="text-gray-500">Please provide listing information to display.</p>
+      <div>
         </div>
-      </div>
+     
     );
   }
 
   const extraFields = listing.category ? categorySpecificFields[listing.category] : null;
-  const categoryColors = getCategoryColors(listing.category);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 p-4">
+    <>
       {/* Image Modal */}
       {selectedImage && (
         <div 
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-300"
+          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
           onClick={() => setSelectedImage(null)}
         >
-          <div className="relative max-w-5xl max-h-full animate-in zoom-in-95 duration-300">
+          <div className="relative max-w-4xl max-h-full">
             <button
-              className="absolute -top-16 right-0 text-white hover:text-gray-300 transition-colors p-2 rounded-full hover:bg-white/10"
+              className="absolute -top-12 right-0 text-white hover:text-gray-300 transition-colors"
               onClick={() => setSelectedImage(null)}
             >
               <X className="w-8 h-8" />
@@ -244,202 +176,125 @@ const ListingInfo: React.FC<ListingInfoProps> = ({ listing }) => {
             <img
               src={selectedImage}
               alt="Full size image"
-              className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl"
+              className="max-w-full max-h-full object-contain rounded-lg"
               onClick={(e) => e.stopPropagation()}
             />
           </div>
         </div>
       )}
 
-      <div className="max-w-6xl mx-auto">
-        <div className={`bg-white rounded-3xl shadow-2xl overflow-hidden ${categoryColors.shadow}`}>
-          {/* Enhanced Header Section */}
-          <div className={`bg-gradient-to-r ${categoryColors.bg} text-white relative overflow-hidden`}>
-            {/* Background pattern */}
-            <div className="absolute inset-0 opacity-10">
-              <div className="absolute inset-0" style={{
-                backgroundImage: `radial-gradient(circle at 25% 25%, white 2px, transparent 2px)`,
-                backgroundSize: '30px 30px'
-              }} />
-            </div>
-            
-            <div className="relative p-8">
-              <div className="flex items-start justify-between mb-6">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
-                      {getCategoryIcon(listing.category)}
-                    </div>
-                    <span className="text-lg font-medium opacity-90">{listing.category || "Uncategorized"}</span>
-                  </div>
-                  <h1 className="text-4xl font-bold mb-4 leading-tight">{listing.title || "Untitled Listing"}</h1>
-                  
-                  {/* Action buttons */}
-                  <div className="flex flex-wrap gap-3">
-                    <ActionButton
-                      icon={<Heart className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />}
-                      label={isFavorite ? "Favorited" : "Favorite"}
-                      onClick={() => setIsFavorite(!isFavorite)}
-                      variant="secondary"
-                    />
-                    <ActionButton
-                      icon={<Share2 className="w-4 h-4" />}
-                      label="Share"
-                      onClick={() => navigator.share?.({ title: listing.title, url: window.location.href })}
-                      variant="secondary"
-                    />
-                    <ActionButton
-                      icon={<Eye className="w-4 h-4" />}
-                      label="View Details"
-                      onClick={() => {}}
-                      variant="secondary"
-                    />
-                  </div>
-                </div>
-                
-                <div className="text-right">
-                  <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-6">
-                    <div className="text-4xl font-bold mb-2">
-                      {listing.price ? formatPrice(listing.price) : "Contact for price"}
-                    </div>
-                    <div className="text-white/80 text-sm flex items-center gap-2">
-                      <Calendar className="w-4 h-4" />
-                      Updated {formatDate(listing.updatedAt)}
-                    </div>
-                  </div>
-                </div>
+      <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden">
+        {/* Header Section */}
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <h1 className="text-2xl font-bold mb-2">{listing.title || "Untitled Listing"}</h1>
+              <div className="flex items-center gap-2 text-blue-100">
+                {getCategoryIcon(listing.category)}
+                <span className="text-lg">{listing.category || "Uncategorized"}</span>
               </div>
             </div>
-            
-            {/* Wave bottom */}
-            <div className="absolute bottom-0 left-0 right-0">
-              <svg viewBox="0 0 1440 120" className="w-full h-8 text-white">
-                <path fill="currentColor" d="M0,64L1440,32L1440,120L0,120Z"></path>
-              </svg>
-            </div>
-          </div>
-
-          {/* Description Section */}
-          {listing.description && (
-            <div className="p-8 border-b border-gray-100">
-              <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                <div className={`p-2 bg-${categoryColors.accent}-50 rounded-lg`}>
-                  <Tag className={`w-5 h-5 text-${categoryColors.accent}-600`} />
-                </div>
-                Description
-              </h2>
-              <div className="bg-gradient-to-br from-gray-50 to-white rounded-2xl p-6 border border-gray-100">
-                <p className="text-gray-700 leading-relaxed text-lg">{listing.description}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Enhanced Contact Information */}
-          <div className="p-8 border-b border-gray-100">
-            <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
-              <div className={`p-2 bg-${categoryColors.accent}-50 rounded-lg`}>
-                <Phone className={`w-5 h-5 text-${categoryColors.accent}-600`} />
-              </div>
-              Contact Information
-            </h2>
-            <div className="grid md:grid-cols-3 gap-6">
-              {listing.contactPhone && (
-                <InfoItem
-                  icon={<Phone className="w-5 h-5" />}
-                  label="Phone Number"
-                  value={listing.contactPhone}
-                  isClickable={true}
-                  accent={categoryColors.accent}
-                  onClick={() => window.open(`tel:${listing.contactPhone}`, '_self')}
-                />
-              )}
-              {listing.email && (
-                <InfoItem
-                  icon={<Mail className="w-5 h-5" />}
-                  label="Email Address"
-                  value={listing.email}
-                  isClickable={true}
-                  accent={categoryColors.accent}
-                  onClick={() => window.open(`mailto:${listing.email}`, '_self')}
-                />
-              )}
-              {listing.address && (
-                <InfoItem
-                  icon={<MapPin className="w-5 h-5" />}
-                  label="Location"
-                  value={listing.address}
-                  isClickable={true}
-                  accent={categoryColors.accent}
-                  onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(listing.address)}`, '_blank')}
-                />
-              )}
-            </div>
-          </div>
-
-          {/* Enhanced Category-specific Details */}
-          {extraFields && (
-            <div className="p-8">
-              <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                <div className={`p-2 bg-${categoryColors.accent}-50 rounded-lg`}>
-                  {getCategoryIcon(listing.category)}
-                </div>
-                {listing.category} Details
-              </h2>
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {Object.entries(extraFields).map(([fieldName, { label, icon }]) => {
-                  const value = (listing as any)[fieldName];
-
-                  if (
-                    value === null ||
-                    value === undefined ||
-                    value === false ||
-                    value === "" ||
-                    value === 0
-                  ) {
-                    return null;
-                  }
-
-                  return (
-                    <InfoItem
-                      key={fieldName}
-                      icon={icon || <Tag className="w-5 h-5" />}
-                      label={label}
-                      value={typeof value === 'boolean' ? (value ? 'Yes' : 'No') : value}
-                      accent={categoryColors.accent}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Enhanced Footer */}
-          <div className="p-8 bg-gradient-to-r from-gray-50 to-gray-100 border-t border-gray-200">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-6 text-gray-600">
-                <div className="flex items-center gap-2">
-                  <div className={`p-2 bg-${categoryColors.accent}-50 rounded-lg`}>
-                    <Calendar className={`w-4 h-4 text-${categoryColors.accent}-600`} />
-                  </div>
-                  <span className="text-sm font-medium">
-                    Listed on {formatDate(listing.createdAt)}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-                  <span className="text-sm text-gray-500">Active listing</span>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <Star className="w-5 h-5 text-yellow-400 fill-current" />
-                <span className="text-sm font-medium text-gray-600">Premium listing</span>
+            <div className="text-right">
+              <div className="text-3xl font-bold">GH₵ {(listing.price)}</div>
+              <div className="text-blue-200 text-sm mt-1">
+                Updated {formatDate(listing.updatedAt)}
               </div>
             </div>
           </div>
         </div>
+
+     
+
+        {/* Description Section */}
+        {listing.description && (
+          <div className="p-6 border-b">
+            <h2 className="text-lg font-semibold mb-3">Description</h2>
+            <p className="text-gray-700 leading-relaxed">{listing.description}</p>
+          </div>
+        )}
+
+        {/* Contact Information */}
+        <div className="p-6 border-b bg-gray-50">
+          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <Phone className="w-5 h-5 text-gray-600" />
+            Contact Information
+          </h2>
+          <div className="grid md:grid-cols-3 gap-4">
+            {listing.contactPhone && (
+              <InfoItem
+                icon={<Phone className="w-4 h-4" />}
+                label="Phone"
+                value={listing.contactPhone}
+                isClickable={true}
+                onClick={() => window.open(`tel:${listing.contactPhone}`, '_self')}
+              />
+            )}
+            {listing.email && (
+              <InfoItem
+                icon={<Mail className="w-4 h-4" />}
+                label="Email"
+                value={listing.email}
+                isClickable={true}
+                onClick={() => window.open(`mailto:${listing.email}`, '_self')}
+              />
+            )}
+            {listing.address && (
+              <InfoItem
+                icon={<MapPin className="w-4 h-4" />}
+                label="Address"
+                value={listing.address}
+                isClickable={true}
+                onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(listing.address)}`, '_blank')}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Category-specific Details */}
+        {extraFields && (
+          <div className="p-6">
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              {getCategoryIcon(listing.category)}
+              {listing.category} Details
+            </h2>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Object.entries(extraFields).map(([fieldName, { label, icon }]) => {
+                const value = (listing as any)[fieldName];
+
+                if (
+                  value === null ||
+                  value === undefined ||
+                  value === false ||
+                  value === "" ||
+                  value === 0
+                ) {
+                  return null;
+                }
+
+                return (
+                  <InfoItem
+                    key={fieldName}
+                    icon={icon || <Tag className="w-4 h-4" />}
+                    label={label}
+                    value={typeof value === 'boolean' ? (value ? 'Yes' : 'No') : value}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="px-6 py-4 bg-gray-50 border-t text-center text-sm text-gray-500">
+          <div className="flex items-center justify-center gap-4">
+            <span className="flex items-center gap-1">
+              <Calendar className="w-4 h-4" />
+              Listed on {formatDate(listing.createdAt)}
+            </span>
+          </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 
