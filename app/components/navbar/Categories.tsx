@@ -1,187 +1,134 @@
 'use client';
 
-import qs from 'query-string';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback } from 'react';
-import { IconType } from 'react-icons';
+import { useSearchParams, usePathname } from "next/navigation";
+import Container from "../Container";
+import CategoryBox from "../CategoryBox";
+import { FaHome, FaCar, FaUtensils } from 'react-icons/fa';
+import { GiCommercialAirplane, GiTheaterCurtains } from 'react-icons/gi';
+import { SiAirbnb } from 'react-icons/si';
+import { MdEvent } from 'react-icons/md';
+import { AiOutlineCalendar } from 'react-icons/ai';
 
-interface CategoryBoxProps {
-  icon: IconType;
-  label: string;
-  selected?: boolean;
-  description?: string;
-}
+export const categories = [
+  {
+    label: 'Apartments',
+    icon: FaHome,
+    description: 'Browse and reserve apartments for short-term or long-term stays, suitable for business, vacation, or personal use.',
+  },
+  {
+    label: 'Cars',
+    icon: FaCar,
+    description: 'Book a wide range of rental cars for travel, business, or leisure — available by the hour, day, or week.',
+  },
+  {
+    label: 'Event Centers',
+    icon: MdEvent,
+    description: 'Reserve venues for weddings, conferences, parties, and other special events with customizable time slots and capacities.',
+  },
+  {
+    label: 'Hotel Rooms',
+    icon: SiAirbnb,
+    description: 'Find and reserve hotel accommodations that suit your travel needs with filters for price, location, and amenities.',
+  },
+  {
+    label: 'Tour Services',
+    icon: GiCommercialAirplane,
+    description: 'Book guided tour services for city tours, adventure trips, or cultural experiences, complete with transport and itineraries.',
+  },
+  {
+    label: 'Event Tickets',
+    icon: GiTheaterCurtains,
+    description: 'Secure tickets for concerts, theater shows, sports events, and more — including seat selection where applicable.',
+  },
+  {
+    label: 'Restaurants',
+    icon: FaUtensils,
+    description: 'Make dining reservations at popular restaurants, choose your preferred time, and receive confirmation instantly.',
+  },
+  {
+    label: 'Appointments',
+    icon: AiOutlineCalendar,
+    description: 'Book appointments for services like salons, spas, doctor visits, and consultations with flexible scheduling options.',
+  },
+];
 
-const CategoryBox: React.FC<CategoryBoxProps> = ({
-  icon: Icon,
-  label,
-  selected,
-  description
-}) => {
-  const router = useRouter();
+const Categories = () => {
   const params = useSearchParams();
+  const category = params?.get('category');
+  const pathname = usePathname();
+  const isMainPage = pathname === '/';
 
-  const handleClick = useCallback(() => {
-    if (!params) return;
-
-    const currentQuery = qs.parse(params.toString());
-    const updatedQuery: Record<string, string | string[]> = {
-      ...currentQuery,
-      category: label,
-    };
-
-    if (params.get('category') === label) {
-      delete updatedQuery.category;
-    }
-
-    const url = qs.stringifyUrl(
-      {
-        url: '/',
-        query: updatedQuery,
-      },
-      { skipNull: true }
-    );
-
-    router.push(url);
-  }, [label, params, router]);
+  if (!isMainPage) return null;
 
   return (
-    <div
-      onClick={handleClick}
-      className={`
-        mb-1
-        group
-        relative
-        flex
-        flex-col
-        items-center
-        justify-center
-        gap-1
-        md:gap-1.5
-        lg:gap-2
-        px-2
-        py-3
-        md:px-2.5
-        md:py-3
-        lg:px-3
-        lg:py-3.5
-        rounded-lg
-        md:rounded-xl
-        border
-        cursor-pointer
-        transition-all
-        duration-300
-        ease-out
-        hover:scale-[1.02]
-        hover:shadow-lg
-        hover:shadow-black/5
-        active:scale-[0.98]
-        touch-manipulation
-        aspect-square
-        w-full
-        max-w-[80px]
-        md:max-w-[70px]
-        lg:max-w-[75px]
-        xl:max-w-[80px]
-        ${selected
-          ? 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200 text-blue-700 shadow-md shadow-blue-100'
-          : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300'}
-      `}
-    >
-      {/* Glow effect */}
-      {selected && (
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-400/10 to-indigo-400/10 rounded-lg md:rounded-xl blur-xl" />
-      )}
-
-      {/* Icon container */}
-      <div
-        className={`
-          relative
-          p-1.5
-          md:p-1.5
-          lg:p-2
-          rounded-md
-          md:rounded-lg
-          transition-all
-          duration-300
-          ${selected
-            ? 'bg-gradient-to-br from-blue-100 to-indigo-100 shadow-sm'
-            : 'bg-gray-100 group-hover:bg-gray-200'}
-        `}
-      >
-        <Icon
-          size={16}
-          className={`
-            md:w-4
-            md:h-4
-            lg:w-5
-            lg:h-5
-            transition-all
-            duration-300
-            ${selected ? 'text-blue-600' : 'text-gray-500 group-hover:text-gray-700'}
-          `}
-        />
-      </div>
-
-      {/* Label with tooltip on hover */}
-      <div
-        className={`
-          relative
-          font-medium
-          md:font-semibold
-          text-[10px]
-          md:text-[10px]
-          lg:text-xs
-          leading-tight
-          max-w-full
-          overflow-hidden
-          text-ellipsis
-          whitespace-nowrap
-          text-center
-          ${selected ? 'text-blue-700' : 'text-gray-600 group-hover:text-gray-800'}
-        `}
-      >
-        {label}
-
-        {/* Tooltip Popup */}
-        {selected && description && (
-          <div className="absolute z-50 left-1/2 -translate-x-1/2 top-full mt-2 w-44 px-3 py-2 text-[10px] text-gray-700 bg-white border border-gray-200 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-            <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 rotate-45 bg-white border-l border-t border-gray-200" />
-            <span className="block text-center leading-snug">
-              {description}
-            </span>
+    <div className="bg-gradient-to-b from-white via-gray-50/30 to-white">
+      <Container>
+        <div className="py-4 md:py-6">
+          {/* Header Section */}
+          <div className="mb-4 md:mb-6 text-center">
+            <h2 className="text-lg md:text-xl font-bold text-gray-900 mb-1">
+              What are you looking for?
+            </h2>
+            <p className="text-xs md:text-sm text-gray-600 max-w-2xl mx-auto">
+              Discover and book from our wide range of services
+            </p>
           </div>
-        )}
-      </div>
 
-      {/* Selection indicator dot */}
-      <div
-        className={`
-          absolute
-          -bottom-0.5
-          md:-bottom-1
-          left-1/2
-          transform
-          -translate-x-1/2
-          w-1
-          h-1
-          md:w-1.5
-          md:h-1.5
-          rounded-full
-          transition-all
-          duration-300
-          ${selected
-            ? 'bg-gradient-to-r from-blue-500 to-indigo-500 opacity-100 scale-100'
-            : 'bg-gray-400 opacity-0 scale-75'}
-        `}
-      />
+          {/* Centered Horizontal Scrollable Categories */}
+          <div className="overflow-x-auto scrollbar-hide scroll-smooth">
+            <div className="flex justify-center w-max mx-auto gap-2 md:gap-3 px-2">
+              {categories.map((item) => (
+                <div key={item.label} className="flex-shrink-0 w-20 md:w-20 lg:w-24">
+                  <CategoryBox
+                    label={item.label}
+                    selected={category === item.label}
+                    icon={item.icon}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
 
-      {/* Ripple effect */}
-      <div className="absolute inset-0 rounded-lg md:rounded-xl overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-blue-400/0 via-blue-400/10 to-blue-400/0 transform -translate-x-full group-active:translate-x-full transition-transform duration-700 ease-out" />
-      </div>
+          {/* Selected Category Description */}
+          {category && (
+            <div className="mt-4 md:mt-6 p-3 md:p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-lg">
+                  {categories.find(cat => cat.label === category)?.icon && (
+                    <div className="w-4 h-4 md:w-5 md:h-5 text-blue-600">
+                      {(() => {
+                        const IconComponent = categories.find(cat => cat.label === category)?.icon;
+                        return IconComponent ? <IconComponent size={16} className="md:w-5 md:h-5" /> : null;
+                      })()}
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-base md:text-lg text-blue-900 mb-1">
+                    {category}
+                  </h3>
+                  <p className="text-sm text-gray-700">
+                    {categories.find(cat => cat.label === category)?.description}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </Container>
+
+      {/* Custom scrollbar styles */}
+      <style jsx>{`
+        .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+        }
+      `}</style>
     </div>
   );
 };
 
-export default CategoryBox;
+export default Categories;
