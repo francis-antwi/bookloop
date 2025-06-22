@@ -16,7 +16,7 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({
   icon: Icon,
   label,
   selected,
-  description
+  description,
 }) => {
   const router = useRouter();
   const params = useSearchParams();
@@ -34,14 +34,7 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({
       delete updatedQuery.category;
     }
 
-    const url = qs.stringifyUrl(
-      {
-        url: '/',
-        query: updatedQuery,
-      },
-      { skipNull: true }
-    );
-
+    const url = qs.stringifyUrl({ url: '/', query: updatedQuery }, { skipNull: true });
     router.push(url);
   }, [label, params, router]);
 
@@ -49,130 +42,67 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({
     <div
       onClick={handleClick}
       className={`
-        mb-1
-        group
-        relative
-        flex
-        flex-col
-        items-center
-        justify-center
-        gap-1
-        md:gap-1.5
-        lg:gap-2
-        px-2
-        py-3
-        md:px-2.5
-        md:py-3
-        lg:px-3
-        lg:py-3.5
-        rounded-lg
-        md:rounded-xl
-        border
-        cursor-pointer
-        transition-all
-        duration-300
-        ease-out
-        hover:scale-[1.02]
-        hover:shadow-lg
-        hover:shadow-black/5
-        active:scale-[0.98]
-        touch-manipulation
-        aspect-square
-        w-full
-        max-w-[80px]
-        md:max-w-[70px]
-        lg:max-w-[75px]
-        xl:max-w-[80px]
+        group relative flex flex-col items-center justify-center
+        gap-1 md:gap-1.5 lg:gap-2 px-2 py-3 md:px-2.5 md:py-3 lg:px-3 lg:py-3.5
+        rounded-lg md:rounded-xl border cursor-pointer transition-all duration-300 ease-out
+        hover:scale-[1.02] hover:shadow-lg hover:shadow-black/5 active:scale-[0.98]
+        touch-manipulation aspect-square w-full max-w-[80px] md:max-w-[70px] lg:max-w-[75px] xl:max-w-[80px]
         ${selected
           ? 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200 text-blue-700 shadow-md shadow-blue-100'
           : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300'}
       `}
     >
-      {/* Glow effect */}
+      {/* Glow for selected */}
       {selected && (
         <div className="absolute inset-0 bg-gradient-to-br from-blue-400/10 to-indigo-400/10 rounded-lg md:rounded-xl blur-xl" />
       )}
 
-      {/* Icon container */}
+      {/* Icon */}
       <div
-        className={`
-          relative
-          p-1.5
-          md:p-1.5
-          lg:p-2
-          rounded-md
-          md:rounded-lg
-          transition-all
-          duration-300
-          ${selected
-            ? 'bg-gradient-to-br from-blue-100 to-indigo-100 shadow-sm'
-            : 'bg-gray-100 group-hover:bg-gray-200'}
+        className={`relative p-1.5 lg:p-2 rounded-md md:rounded-lg transition-all duration-300
+        ${selected ? 'bg-gradient-to-br from-blue-100 to-indigo-100 shadow-sm' : 'bg-gray-100 group-hover:bg-gray-200'}
         `}
       >
         <Icon
           size={16}
-          className={`
-            md:w-4
-            md:h-4
-            lg:w-5
-            lg:h-5
-            transition-all
-            duration-300
+          className={`transition-all duration-300
+            md:w-4 md:h-4 lg:w-5 lg:h-5
             ${selected ? 'text-blue-600' : 'text-gray-500 group-hover:text-gray-700'}
           `}
         />
       </div>
 
-      {/* Label with tooltip on hover */}
+      {/* Label */}
       <div
         className={`
-          relative
-          font-medium
-          md:font-semibold
-          text-[10px]
-          md:text-[10px]
-          lg:text-xs
-          leading-tight
-          max-w-full
-          overflow-hidden
-          text-ellipsis
-          whitespace-nowrap
-          text-center
+          relative font-medium md:font-semibold text-[10px] md:text-[10px] lg:text-xs
+          leading-tight max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-center
           ${selected ? 'text-blue-700' : 'text-gray-600 group-hover:text-gray-800'}
         `}
       >
         {label}
 
-        {/* Tooltip Popup */}
-        {selected && description && (
-          <div className="absolute z-50 left-1/2 -translate-x-1/2 top-full mt-2 w-44 px-3 py-2 text-[10px] text-gray-700 bg-white border border-gray-200 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+        {/* Tooltip on hover */}
+        {description && (
+          <div className="
+            absolute z-50 left-1/2 -translate-x-1/2 top-full mt-2 w-44 px-3 py-2
+            text-[10px] text-gray-700 bg-white border border-gray-200 rounded-lg shadow-xl
+            opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none
+          ">
             <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 rotate-45 bg-white border-l border-t border-gray-200" />
-            <span className="block text-center leading-snug">
+            <span className="block text-center leading-snug break-words">
               {description}
             </span>
           </div>
         )}
       </div>
 
-      {/* Selection indicator dot */}
+      {/* Selection dot */}
       <div
         className={`
-          absolute
-          -bottom-0.5
-          md:-bottom-1
-          left-1/2
-          transform
-          -translate-x-1/2
-          w-1
-          h-1
-          md:w-1.5
-          md:h-1.5
-          rounded-full
-          transition-all
-          duration-300
-          ${selected
-            ? 'bg-gradient-to-r from-blue-500 to-indigo-500 opacity-100 scale-100'
-            : 'bg-gray-400 opacity-0 scale-75'}
+          absolute -bottom-0.5 md:-bottom-1 left-1/2 transform -translate-x-1/2
+          w-1 h-1 md:w-1.5 md:h-1.5 rounded-full transition-all duration-300
+          ${selected ? 'bg-gradient-to-r from-blue-500 to-indigo-500 opacity-100 scale-100' : 'bg-gray-400 opacity-0 scale-75'}
         `}
       />
 
