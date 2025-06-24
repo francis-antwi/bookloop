@@ -24,7 +24,7 @@ export async function POST(req: Request) {
     if (!response.ok) {
       const error = await response.text();
       console.error("OpenAI error:", error);
-      return NextResponse.json({ response: "OpenAI service unavailable." }, { status: 500 });
+      return NextResponse.json({ response: "Currently unavailable." }, { status: 500 });
     }
 
     const data = await response.json();
