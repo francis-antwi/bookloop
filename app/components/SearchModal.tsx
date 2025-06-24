@@ -66,7 +66,6 @@ const SearchModal = () => {
       setErrorMessage('');
 
       try {
-        // Call API to search for location
         const response = await axios.get(`/api/query`, {
           params: { address: data.location }
         });
@@ -96,8 +95,6 @@ const SearchModal = () => {
           }, { skipNull: true });
 
           setSuccessMessage("Search completed successfully!");
-          
-          // Delay navigation for better UX
           setTimeout(() => {
             router.push(url);
             handleClose();
@@ -118,12 +115,39 @@ const SearchModal = () => {
     return step === STEPS.DATE ? "Search" : "Next";
   }, [step, isLoading]);
 
-  // Progress indicator
   const progressPercentage = ((step + 1) / Object.keys(STEPS).length * 50) * 100;
+
+  // 🔊 Voice input handler
+  const handleVoiceInput = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Your browser does not support voice recognition.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      const input = document.getElementById('location') as HTMLInputElement;
+      if (input) {
+        input.value = transcript;
+        input.dispatchEvent(new Event('input', { bubbles: true })); // update react-hook-form
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error('Speech recognition error', event.error);
+    };
+
+    recognition.start();
+  };
 
   const bodyContent = (
     <div className="flex flex-col gap-6">
-      {/* Progress Bar */}
       <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
         <div 
           className="bg-gradient-to-r from-blue-500 to-indigo-600 h-full rounded-full transition-all duration-500 ease-out"
@@ -131,7 +155,6 @@ const SearchModal = () => {
         />
       </div>
 
-      {/* Step Indicator */}
       <div className="flex items-center justify-between text-sm text-gray-500">
         <div className={`flex items-center gap-2 ${step >= STEPS.LOCATION ? 'text-blue-600' : ''}`}>
           <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
@@ -155,7 +178,6 @@ const SearchModal = () => {
         </div>
       </div>
 
-      {/* Content based on step */}
       <div className="min-h-[300px] flex flex-col justify-center">
         {step === STEPS.LOCATION && (
           <div className="space-y-6 animate-fadeIn">
@@ -166,8 +188,9 @@ const SearchModal = () => {
               variant="gradient"
               animated
             />
-            
-            <div className="relative">
+
+            {/* Location input with voice button */}
+            <div className="relative flex items-center gap-2">
               <Input 
                 id="location" 
                 label="Location" 
@@ -175,18 +198,25 @@ const SearchModal = () => {
                 register={register} 
                 errors={errors} 
                 required
-                className="text-lg"
+                className="text-lg pr-12"
               />
-              
-              {/* Location suggestions or recent searches could go here */}
-              {locationValue && locationValue.length > 2 && (
-                <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-10 mt-1">
-                  <div className="p-3 text-sm text-gray-500">
-                    Press Next to continue with "{locationValue}"
-                  </div>
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={handleVoiceInput}
+                className="absolute right-3 top-8 text-blue-600 hover:text-blue-800"
+                title="Tap to speak"
+              >
+                🎤
+              </button>
             </div>
+
+            {locationValue && locationValue.length > 2 && (
+              <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-10 mt-1">
+                <div className="p-3 text-sm text-gray-500">
+                  Press Next to continue with "{locationValue}"
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -200,7 +230,6 @@ const SearchModal = () => {
               animated
             />
 
-            {/* Messages */}
             {errorMessage && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3 animate-fadeIn">
                 <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
@@ -223,7 +252,6 @@ const SearchModal = () => {
               </div>
             )}
 
-            {/* Date Range Picker with custom styling */}
             <div className="flex justify-center">
               <div className="border border-gray-200 rounded-2xl overflow-hidden shadow-sm bg-white">
                 <DateRange
@@ -238,14 +266,10 @@ const SearchModal = () => {
               </div>
             </div>
 
-            {/* Date summary */}
             {dateRange.startDate && dateRange.endDate && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center animate-fadeIn">
                 <p className="text-blue-700 font-medium">
                   Selected: {dateRange.startDate.toLocaleDateString()} - {dateRange.endDate.toLocaleDateString()}
-                </p>
-                <p className="text-blue-600 text-sm mt-1">
-                  {Math.ceil((dateRange.endDate.getTime() - dateRange.startDate.getTime()) / (1000 * 60 * 60 * 24))}
                 </p>
               </div>
             )}
