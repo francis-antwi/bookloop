@@ -1,67 +1,73 @@
 'use client';
+
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, X, Send, Bot, User, Minimize2 } from 'lucide-react';
 
-export default function FloatingChatbot() {
-  const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<string[]>(['🤖: Hi there! How can I help you with BookLoop today?']);
-  const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
+export default function ChatBot() {
+  const [isOpen, setIsOpen] = useState<boolean>(false);
+  const [isMinimized, setIsMinimized] = useState<boolean>(false);
+  const [messages, setMessages] = useState<string[]>([
+    '🤖: Hi there! How can I help you with Bookloop Services today?'
+  ]);
+  const [input, setInput] = useState<string>('');
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    if (isOpen && !isMinimized) {
+      scrollToBottom();
+    }
+  }, [messages, isOpen, isMinimized]);
+
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
   const toggleChat = () => {
-    setIsOpen(!isOpen);
+    setIsOpen((prev) => !prev);
     setIsMinimized(false);
   };
 
   const minimizeChat = () => {
-    setIsMinimized(!isMinimized);
+    setIsMinimized((prev) => !prev);
   };
 
   const handleSend = async () => {
     if (!input.trim()) return;
-    
+
     const userMessage = input;
-    setMessages([...messages, `🧑: ${userMessage}`]);
+    setMessages((prev) => [...prev, `🧑: ${userMessage}`]);
     setInput('');
     setIsLoading(true);
 
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
-        body: JSON.stringify({ message: userMessage }),
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: userMessage }),
       });
 
       const data = await res.json();
       setMessages((prev) => [...prev, `🤖: ${data.response}`]);
     } catch (error) {
-      setMessages((prev) => [...prev, `🤖: Sorry, I'm having trouble connecting right now. Please try again.`]);
+      setMessages((prev) => [
+        ...prev,
+        `🤖: Sorry, I’m having trouble right now. Try again soon.`,
+      ]);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !isLoading) {
-      handleSend();
-    }
+    if (e.key === 'Enter' && !isLoading) handleSend();
   };
 
   const formatMessage = (msg: string, index: number) => {
     const isBot = msg.startsWith('🤖:');
     const isUser = msg.startsWith('🧑:');
     const text = msg.substring(3).trim();
-    
+
     return (
       <div key={index} className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
         <div className={`flex max-w-[85%] ${isUser ? 'flex-row-reverse' : 'flex-row'} items-end gap-2`}>
@@ -99,7 +105,7 @@ export default function FloatingChatbot() {
                   <Bot size={20} className="text-white" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-base">BookLoop Assistant</h3>
+                  <h3 className="font-semibold text-base">EliteFields Assistant</h3>
                   <div className="flex items-center gap-2 text-xs opacity-90">
                     <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
                     <span>Online • Ready to help</span>
@@ -107,23 +113,17 @@ export default function FloatingChatbot() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={minimizeChat}
-                  className="w-8 h-8 hover:bg-white hover:bg-opacity-20 rounded-full flex items-center justify-center transition-all duration-200"
-                >
+                <button onClick={minimizeChat} className="w-8 h-8 hover:bg-white hover:bg-opacity-20 rounded-full flex items-center justify-center transition-all duration-200">
                   <Minimize2 size={16} />
                 </button>
-                <button
-                  onClick={toggleChat}
-                  className="w-8 h-8 hover:bg-white hover:bg-opacity-20 rounded-full flex items-center justify-center transition-all duration-200"
-                >
+                <button onClick={toggleChat} className="w-8 h-8 hover:bg-white hover:bg-opacity-20 rounded-full flex items-center justify-center transition-all duration-200">
                   <X size={16} />
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Messages Container */}
+          {/* Chat Body */}
           {!isMinimized && (
             <>
               <div className="h-80 overflow-y-auto p-4 bg-gradient-to-b from-gray-50 to-white">
@@ -137,8 +137,8 @@ export default function FloatingChatbot() {
                       <div className="bg-white border border-gray-100 px-4 py-3 rounded-2xl rounded-bl-md">
                         <div className="flex items-center gap-1">
                           <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-100"></div>
+                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-200"></div>
                         </div>
                       </div>
                     </div>
@@ -150,17 +150,15 @@ export default function FloatingChatbot() {
               {/* Input Area */}
               <div className="p-4 border-t border-gray-100 bg-white rounded-b-2xl">
                 <div className="flex items-center gap-3">
-                  <div className="flex-1 relative">
-                    <input
-                      type="text"
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-full text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                      placeholder="Type your message..."
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      onKeyPress={handleKeyPress}
-                      disabled={isLoading}
-                    />
-                  </div>
+                  <input
+                    type="text"
+                    className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-full text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                    placeholder="Type your message..."
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleKeyPress}
+                    disabled={isLoading}
+                  />
                   <button
                     onClick={handleSend}
                     disabled={isLoading || !input.trim()}
@@ -180,19 +178,19 @@ export default function FloatingChatbot() {
         <div className="relative">
           <button
             onClick={toggleChat}
-            className="w-16 h-16 bg-gradient-to-r from-blue-500 via-blue-600 to-purple-600 text-white rounded-full shadow-2xl hover:shadow-3xl transform transition-all duration-300 flex items-center justify-center group hover:scale-110"
+            className="w-16 h-16 bg-gradient-to-r from-blue-500 via-blue-600 to-purple-600 text-white rounded-full shadow-2xl hover:shadow-3xl transition-all duration-300 flex items-center justify-center hover:scale-110"
           >
             <div className={`transition-all duration-300 ${isOpen ? 'rotate-180 scale-90' : 'rotate-0 scale-100'}`}>
               {isOpen ? <X size={24} /> : <MessageCircle size={24} />}
             </div>
           </button>
-          
+
           {/* Ripple Effect */}
           {!isOpen && (
             <div className="absolute inset-0 w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full animate-ping opacity-20"></div>
           )}
-          
-          {/* Notification Badge */}
+
+          {/* Notification Dot */}
           {!isOpen && (
             <div className="absolute -top-2 -right-2 w-6 h-6 bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs rounded-full flex items-center justify-center font-medium shadow-lg">
               <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
