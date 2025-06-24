@@ -9,8 +9,7 @@ import LoginModal from "./components/modals/LoginModal";
 import RentalModal from "./components/modals/RentalModal";
 import SearchModal from "./components/SearchModal";
 import { getServerSession } from "next-auth";
-
-import SessionProviderWrapper from "./providers/SessionProviderWrapper"; // new wrapper
+import SessionProviderWrapper from "./providers/SessionProviderWrapper";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import ChatBot from "./chat/ChatBot";
 
@@ -60,9 +59,13 @@ export default async function RootLayout({
             <LoginModal />
             <RegisterModal />
             <Navbar currentUser={currentUser} />
-            <div className="pb-20 pt-28">{children}</div>
-            <ChatBot />
+            <div className="pb-20 pt-28">
+              {children}
+            </div>
           </Client>
+
+    
+          <ChatBot />
         </SessionProviderWrapper>
       </body>
     </html>
