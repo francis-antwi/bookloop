@@ -12,6 +12,7 @@ import { getServerSession } from "next-auth";
 
 import SessionProviderWrapper from "./providers/SessionProviderWrapper"; // new wrapper
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
+import ChatBot from "./chat/ChatBot";
 
 const font = Nunito({
   subsets: ["latin"],
@@ -60,6 +61,7 @@ export default async function RootLayout({
             <RegisterModal />
             <Navbar currentUser={currentUser} />
             <div className="pb-20 pt-28">{children}</div>
+            <ChatBot />
           </Client>
         </SessionProviderWrapper>
       </body>
