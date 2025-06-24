@@ -1,10 +1,12 @@
 import getCurrentUser from "./actions/getCurrentUser";
 import getListings, { IListingsParams } from "./actions/getListing";
+import ChatBot from "./chat/ChatBot";
 import Client from "./components/Client";
 import Container from "./components/Container";
 import EmptyState from "./components/EmptyState";
 import ListingCard from "./components/listings/ListingCard";
 import { SafeListing } from "./types";
+
 
 interface HomeProps {
   // Accept searchParams as a Promise resolving to flexible key-value pairs
@@ -36,6 +38,7 @@ const Home = async ({ searchParams }: HomeProps) => {
 
   // Render listings grid
   return (
+  <>
     <Client>
       <Container>
         <div
@@ -61,7 +64,14 @@ const Home = async ({ searchParams }: HomeProps) => {
         </div>
       </Container>
     </Client>
-  );
+
+    <main className="p-6">
+      <h1 className="text-2xl font-bold mb-4">Welcome to EliteFields</h1>
+      <ChatBot />
+    </main>
+  </>
+);
+
 };
 
 export default Home;
