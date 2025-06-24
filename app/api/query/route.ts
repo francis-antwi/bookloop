@@ -16,16 +16,18 @@ export async function GET(request: NextRequest) {
           contains: address,
           mode: "insensitive"
         }
+      },
+      select: {
+        address: true, // ✅ only select address
       }
     });
 
     if (listing) {
-      return NextResponse.json(listing, { status: 200 });
+      return NextResponse.json({ address: listing.address }, { status: 200 });
     } else {
       return NextResponse.json({ message: 'Location not found' }, { status: 404 });
     }
   } catch (error) {
-    // Log the error to the console
     console.error("Error fetching listing:", error);
     return NextResponse.json({ error: 'Error fetching listing' }, { status: 500 });
   }
