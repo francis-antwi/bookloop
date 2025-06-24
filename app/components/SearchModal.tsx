@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import useSearchModal from "../hooks/useSearchModal";
@@ -33,8 +33,23 @@ const SearchModal = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  const { register, handleSubmit, formState: { errors }, watch, reset } = useForm();
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    watch,
+    reset,
+    setValue
+  } = useForm();
   const locationValue = watch('location');
+
+  // Load ResponsiveVoice
+  useEffect(() => {
+    const script = document.createElement("script");
+    script.src = "https://code.responsivevoice.org/responsivevoice.js?key=YOUR_KEY"; // Replace with your key if needed
+    script.async = true;
+    document.body.appendChild(script);
+  }, []);
 
   const onBack = useCallback(() => {
     setStep((value) => value - 1);
@@ -89,12 +104,11 @@ const SearchModal = () => {
             updateQuery.endDate = formatISO(dateRange.endDate);
           }
 
-          const url = qs.stringifyUrl({
-            url: '/',
-            query: updateQuery
-          }, { skipNull: true });
+          const url = qs.stringifyUrl({ url: '/', query: updateQuery }, { skipNull: true });
 
           setSuccessMessage("Search completed successfully!");
+          (window as any).responsiveVoice?.speak("Search completed successfully!");
+
           setTimeout(() => {
             router.push(url);
             handleClose();
@@ -102,7 +116,7 @@ const SearchModal = () => {
         }
       } catch (error) {
         setErrorMessage("Location not found. Please try a different location.");
-        console.error("Error fetching location:", error);
+        (window as any).responsiveVoice?.speak("Location not found. Please try a different one.");
       } finally {
         setIsLoading(false);
       }
@@ -115,9 +129,9 @@ const SearchModal = () => {
     return step === STEPS.DATE ? "Search" : "Next";
   }, [step, isLoading]);
 
-  const progressPercentage = ((step + 1) / Object.keys(STEPS).length * 50) * 100;
+  const progressPercentage = ((step + 1) / Object.values(STEPS).length) * 100;
 
-  // 🔊 Voice input handler
+  // 🎤 Voice input and feedback
   const handleVoiceInput = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -130,17 +144,19 @@ const SearchModal = () => {
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
+    recognition.onstart = () => {
+      (window as any).responsiveVoice?.speak("Listening. Please say your destination.");
+    };
+
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript;
-      const input = document.getElementById('location') as HTMLInputElement;
-      if (input) {
-        input.value = transcript;
-        input.dispatchEvent(new Event('input', { bubbles: true })); // update react-hook-form
-      }
+      setValue('location', transcript, { shouldValidate: true });
+      (window as any).responsiveVoice?.speak(`You said ${transcript}. You can press Next to continue.`);
     };
 
     recognition.onerror = (event: any) => {
       console.error('Speech recognition error', event.error);
+      (window as any).responsiveVoice?.speak("Sorry, I didn't catch that. Please try again.");
     };
 
     recognition.start();
@@ -149,7 +165,7 @@ const SearchModal = () => {
   const bodyContent = (
     <div className="flex flex-col gap-6">
       <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-        <div 
+        <div
           className="bg-gradient-to-r from-blue-500 to-indigo-600 h-full rounded-full transition-all duration-500 ease-out"
           style={{ width: `${progressPercentage}%` }}
         />
@@ -158,22 +174,14 @@ const SearchModal = () => {
       <div className="flex items-center justify-between text-sm text-gray-500">
         <div className={`flex items-center gap-2 ${step >= STEPS.LOCATION ? 'text-blue-600' : ''}`}>
           <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
-            step >= STEPS.LOCATION 
-              ? 'bg-blue-600 text-white' 
-              : 'bg-gray-200 text-gray-500'
-          }`}>
-            1
-          </div>
+            step >= STEPS.LOCATION ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'
+          }`}>1</div>
           <span>Location</span>
         </div>
         <div className={`flex items-center gap-2 ${step >= STEPS.DATE ? 'text-blue-600' : ''}`}>
           <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
-            step >= STEPS.DATE 
-              ? 'bg-blue-600 text-white' 
-              : 'bg-gray-200 text-gray-500'
-          }`}>
-            2
-          </div>
+            step >= STEPS.DATE ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'
+          }`}>2</div>
           <span>Dates</span>
         </div>
       </div>
@@ -189,7 +197,6 @@ const SearchModal = () => {
               animated
             />
 
-            {/* Location input with voice button */}
             <div className="relative flex items-center gap-2">
               <Input 
                 id="location" 
@@ -198,15 +205,29 @@ const SearchModal = () => {
                 register={register} 
                 errors={errors} 
                 required
-                className="text-lg pr-12"
+                className="text-lg pr-16"
               />
               <button
                 type="button"
                 onClick={handleVoiceInput}
-                className="absolute right-3 top-8 text-blue-600 hover:text-blue-800"
+                className="absolute right-10 top-8 text-blue-600 hover:text-blue-800"
                 title="Tap to speak"
               >
                 🎤
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (locationValue) {
+                    (window as any).responsiveVoice?.speak(`You entered ${locationValue}`);
+                  } else {
+                    (window as any).responsiveVoice?.speak("Please enter a location first");
+                  }
+                }}
+                className="absolute right-3 top-8 text-green-600 hover:text-green-800"
+                title="Read aloud"
+              >
+                🔊
               </button>
             </div>
 
