@@ -10,7 +10,7 @@ export async function POST(req: Request) {
 
   try {
     const response = await fetch(
-      'https://api-inference.huggingface.co/models/gpt2?wait_for_model=true', // test with gpt2
+      'https://api-inference.huggingface.co/models/gpt2?wait_for_model=true',
       {
         method: 'POST',
         headers: {
@@ -22,17 +22,16 @@ export async function POST(req: Request) {
     );
 
     if (!response.ok) {
-      const error = await response.text();
-      console.error('HuggingFace error:', error, response.status);
+      const errorText = await response.text();
+      console.error('❌ HuggingFace error:', errorText, 'Status:', response.status);
       return NextResponse.json({ response: 'Service unavailable.' }, { status: 500 });
     }
 
     const data = await response.json();
-    const reply = data?.[0]?.generated_text || '🤖: Sorry, I could not understand that.';
-
+    const reply = data?.[0]?.generated_text || '🤖: No response.';
     return NextResponse.json({ response: reply });
   } catch (err) {
-    console.error('Unexpected error:', err);
+    console.error('🔥 Unexpected error:', err);
     return NextResponse.json({ response: 'Unexpected server error.' }, { status: 500 });
   }
 }
