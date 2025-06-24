@@ -1,6 +1,6 @@
 import getCurrentUser from "./actions/getCurrentUser";
 import getListings, { IListingsParams } from "./actions/getListing";
-import ChatBot from "./chat/ChatBot";
+import ChatBot from "./chat/Chatbot";
 import Client from "./components/Client";
 import Container from "./components/Container";
 import EmptyState from "./components/EmptyState";

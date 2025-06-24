@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, X, Send, Bot, User, Minimize2 } from 'lucide-react';
 
-export default function ChatBot() {
+export default function Chatbot() {
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [isMinimized, setIsMinimized] = useState<boolean>(false);
   const [messages, setMessages] = useState<string[]>([
@@ -64,7 +64,6 @@ export default function ChatBot() {
   };
 
   const formatMessage = (msg: string, index: number) => {
-    const isBot = msg.startsWith('🤖:');
     const isUser = msg.startsWith('🧑:');
     const text = msg.substring(3).trim();
 
@@ -92,7 +91,9 @@ export default function ChatBot() {
     <div className="fixed bottom-0 right-0 z-50">
       {/* Chat Window */}
       <div className={`absolute bottom-20 right-4 transition-all duration-500 ease-out transform ${
-        isOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-8 pointer-events-none'
+        isOpen
+          ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto'
+          : 'opacity-0 scale-95 translate-y-8 pointer-events-none'
       }`}>
         <div className={`bg-white rounded-2xl shadow-2xl border border-gray-100 transition-all duration-300 ${
           isMinimized ? 'w-[320px] h-14' : 'w-[380px] h-[500px]'
@@ -174,7 +175,7 @@ export default function ChatBot() {
       </div>
 
       {/* Floating Button */}
-      <div className="fixed bottom-6 right-6">
+      <div className="fixed bottom-6 right-6 z-50">
         <div className="relative">
           <button
             onClick={toggleChat}
@@ -185,16 +186,13 @@ export default function ChatBot() {
             </div>
           </button>
 
-          {/* Ripple Effect */}
           {!isOpen && (
-            <div className="absolute inset-0 w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full animate-ping opacity-20"></div>
-          )}
-
-          {/* Notification Dot */}
-          {!isOpen && (
-            <div className="absolute -top-2 -right-2 w-6 h-6 bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs rounded-full flex items-center justify-center font-medium shadow-lg">
-              <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-            </div>
+            <>
+              <div className="absolute inset-0 w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full animate-ping opacity-20"></div>
+              <div className="absolute -top-2 -right-2 w-6 h-6 bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs rounded-full flex items-center justify-center font-medium shadow-lg">
+                <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+              </div>
+            </>
           )}
         </div>
       </div>

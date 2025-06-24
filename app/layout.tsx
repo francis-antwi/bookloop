@@ -11,7 +11,8 @@ import SearchModal from "./components/SearchModal";
 import { getServerSession } from "next-auth";
 import SessionProviderWrapper from "./providers/SessionProviderWrapper";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
-import ChatBot from "./chat/ChatBot";
+import Chatbot from "./chat/Chatbot";
+
 
 const font = Nunito({
   subsets: ["latin"],
@@ -63,9 +64,7 @@ export default async function RootLayout({
               {children}
             </div>
           </Client>
-
-    
-          <ChatBot />
+          <Chatbot />
         </SessionProviderWrapper>
       </body>
     </html>
