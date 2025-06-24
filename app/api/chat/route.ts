@@ -1,26 +1,27 @@
-import { NextResponse } from 'next/server';
+import { NextApiRequest, NextApiResponse } from 'next';
 
-export async function POST(req: Request) {
-  const { message } = await req.json();
+const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
+const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
 
-  const HF_API_TOKEN = process.env.HF_API_TOKEN; // set this on Vercel
-  if (!HF_API_TOKEN) {
-    return NextResponse.json({ response: 'Hugging Face API key missing' }, { status: 500 });
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') return res.status(405).end();
+
+  const message = req.body?.message;
+
+  if (message?.text) {
+    const chatId = message.chat.id;
+    const userMessage = message.text;
+
+    // Simple echo or command response
+    await fetch(`${TELEGRAM_API}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: `You said: ${userMessage}`,
+      }),
+    });
   }
 
-  const response = await fetch('https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-alpha', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${HF_API_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      inputs: `User: ${message}\nAI:`,
-    }),
-  });
-
-  const data = await response.json();
-
-  const botReply = data?.[0]?.generated_text?.split('AI:')[1]?.trim() || 'Sorry, I couldn’t respond.';
-  return NextResponse.json({ response: botReply });
+  return res.status(200).json({ status: 'ok' });
 }
