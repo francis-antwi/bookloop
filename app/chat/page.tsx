@@ -79,7 +79,7 @@ export default function Chatbot() {
                 <Bot size={18} />
               </div>
               <div>
-                <p className="font-semibold text-sm">EliteFields Assistant</p>
+                <p className="font-semibold text-sm">Bookloop Assistant</p>
                 <span className="text-xs text-white/80">Online • Ready to help</span>
               </div>
             </div>
