@@ -11,7 +11,8 @@ import SearchModal from "./components/SearchModal";
 import { getServerSession } from "next-auth";
 import SessionProviderWrapper from "./providers/SessionProviderWrapper";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
-import Chatbot from "./chat/Chatbot";
+import Chatbot from "./chat/page";
+
 
 
 const font = Nunito({
