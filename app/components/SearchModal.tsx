@@ -288,7 +288,7 @@ const SearchModal = () => {
       recognition.start();
     } catch (error) {
       console.error('Error starting recognition:', error);
-      setErrorMessage('🎤 Voice input isn\'t working right now. Try typing instead!');
+      setErrorMessage(' Voice input isn\'t working right now. Try typing instead!');
       setIsListening(false);
       setListeningTarget(null);
       clearTimeout(micTimer);
@@ -522,7 +522,7 @@ const SearchModal = () => {
                 >
                   <FaMicrophone className={isListening && listeningTarget === 'location' ? 'animate-bounce' : 'group-hover:animate-pulse'} />
                   <span className="font-semibold">
-                    {isListening && listeningTarget === 'location' ? '🎤 Listening...' : '🎙️ Voice Input'}
+                    {isListening && listeningTarget === 'location' ? ' Listening...' : 'Voice Input'}
                   </span>
                 </button>
               </div>
