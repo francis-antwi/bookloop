@@ -34,7 +34,7 @@ import {
   FaLightbulb
 } from 'react-icons/fa6';
 import { IoIosArrowForward } from 'react-icons/io';
-
+import { Loader } from '@googlemaps/js-api-loader';
 // Add proper type definitions
 declare global {
   interface Window {
@@ -140,25 +140,31 @@ useEffect(() => {
       document.body.appendChild(script);
     });
   };
+const loadScripts = async () => {
+  try {
+    // Load ResponsiveVoice
+    await loadScript('https://code.responsivevoice.org/responsivevoice.js?key=StbKOKTB');
 
-  const loadScripts = async () => {
-    try {
-      await loadScript('https://code.responsivevoice.org/responsivevoice.js?key=StbKOKTB')
+    const googleKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
 
-      const googleKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
-      if (googleKey) {
-        await loadScript(
-          `https://maps.googleapis.com/maps/api/js?key=${googleKey}&libraries=places`
-        );
-      }
+    if (googleKey) {
+      const loader = new Loader({
+        apiKey: googleKey,
+        version: 'weekly',
+        libraries: ['places'],
+      });
 
-      scriptsLoadedRef.current = true;
-      setScriptsLoaded(true);
-    } catch (error) {
-      console.error('Error loading scripts:', error);
-      setScriptsLoaded(true);
+      await loader.load(); // this loads Google Maps API the proper way
+      console.log('Google Maps API loaded successfully');
     }
-  };
+
+    scriptsLoadedRef.current = true;
+    setScriptsLoaded(true);
+  } catch (error) {
+    console.error('Error loading scripts:', error);
+    setScriptsLoaded(true);
+  }
+};
 
   loadScripts();
 }, []);
