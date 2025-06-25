@@ -2,14 +2,24 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/app/libs/prismadb';
 
 const locationCache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+const CACHE_TTL = 10 * 60 * 1000;
 
 function normalizeAddress(address: string): string {
   return address
     .toLowerCase()
     .trim()
-    .replace(/[^\w\s,]/g, '') // remove special characters
-    .replace(/\s+/g, ' ');    // normalize whitespace
+    .replace(/[^\w\s,]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+function extractLocationComponents(address: string) {
+  const normalized = normalizeAddress(address);
+  const parts = normalized.split(',').map(part => part.trim());
+  return {
+    full: normalized,
+    city: parts[0] || '',
+    parts: parts.filter(Boolean)
+  };
 }
 
 function getCachedResult(key: string) {
@@ -28,7 +38,6 @@ function setCachedResult(key: string, data: any) {
   }
   locationCache.set(key, { data, timestamp: Date.now() });
 }
-
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const address = searchParams.get('address');
@@ -42,22 +51,31 @@ export async function GET(request: NextRequest) {
 
   try {
     const normalizedAddress = normalizeAddress(address);
-    const cacheKey = `strict-match:${normalizedAddress}`;
-
+    const cacheKey = `search:${normalizedAddress}`;
     const cached = getCachedResult(cacheKey);
     if (cached) {
       return NextResponse.json(cached, {
         status: 200,
-        headers: { 'X-Cache': 'HIT' },
+        headers: { 'X-Cache': 'HIT' }
       });
     }
 
+    const locationComponents = extractLocationComponents(address);
+
+    const orConditions = [
+      { address: { contains: normalizedAddress, mode: 'insensitive' } },
+      ...locationComponents.parts.map(part => ({
+        address: { contains: part, mode: 'insensitive' }
+      })),
+      ...address.split(/\s+/).filter(w => w.length > 2).map(word => ({
+        address: { contains: word, mode: 'insensitive' }
+      }))
+    ];
+
     const listings = await prisma.listing.findMany({
       where: {
-        address: {
-          equals: normalizedAddress,
-          mode: 'insensitive',
-        },
+        AND: [{ address: { not: null } }], // ✅ prevent null crash
+        OR: orConditions
       },
       select: {
         id: true,
@@ -65,32 +83,35 @@ export async function GET(request: NextRequest) {
         address: true,
         category: true,
       },
-      take: 1, // ⬅️ if you're expecting only one listing per address
+      orderBy: [{ createdAt: 'desc' }],
+      take: 10
     });
 
     if (listings.length > 0) {
       const result = {
         success: true,
-        listing: listings[0], // ⬅️ only return the single matched listing
+        matchCount: listings.length,
+        listings,
         searchQuery: address,
-        normalizedQuery: normalizedAddress,
+        normalizedQuery: normalizedAddress
       };
       setCachedResult(cacheKey, result);
 
       return NextResponse.json(result, {
         status: 200,
-        headers: { 'X-Cache': 'MISS' },
+        headers: { 'X-Cache': 'MISS' }
       });
     }
 
+    const suggestions = await generateSuggestions(address);
     return NextResponse.json({
       success: false,
-      message: 'No listing found with that exact address',
-      listing: null,
+      message: 'No listings found for this location',
+      listings: [],
       searchQuery: address,
       normalizedQuery: normalizedAddress,
-    }, { status: 404 });
-
+      suggestions
+    }, { status: 404 }); // 👈 more accurate than 200
   } catch (error: any) {
     console.error('Search failed:', error);
     return NextResponse.json({
