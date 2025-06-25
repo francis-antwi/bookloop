@@ -62,20 +62,10 @@ export default async function RootLayout({
             <div className="pb-20 pt-28">{children}</div>
           </Client>
           {/* ✅ Tidio Chat Script */}
-          <SessionProviderWrapper session={session}>
-  <head>
-    <link
-      rel="preload"
-      href="https://code.tidio.co/widget-v4/fonts/mulish_SGhgqk3wotYKNnBQ.woff2"
-      as="font"
-      type="font/woff2"
-      crossOrigin="anonymous"
-    />
-  </head>
-  <body className={font.className} suppressHydrationWarning={true}>
-    ...
-  </body>
-</SessionProviderWrapper>
+          <Script
+            src="//code.tidio.co/dph8r5uefv6snwp4etkml9rwp98eeed5.js"
+            strategy="afterInteractive"
+          />
         </SessionProviderWrapper>
       </body>
     </html>
