@@ -19,6 +19,7 @@ import 'react-date-range/dist/theme/default.css';
 import axios from 'axios';
 import qs from 'query-string';
 import { formatISO } from 'date-fns';
+import chrono from 'chrono-node';
 import Input from './inputs/Input';
 import {
   FaLocationDot,
@@ -43,7 +44,8 @@ const SearchModal = () => {
   const [step, setStep] = useState(STEPS.LOCATION);
   const [isLoading, setIsLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [showMicrophoneAnimation, setShowMicrophoneAnimation] = useState(false);
+  const [listeningTarget, setListeningTarget] = useState<'location' | 'dates' | null>(null);
+  const [showMicAnim, setShowMicAnim] = useState(false);
   const [dateRange, setDateRange] = useState<Range>({
     startDate: new Date(),
     endDate: new Date(),
@@ -63,20 +65,45 @@ const SearchModal = () => {
   const locationValue = watch('location');
 
   useEffect(() => {
-    const script = document.createElement('script');
-    script.src = 'https://code.responsivevoice.org/responsivevoice.js?key=oMsyTFvN';
-    script.async = true;
-    document.body.appendChild(script);
-  }, []);
+    const s1 = document.createElement('script');
+    s1.src = 'https://code.responsivevoice.org/responsivevoice.js?key=oMsyTFvN';
+    s1.async = true;
+    document.body.appendChild(s1);
+
+    const s2 = document.createElement('script');
+    s2.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_API_KEY}&libraries=places`;
+    s2.async = true;
+    document.body.appendChild(s2);
+
+    s1.onload = s2.onload = () => {
+      const input = document.getElementById('location') as HTMLInputElement;
+      if (window.google && input) {
+        const ac = new window.google.maps.places.Autocomplete(input, {
+          types: ['(cities)']
+        });
+        ac.addListener('place_changed', () => {
+          const place = ac.getPlace();
+          if (place.formatted_address) {
+            setValue('location', place.formatted_address);
+            speak(`Wo de ${place.formatted_address}`, 'Twi Female');
+          }
+        });
+      }
+    };
+  }, [setValue]);
+
+  const speak = (text: string, lang = 'Twi Female') => {
+    (window as any).responsiveVoice?.speak(text, lang);
+  };
 
   const onBack = useCallback(() => {
-    setStep((value) => value - 1);
+    setStep((v) => v - 1);
     setErrorMessage('');
     setSuccessMessage('');
   }, []);
 
   const onNext = useCallback(() => {
-    setStep((value) => value + 1);
+    setStep((v) => v + 1);
     setErrorMessage('');
     setSuccessMessage('');
   }, []);
@@ -89,91 +116,58 @@ const SearchModal = () => {
     reset();
   }, [searchModal, reset]);
 
-  const onSubmit = useCallback(
-    async (data: any) => {
-      if (step !== STEPS.DATE) {
-        return onNext();
-      }
-
-      setIsLoading(true);
-      setErrorMessage('');
-
-      try {
-        const response = await axios.get(`/api/query`, {
-          params: { address: data.location }
-        });
-
-        if (response.status === 200) {
-          const listing = response.data;
-          let currentQuery = {};
-          if (params) {
-            currentQuery = qs.parse(params.toString());
-          }
-
-          const updateQuery: any = {
-            ...currentQuery,
-            location: listing?.address
-          };
-
-          if (dateRange.startDate) updateQuery.startDate = formatISO(dateRange.startDate);
-          if (dateRange.endDate) updateQuery.endDate = formatISO(dateRange.endDate);
-
-          const url = qs.stringifyUrl({ url: '/', query: updateQuery }, { skipNull: true });
-
-          setSuccessMessage('Search completed successfully!');
-          (window as any).responsiveVoice?.speak('Search completed successfully!');
-
-          setTimeout(() => {
-            router.push(url);
-            handleClose();
-          }, 1500);
-        }
-      } catch (error) {
-        setErrorMessage('Location not found. Please try a different location.');
-        (window as any).responsiveVoice?.speak('Location not found. Please try a different one.');
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [step, onNext, params, dateRange, router, handleClose]
-  );
-
-  const actionLabel = useMemo(() => {
-    if (isLoading) return 'Searching...';
-    return step === STEPS.DATE ? 'Search' : 'Next';
-  }, [step, isLoading]);
-
-  const progressPercentage = ((step + 1) / Object.values(STEPS).length) * 100;
-
-  const handleVoiceInput = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert('Your browser does not support voice recognition.');
+  const handleVoiceInput = (target: 'location' | 'dates') => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      alert('Browser does not support speech.');
       return;
     }
 
-    const recognition = new SpeechRecognition();
+    const recognition = new SR();
     recognition.lang = 'en-US';
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
     setIsListening(true);
-    setShowMicrophoneAnimation(true);
-    setTimeout(() => setShowMicrophoneAnimation(false), 3000);
+    setListeningTarget(target);
+    setShowMicAnim(true);
+    setTimeout(() => setShowMicAnim(false), 3000);
 
     recognition.onstart = () => {
-      (window as any).responsiveVoice?.speak('Listening. Please say your destination.');
+      speak(
+        target === 'location'
+          ? 'Kasa fa wo kurow ho.'
+          : 'Kasa fa wo bere ho. Sɛ yɛka sɛ: from July first to July third.'
+      );
     };
 
-    recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      setValue('location', transcript, { shouldValidate: true });
-      (window as any).responsiveVoice?.speak(`You said ${transcript}. You can press Next to continue.`);
+    recognition.onresult = (ev: any) => {
+      const text = ev.results[0][0].transcript;
+      if (target === 'location') {
+        setValue('location', text);
+        speak(`Woaka sɛ ${text}`, 'Twi Female');
+      } else {
+        const parsed = chrono.parse(text);
+        if (parsed.length > 0) {
+          const p = parsed[0];
+          setDateRange({
+            ...dateRange,
+            startDate: p.start.date(),
+            endDate: p.end?.date() ?? p.start.date()
+          });
+          speak(
+            `Woapaw bere fi ${p.start.date().toDateString()} kɔ ${ (p.end ?? p.start).date().toDateString() }`,
+            'Twi Female'
+          );
+        } else {
+          speak('Memee nte ase. San ka bio.', 'Twi Female');
+        }
+      }
       setIsListening(false);
     };
 
     recognition.onerror = () => {
-      (window as any).responsiveVoice?.speak("Sorry, I didn't catch that. Please try again.");
+      speak('Mesrɛ, san ka bio.', 'Twi Female');
       setIsListening(false);
     };
 
@@ -184,187 +178,154 @@ const SearchModal = () => {
     recognition.start();
   };
 
-  const bodyContent = (
-    <div className="flex flex-col gap-8">
-      {/* Progress bar */}
-      <div className="relative pt-4">
-        <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-          <div
-            className="bg-gradient-to-r from-blue-500 to-indigo-600 h-full rounded-full transition-all duration-500 ease-out"
-            style={{ width: `${progressPercentage}%` }}
-          />
-        </div>
-        <div className="flex justify-between mt-2 text-xs font-medium">
-          <span className={step >= STEPS.LOCATION ? 'text-blue-600' : 'text-gray-400'}>Location</span>
-          <span className={step >= STEPS.DATE ? 'text-blue-600' : 'text-gray-400'}>Dates</span>
-        </div>
-      </div>
+  const onSubmit = useCallback(
+    async (data: any) => {
+      if (step !== STEPS.DATE) {
+        return onNext();
+      }
 
-      {/* Location Step */}
-      {step === STEPS.LOCATION && (
-        <div className="space-y-6">
-          <div className="text-center space-y-2">
-            <h2 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              Where would you like?
-            </h2>
-            <p className="text-gray-500">Discover amazing places around Ghana</p>
-          </div>
+      setIsLoading(true);
+      setErrorMessage('');
 
-          <div className="relative">
-            <Input
-              id="location"
-              label="Destination"
-              placeholder="Enter a city, address, or landmark"
-              register={register}
-              errors={errors}
-              required
-              className="text-lg pr-24 border-2 border-gray-200 hover:border-blue-300 focus:border-blue-500 transition-all duration-300"
-            />
-            <div className="absolute right-2 top-9 flex gap-2">
-              <button
-                type="button"
-                onClick={() =>
-                  (window as any).responsiveVoice?.speak(locationValue ? `You entered ${locationValue}` : 'Please enter a location first')
-                }
-                className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600"
-              >
-                <FaVolumeHigh className="w-4 h-4" />
-              </button>
+      try {
+        const res = await axios.get('/api/query', { params: { address: data.location } });
+        if (res.status === 200) {
+          const listing = res.data;
+          const currentQ = params ? qs.parse(params.toString()) : {};
+          const newQ: any = { ...currentQ, location: listing.address };
+          if (dateRange.startDate) newQ.startDate = formatISO(dateRange.startDate);
+          if (dateRange.endDate) newQ.endDate = formatISO(dateRange.endDate);
 
-              <button
-                type="button"
-                onClick={handleVoiceInput}
-                disabled={isListening}
-                className={`p-2 rounded-full transition-all duration-300 ${
-                  isListening || showMicrophoneAnimation
-                    ? 'bg-red-500 text-white animate-pulse'
-                    : 'bg-blue-500 hover:bg-blue-600 text-white'
-                }`}
-              >
-                <FaMicrophone className="w-4 h-4" />
-              </button>
-            </div>
+          const url = qs.stringifyUrl({ url: '/', query: newQ }, { skipNull: true });
 
-            {showMicrophoneAnimation && (
-              <div className="absolute -right-2 -top-2 w-16 h-16 bg-red-500/10 rounded-full animate-ping pointer-events-none"></div>
-            )}
-          </div>
-
-          {locationValue && (
-            <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 flex items-center gap-3">
-              <div className="bg-blue-100 p-2 rounded-full">
-                <FaLocationDot className="text-blue-600" />
-              </div>
-              <div>
-                <p className="font-medium text-gray-700">You're searching for:</p>
-                <p className="text-blue-600 font-semibold">"{locationValue}"</p>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Date Step */}
-      {step === STEPS.DATE && (
-        <div className="space-y-6">
-          <div className="text-center space-y-2">
-            <h2 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              What is your schedule?
-            </h2>
-            <p className="text-gray-500">Select your preferred dates</p>
-          </div>
-
-          {isListening && (
-            <div className="flex items-center justify-between bg-white/80 backdrop-blur-sm rounded-lg px-4 py-2 shadow-sm border border-gray-100 animate-fadeIn">
-              <div className="flex items-center">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 flex items-center justify-center mr-3">
-                  <FaMicrophone className="text-white text-sm" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-800">Voice Recognition Active</p>
-                  <p className="text-xs text-gray-500">Say your check-in and check-out dates</p>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <div
-                    key={i}
-                    className="h-4 w-1 bg-blue-500 rounded-full animate-pulse"
-                    style={{ animationDelay: `${i * 0.1}s` }}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {errorMessage && (
-            <div className="bg-red-50 border border-red-100 rounded-lg p-4 flex items-start gap-3">
-              <div className="bg-red-100 p-2 rounded-full mt-0.5">
-                <FaExclamation className="text-red-600" />
-              </div>
-              <p className="text-red-600 font-medium">{errorMessage}</p>
-            </div>
-          )}
-
-          {successMessage && (
-            <div className="bg-green-50 border border-green-100 rounded-lg p-4 flex items-start gap-3">
-              <div className="bg-green-100 p-2 rounded-full mt-0.5">
-                <FaCheck className="text-green-600" />
-              </div>
-              <p className="text-green-600 font-medium">{successMessage}</p>
-            </div>
-          )}
-
-          <div className="bg-white rounded-xl border-2 border-gray-200 p-4 shadow-sm hover:shadow-md transition-all duration-300">
-            <DateRange
-              ranges={[dateRange]}
-              onChange={(ranges) => setDateRange(ranges.selection)}
-              moveRangeOnFirstSelection={false}
-              editableDateInputs={true}
-              className="w-full"
-              minDate={new Date()}
-            />
-
-            <div className="mt-4 flex justify-between items-center border-t border-gray-100 pt-4">
-              <div>
-                <p className="text-sm text-gray-500">Selected dates</p>
-                <p className="font-medium">
-                  {dateRange.startDate?.toLocaleDateString()} - {dateRange.endDate?.toLocaleDateString()}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 text-sm bg-blue-50 px-3 py-1 rounded-full">
-                <FaCalendarDays className="text-blue-600" />
-                <span className="text-blue-600">
-                  {Math.ceil(
-                    ((dateRange.endDate?.getTime() ?? 0) - (dateRange.startDate?.getTime() ?? 0)) /
-                      (1000 * 60 * 60 * 24)
-                  ) || 1}{' '}
-                  night(s)
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+          setSuccessMessage('Yɛ wiei ara!');
+          speak('Yɛ wiei ara!', 'Twi Female');
+          setTimeout(() => {
+            router.push(url);
+            handleClose();
+          }, 1500);
+        }
+      } catch {
+        setErrorMessage('Ɛnsɛe, san hyɛ ho bio.');
+        speak('Ɛnsɛe, san hyɛ ho bio.', 'Twi Female');
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [step, dateRange, params, router, handleClose, onNext]
   );
+
+  const actionLabel = useMemo(() => {
+    if (isLoading) return 'Ɛredi...';
+    return step === STEPS.DATE ? 'Hwehwɛ' : 'Next';
+  }, [step, isLoading]);
+
+  const progressPercentage = ((step + 1) / Object.values(STEPS).length) * 100;
 
   return (
     <Modal
       isOpen={searchModal.isOpen}
       onClose={handleClose}
       onSubmit={handleSubmit(onSubmit)}
-      title="Find Your Perfect listing"
+      title="Hwehwɛ Beae Pa"
       actionLabel={
-        <div className="flex items-center justify-center gap-2">
+        <div className="flex items-center gap-2">
           {actionLabel}
           {!isLoading && <IoIosArrowForward />}
         </div>
       }
       secondaryActionLabel={step === STEPS.DATE ? 'Back' : undefined}
       secondaryAction={step === STEPS.DATE ? onBack : undefined}
-      body={bodyContent}
       disabled={isLoading}
+      body={
+        <div className="flex flex-col gap-8">
+          {/* Progress */}
+          <div className="relative pt-4">
+            <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-500"
+                style={{ width: `${progressPercentage}%` }}
+              />
+            </div>
+            <div className="flex justify-between mt-2 text-xs font-medium">
+              <span className={step >= STEPS.LOCATION ? 'text-blue-600' : 'text-gray-400'}>Location</span>
+              <span className={step >= STEPS.DATE ? 'text-blue-600' : 'text-gray-400'}>Dates</span>
+            </div>
+          </div>
+
+          {/* LOCATION */}
+          {step === STEPS.LOCATION && (
+            <div className="space-y-6">
+              <Input
+                id="location"
+                label="Destination"
+                placeholder="Enter a city or landmark"
+                register={register}
+                errors={errors}
+                required
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => speak(locationValue ? `Wo de ${locationValue}` : 'Fa location no ka')}
+                  className="p-2 bg-gray-200 rounded-full"
+                >
+                  <FaVolumeHigh />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleVoiceInput('location')}
+                  disabled={isListening}
+                  className={`p-2 rounded-full ${
+                    isListening && listeningTarget === 'location' ? 'bg-red-500 text-white animate-pulse' : 'bg-blue-500 text-white'
+                  }`}
+                >
+                  <FaMicrophone />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* DATE */}
+          {step === STEPS.DATE && (
+            <div className="space-y-6">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleVoiceInput('dates')}
+                  disabled={isListening}
+                  className={`p-2 rounded-full ${
+                    isListening && listeningTarget === 'dates' ? 'bg-red-500 text-white animate-pulse' : 'bg-blue-500 text-white'
+                  }`}
+                >
+                  <FaMicrophone />
+                </button>
+              </div>
+              <DateRange
+                ranges={[dateRange]}
+                onChange={(r) => setDateRange(r.selection)}
+                editableDateInputs
+                moveRangeOnFirstSelection={false}
+                minDate={new Date()}
+                className="w-full"
+              />
+            </div>
+          )}
+
+          {errorMessage && (
+            <div className="bg-red-50 text-red-600 p-3 rounded flex items-center gap-2">
+              <FaExclamation />
+              {errorMessage}
+            </div>
+          )}
+          {successMessage && (
+            <div className="bg-green-50 text-green-600 p-3 rounded flex items-center gap-2">
+              <FaCheck />
+              {successMessage}
+            </div>
+          )}
+        </div>
+      }
     />
   );
 };
