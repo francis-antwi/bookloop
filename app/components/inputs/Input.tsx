@@ -10,6 +10,8 @@ interface InputProps {
     required?: boolean;
     register: UseFormRegister<FieldValues>;
     errors?: FieldErrors; // Make errors optional
+    placeholder?: string;
+    
 }
 
 const Input: React.FC<InputProps> = ({
