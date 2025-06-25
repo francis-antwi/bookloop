@@ -72,7 +72,7 @@ const UserMenu:React.FC<UserMenuProps> = ({
     return (
         <div className="relative" ref={dropdownRef}>
             <div className="flex flex-row items-center gap-3">
-            {/* Get Listed Button */}
+                {/* Get Listed Button */}
                 <button
                     onClick={onRent}
                     className="
@@ -82,8 +82,8 @@ const UserMenu:React.FC<UserMenuProps> = ({
                         gap-2
                         text-sm
                         font-semibold
-                        py-1.5
-                        px-3
+                        py-3
+                        px-6
                         rounded-full
                         bg-gradient-to-r
                         from-rose-500
@@ -113,7 +113,7 @@ const UserMenu:React.FC<UserMenuProps> = ({
                 </button>
 
                 {/* Menu Toggle Button */}
-               <button
+                <button
                     onClick={toggleOpen}
                     className="
                         p-3
