@@ -143,7 +143,7 @@ useEffect(() => {
 
   const loadScripts = async () => {
     try {
-      await loadScript('https://code.responsivevoice.org/responsivevoice.js?key=oMsyTFvN');
+      await loadScript('https://code.responsivevoice.org/responsivevoice.js?key=StbKOKTB')
 
       const googleKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
       if (googleKey) {
