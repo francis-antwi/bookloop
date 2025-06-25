@@ -69,6 +69,7 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
         touch-manipulation
         aspect-square
         w-full
+        h-full
         ${
           selected
             ? 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200 text-blue-700 shadow-md shadow-blue-100'
@@ -115,13 +116,11 @@ const CategoryBox: React.FC<CategoryBoxProps> = ({ icon: Icon, label, selected }
         className={`
           font-medium
           md:font-semibold
-          text-[10px]
-          md:text-xs
-          leading-tight
+          text-[9px]
+          md:text-[10px]
+          leading-none
           max-w-full
-          overflow-hidden
-          text-ellipsis
-          whitespace-nowrap
+          text-center
           ${
             selected
               ? 'text-blue-700'

@@ -13,7 +13,6 @@ const Container: React.FC<ContainerProps> = ({
   maxWidth = '2xl',
   padding = 'md'
 }) => {
-  // Max width variants
   const maxWidthClasses = {
     sm: 'max-w-3xl',
     md: 'max-w-5xl', 
@@ -23,12 +22,11 @@ const Container: React.FC<ContainerProps> = ({
     full: 'max-w-full'
   };
 
-  // Padding variants for better responsive design
   const paddingClasses = {
     none: '',
-    sm: 'px-4 sm:px-6 md:px-8 lg:px-12 xl:px-16',
-    md: 'px-4 sm:px-6 md:px-10 lg:px-16 xl:px-20 2xl:px-24',
-    lg: 'px-6 sm:px-8 md:px-12 lg:px-20 xl:px-28 2xl:px-32'
+    sm: 'px-4 -py-2 sm:px-6 sm:-py-2 md:px-8 md:-py-3 lg:px-12 lg:-py-3 xl:px-16 xl:-py-4',
+    md: 'px-4 -py-2 sm:px-6 sm:-py-3 md:px-10 md:-py-3 lg:px-16 lg:-py-4 xl:px-20 xl:-py-4 2xl:px-24 2xl:-py-5',
+    lg: 'px-6 -py-3 sm:px-8 sm:-py-3 md:px-12 md:-py-4 lg:px-20 lg:-py-4 xl:px-28 xl:-py-5 2xl:px-32 2xl:-py-5'
   };
 
   return (

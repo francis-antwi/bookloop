@@ -72,7 +72,7 @@ const UserMenu:React.FC<UserMenuProps> = ({
     return (
         <div className="relative" ref={dropdownRef}>
             <div className="flex flex-row items-center gap-3">
-                {/* Get Listed Button */}
+            {/* Get Listed Button */}
                 <button
                     onClick={onRent}
                     className="
@@ -82,8 +82,8 @@ const UserMenu:React.FC<UserMenuProps> = ({
                         gap-2
                         text-sm
                         font-semibold
-                        py-3
-                        px-6
+                        py-1.5
+                        px-3
                         rounded-full
                         bg-gradient-to-r
                         from-rose-500
@@ -113,7 +113,7 @@ const UserMenu:React.FC<UserMenuProps> = ({
                 </button>
 
                 {/* Menu Toggle Button */}
-                <button
+               <button
                     onClick={toggleOpen}
                     className="
                         p-3
@@ -152,9 +152,9 @@ const UserMenu:React.FC<UserMenuProps> = ({
             {/* Dropdown Menu */}
             {isOpen && (
                 <>
-                    {/* Enhanced Backdrop with blur */}
+                    {/* Backdrop without blur */}
                     <div 
-                        className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm"
+                        className="fixed inset-0 z-40 bg-black/20"
                         onClick={() => setIsOpen(false)}
                     />
                     
@@ -231,7 +231,7 @@ const UserMenu:React.FC<UserMenuProps> = ({
                                             label="Listings"
                                             icon={
                                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 21v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21m0 0h4.5V9.75a2.25 2.25 0 00-2.25-2.25h-13.5a2.25 2.25 0 00-2.25 2.25v7.875c0 .621.504 1.125 1.125 1.125H6.75a2.25 2.25 0 002.25-2.25v-4.875c0-.621.504-1.125 1.125-1.125z" />
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 21v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21m0 0h4.5V9.75a2.25 2.25 0 00-2.25-2.25h-13.5a2.25 2.25 0 00-2.25-2.25v7.875c0 .621.504 1.125 1.125 1.125H6.75a2.25 2.25 0 002.25-2.25v-4.875c0-.621.504-1.125 1.125-1.125z" />
                                                 </svg>
                                             }
                                         />

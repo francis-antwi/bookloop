@@ -54,7 +54,7 @@
     "eslint-config-next": "15.0.3",
     "html-loader": "^5.1.0",
     "postcss": "^8.4.47",
-    "prisma": "^6.10.0",
+    "prisma": "^6.10.1",
     "tailwindcss": "^3.4.14",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"

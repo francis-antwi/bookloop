@@ -19,16 +19,15 @@ import 'react-date-range/dist/theme/default.css';
 import axios from 'axios';
 import qs from 'query-string';
 import { formatISO } from 'date-fns';
-import chrono from 'chrono-node';
+import * as chrono from "chrono-node";
+import { FaMagic } from "react-icons/fa";
 
 import {
   FaLocationDot,
   FaCalendarDays,
   FaCheck,
   FaExclamation,
-  FaVolumeHigh,
   FaMicrophone,
-  FaMagic,
   FaRocket,
   FaLightbulb
 } from 'react-icons/fa6';
@@ -36,11 +35,11 @@ import { IoIosArrowForward } from 'react-icons/io';
 import { Loader } from '@googlemaps/js-api-loader';
 import Modal from './modals/Modal';
 import Input from './inputs/Input';
+
 // Add proper type definitions
 declare global {
   interface Window {
     google: any;
-    responsiveVoice: any;
     SpeechRecognition: any;
     webkitSpeechRecognition: any;
   }
@@ -123,53 +122,34 @@ const SearchModal = () => {
   }, [isListening]);
 
   // Load external scripts with better error handling
-useEffect(() => {
-  if (scriptsLoadedRef.current) return;
+  useEffect(() => {
+    if (scriptsLoadedRef.current) return;
 
-  const loadScript = (src: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      if (document.querySelector(`script[src="${src}"]`)) {
-        resolve(); // Already loaded
-        return;
+    const loadScripts = async () => {
+      try {
+        const googleKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
+
+        if (googleKey) {
+          const loader = new Loader({
+            apiKey: googleKey,
+            version: 'weekly',
+            libraries: ['places'],
+          });
+
+          await loader.load(); // this loads Google Maps API the proper way
+          console.log('Google Maps API loaded successfully');
+        }
+
+        scriptsLoadedRef.current = true;
+        setScriptsLoaded(true);
+      } catch (error) {
+        console.error('Error loading scripts:', error);
+        setScriptsLoaded(true);
       }
+    };
 
-      const script = document.createElement('script');
-      script.src = src;
-      script.async = true;
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
-      document.body.appendChild(script);
-    });
-  };
-const loadScripts = async () => {
-  try {
-    // Load ResponsiveVoice
-    await loadScript('https://code.responsivevoice.org/responsivevoice.js?key=StbKOKTB');
-
-    const googleKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
-
-    if (googleKey) {
-      const loader = new Loader({
-        apiKey: googleKey,
-        version: 'weekly',
-        libraries: ['places'],
-      });
-
-      await loader.load(); // this loads Google Maps API the proper way
-      console.log('Google Maps API loaded successfully');
-    }
-
-    scriptsLoadedRef.current = true;
-    setScriptsLoaded(true);
-  } catch (error) {
-    console.error('Error loading scripts:', error);
-    setScriptsLoaded(true);
-  }
-};
-
-  loadScripts();
-}, []);
-
+    loadScripts();
+  }, []);
 
   // Initialize Google Places Autocomplete with better error handling
   useEffect(() => {
@@ -188,7 +168,6 @@ const loadScripts = async () => {
             setValue('location', place.formatted_address);
             setShowSparkles(true);
             setTimeout(() => setShowSparkles(false), 2000);
-            speak(`✨ Amazing choice! ${place.formatted_address} it is!`, 'UK English Female');
           }
         });
       } catch (error) {
@@ -196,22 +175,6 @@ const loadScripts = async () => {
       }
     }
   }, [scriptsLoaded, setValue, step]);
-
-  const speak = useCallback((text: string, voice = 'UK English Female') => {
-  const rv = window?.responsiveVoice;
-  if (rv && rv.voiceSupport()) {
-    try {
-      rv.speak(text, voice, {
-        pitch: 1.1,
-        rate: 0.9,
-        volume: 0.8,
-      });
-    } catch (error) {
-      console.error('Speech synthesis error:', error);
-    }
-  }
-}, []);
-
 
   const onBack = useCallback(() => {
     setStep((v) => v - 1);
@@ -229,8 +192,7 @@ const loadScripts = async () => {
     setShowSuggestions(false);
     setPulseAnimation(true);
     setTimeout(() => setPulseAnimation(false), 600);
-    speak('Great! Now let\'s pick your perfect dates! 📅');
-  }, [speak]);
+  }, []);
 
   const handleClose = useCallback(() => {
     searchModal.onClose();
@@ -251,8 +213,7 @@ const loadScripts = async () => {
     setShowSuggestions(false);
     setShowSparkles(true);
     setTimeout(() => setShowSparkles(false), 2000);
-    speak(`Perfect choice! ${suggestion} sounds amazing!`);
-  }, [setValue, speak]);
+  }, [setValue]);
 
   const handleVoiceInput = useCallback((target: 'location' | 'dates') => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -273,14 +234,6 @@ const loadScripts = async () => {
 
     const micTimer = setTimeout(() => setShowMicAnim(false), 8000);
 
-    recognition.onstart = () => {
-      speak(
-        target === 'location'
-          ? '🌍 I\'m listening! Tell me where your heart wants to go!'
-          : '📅 Perfect! Now tell me your dream dates - like "from next Friday to Sunday" or "July 15th to 20th"!'
-      );
-    };
-
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript;
       
@@ -288,7 +241,6 @@ const loadScripts = async () => {
         setValue('location', transcript);
         setShowSparkles(true);
         setTimeout(() => setShowSparkles(false), 2000);
-        speak(`🎯 Got it! "${transcript}" sounds absolutely amazing!`);
       } else if (target === 'dates') {
         try {
           const parsed = chrono.parse(transcript);
@@ -305,17 +257,11 @@ const loadScripts = async () => {
             
             setShowSparkles(true);
             setTimeout(() => setShowSparkles(false), 2000);
-            
-            speak(
-              `🎉 Perfect timing! ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()} - this is going to be epic!`
-            );
           } else {
             setErrorMessage('🤔 Hmm, I didn\'t catch those dates. Try saying something like "next weekend" or "July 15th to 20th"');
-            speak('Oops! Could you try saying your dates again? Maybe like "next Friday to Sunday"?');
           }
         } catch (error) {
           setErrorMessage('✨ Let\'s try that again! Say your dates like "from Monday to Friday"');
-          speak('Let\'s give those dates another shot!');
         }
       }
       
@@ -327,7 +273,6 @@ const loadScripts = async () => {
     recognition.onerror = (event: any) => {
       console.error('Speech recognition error:', event.error);
       setErrorMessage('🎤 Oops! I didn\'t hear that clearly. Give it another try!');
-      speak('Sorry, I missed that! Let\'s try once more!');
       setIsListening(false);
       setListeningTarget(null);
       clearTimeout(micTimer);
@@ -348,7 +293,7 @@ const loadScripts = async () => {
       setListeningTarget(null);
       clearTimeout(micTimer);
     }
-  }, [dateRange, setValue, speak]);
+  }, [dateRange, setValue]);
 
   const onSubmit = useCallback(
     async (data: any) => {
@@ -358,7 +303,6 @@ const loadScripts = async () => {
 
       if (!data.location) {
         setErrorMessage('🌍 Don\'t forget to tell us where you want to go!');
-        speak('Oops! We need to know your destination first!');
         return;
       }
 
@@ -368,23 +312,30 @@ const loadScripts = async () => {
       setShowSuggestions(false);
 
       try {
-        const response = await axios.get<ApiResponse>('/api/query', { 
+        const response = await axios.get<ApiResponse>('/api/query', {
           params: { address: data.location },
-          timeout: 10000
+          timeout: 10000,
         });
-        
-        // Handle successful response
-        if (response.status === 200 && response.data.success && response.data.data) {
-          const listing = response.data.data;
+
+        const listings = response.data.listings;
+
+        if (
+          response.status === 200 &&
+          response.data.success &&
+          Array.isArray(listings) &&
+          listings.length > 0
+        ) {
+          const listing = listings[0]; // Use the first result
+
           const currentQuery = params ? qs.parse(params.toString()) : {};
-          
-          const newQuery: any = { 
-            ...currentQuery, 
-            location: listing.address || data.location,
+
+          const newQuery: any = {
+            ...currentQuery,
+            address: listing.address, 
             locationValue: listing.locationValue,
-            listingId: listing.id
+            listingId: listing.id,
           };
-          
+
           if (dateRange.startDate) {
             newQuery.startDate = formatISO(dateRange.startDate);
           }
@@ -392,15 +343,11 @@ const loadScripts = async () => {
             newQuery.endDate = formatISO(dateRange.endDate);
           }
 
-          const url = qs.stringifyUrl(
-            { url: '/', query: newQuery }, 
-            { skipNull: true }
-          );
+          const url = qs.stringifyUrl({ url: '/', query: newQuery }, { skipNull: true });
 
-          setSuccessMessage(`🚀 Woohoo! Found "${listing.title}" in ${listing.address}! Your perfect adventure awaits!`);
+          setSuccessMessage(`🚀 Woohoo! Found "${listing.title}" in ${listing.address}!`);
           setShowSparkles(true);
-          speak(`Amazing! I found ${listing.title} in ${listing.address}! Get ready for an incredible journey!`);
-          
+
           setTimeout(() => {
             router.push(url);
             handleClose();
@@ -410,43 +357,26 @@ const loadScripts = async () => {
         }
       } catch (error: any) {
         console.error('Search error:', error);
-        
-        // Handle 404 - location not found with suggestions
+
         if (error.response?.status === 404) {
           const errorData = error.response.data as ApiResponse;
-          setErrorMessage(`🔍 "${data.location}" not found. ${errorData.details || 'Try a different location!'}`);
-          
-          if (errorData.suggestions && errorData.suggestions.length > 0) {
+          setErrorMessage(`🔍 "${data.location}" not found. ${errorData.details || ''}`);
+
+          if (errorData.suggestions?.length) {
             setSuggestions(errorData.suggestions);
             setShowSuggestions(true);
-            speak(`Hmm, I couldn't find that exact location. But I have some great suggestions for you!`);
-          } else {
-            speak('Hmm, let\'s try searching for a different location!');
           }
-        } 
-        // Handle other errors
-        else if (error.response?.status === 400) {
+        } else if (error.response?.status === 400) {
           const errorData = error.response.data;
-          setErrorMessage(`❌ ${errorData.details || 'Please check your search and try again!'}`);
-          speak('Oops, there was an issue with your search. Let\'s try again!');
-        }
-        else if (error.response?.status === 408) {
-          setErrorMessage('⏱️ Search is taking too long. Try a shorter location name!');
-          speak('The search is taking a bit long. Let\'s try a shorter location name!');
-        }
-        else if (error.response?.status === 503) {
-          setErrorMessage('🔧 Service temporarily unavailable. Please try again in a moment!');
-          speak('Our service is temporarily busy. Let\'s try again in a moment!');
-        }
-        else {
-          setErrorMessage('🔍 Oops! Something went wrong. Let\'s try that search again!');
-          speak('Hmm, let\'s try that search one more time!');
+          setErrorMessage(`❌ ${errorData.details || 'Invalid input'}`);
+        } else {
+          setErrorMessage('🔍 Oops! Something went wrong.');
         }
       } finally {
         setIsLoading(false);
       }
     },
-    [step, dateRange, params, router, handleClose, onNext, speak]
+    [step, dateRange, params, router, handleClose, onNext]
   );
 
   const actionLabel = useMemo(() => {
@@ -507,7 +437,7 @@ const loadScripts = async () => {
         <div className="flex items-center gap-2 relative">
           <FaMagic className="text-purple-500 animate-spin" />
           <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent font-bold">
-            Find Your Dream Destination
+            Find your desired listing
           </span>
           {showSparkles && <Sparkles />}
         </div>
@@ -541,7 +471,7 @@ const loadScripts = async () => {
                 step >= STEPS.LOCATION ? 'text-blue-600 scale-105' : 'text-gray-400'
               }`}>
                 <FaLocationDot className={step >= STEPS.LOCATION ? 'animate-bounce' : ''} />
-                Destination
+                Location
               </span>
               <span className={`flex items-center gap-2 transition-all duration-300 ${
                 step >= STEPS.DATE ? 'text-purple-600 scale-105' : 'text-gray-400'
@@ -559,7 +489,7 @@ const loadScripts = async () => {
                 <h3 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                   🌎 Where to Next?
                 </h3>
-                <p className="text-gray-600 animate-pulse">Tell us your dream destination!</p>
+                <p className="text-gray-600 animate-pulse">Find your listing location!</p>
               </div>
               
               <div className="relative group">
@@ -579,17 +509,7 @@ const loadScripts = async () => {
                 <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
               </div>
               
-              <div className="flex gap-4 justify-center">
-                <button
-                  type="button"
-                  onClick={() => speak(locationValue ? `🎯 Selected destination: ${locationValue}. Sounds incredible!` : '🌍 Please enter your dream destination first!')}
-                  className="group flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-gray-100 to-gray-200 hover:from-gray-200 hover:to-gray-300 rounded-xl transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
-                  disabled={isListening}
-                >
-                  <FaVolumeHigh className="text-gray-600 group-hover:animate-pulse" />
-                  <span className="font-semibold text-gray-700">🔊 Hear It</span>
-                </button>
-                
+              <div className="flex justify-center">
                 <button
                   type="button"
                   onClick={() => handleVoiceInput('location')}
@@ -602,7 +522,7 @@ const loadScripts = async () => {
                 >
                   <FaMicrophone className={isListening && listeningTarget === 'location' ? 'animate-bounce' : 'group-hover:animate-pulse'} />
                   <span className="font-semibold">
-                    {isListening && listeningTarget === 'location' ? '🎤 Listening...' : '🎙️ Voice Magic'}
+                    {isListening && listeningTarget === 'location' ? '🎤 Listening...' : '🎙️ Voice Input'}
                   </span>
                 </button>
               </div>
@@ -610,7 +530,7 @@ const loadScripts = async () => {
               {isListening && listeningTarget === 'location' && (
                 <div className="flex flex-col items-center space-y-4 p-6 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border-2 border-blue-200 animate-pulse">
                   <VoiceVisualizer />
-                  <p className="text-blue-700 font-semibold animate-bounce">🎤 I'm listening for your dream destination...</p>
+                  <p className="text-blue-700 font-semibold animate-bounce">🎤 I'm listening for your location...</p>
                 </div>
               )}
 
@@ -646,7 +566,7 @@ const loadScripts = async () => {
                 <h3 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
                   📅 Perfect! Now Pick Your Dates
                 </h3>
-                <p className="text-gray-600">When do you want to explore <span className="font-semibold text-blue-600">{locationValue || 'your destination'}</span>?</p>
+                <p className="text-gray-600">When do you want to explore <span className="font-semibold text-blue-600">{locationValue || 'your location'}</span>?</p>
                 
                 <button
                   type="button"
@@ -660,7 +580,7 @@ const loadScripts = async () => {
                 >
                   <FaMicrophone className={isListening && listeningTarget === 'dates' ? 'animate-bounce text-xl' : 'group-hover:animate-pulse text-xl'} />
                   <span className="font-bold text-lg">
-                    {isListening && listeningTarget === 'dates' ? '🎤 Listening for Dates...' : '🗣️ Tell Me Your Dates'}
+                    {isListening && listeningTarget === 'dates' ? '🎤 Listening for Dates...' : '🗣️ Voice Input for Dates'}
                   </span>
                 </button>
               </div>
@@ -711,7 +631,7 @@ const loadScripts = async () => {
             </div>
           )}
           
-      {successMessage && (
+          {successMessage && (
             <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 text-green-700 p-4 rounded-xl flex items-center gap-3 animate-bounce">
               <FaCheck className="text-green-500 flex-shrink-0 animate-pulse text-xl" />
               <span className="font-semibold">{successMessage}</span>

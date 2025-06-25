@@ -22,7 +22,7 @@ const Favourites: React.FC<FavouriteProps> = ({
     // Filter listings based on search
     const filteredListings = listings.filter(listing =>
         listing.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        listing.locationValue?.toLowerCase().includes(searchTerm.toLowerCase())
+        listing.address?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     // Sort listings

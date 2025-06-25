@@ -67,11 +67,11 @@ const Categories = () => {
       <Container>
         <div className="py-2">
           {/* Header */}
-          <div className="mb-2 text-center">
+          <div className="mb-1F text-center">
             <h2 className="text-lg font-bold text-gray-900 mb-1">
               What are you looking for?
             </h2>
-            <p className="text-xs text-gray-600 max-w-2xl mx-auto">
+            <p className="text-xs text-gray-600 max-w-2xl mx-auto mb-2">
               Discover and book from our wide range of services
             </p>
           </div>
@@ -82,7 +82,7 @@ const Categories = () => {
               {categories.map((item) => (
                 <div
                   key={item.label}
-                  className="flex-shrink-0 w-[70px]" // 50% reduced size
+                  className="flex-shrink-0 w-24 h-24" // Increased to w-24 h-24 for better text visibility
                 >
                   <CategoryBox
                     label={item.label}
