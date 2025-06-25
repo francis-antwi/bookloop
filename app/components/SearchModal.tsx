@@ -20,7 +20,7 @@ import axios from 'axios';
 import qs from 'query-string';
 import { formatISO } from 'date-fns';
 import chrono from 'chrono-node';
-import Input from './inputs/Input';
+
 import {
   FaLocationDot,
   FaCalendarDays,
@@ -35,6 +35,7 @@ import {
 import { IoIosArrowForward } from 'react-icons/io';
 import { Loader } from '@googlemaps/js-api-loader';
 import Modal from './modals/Modal';
+import Input from './inputs/Input';
 // Add proper type definitions
 declare global {
   interface Window {
