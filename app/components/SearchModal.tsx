@@ -30,7 +30,8 @@ import {
   FaVolumeHigh,
   FaMicrophone,
   FaMagic,
-  FaRocket
+  FaRocket,
+  FaLightbulb
 } from 'react-icons/fa6';
 import { IoIosArrowForward } from 'react-icons/io';
 
@@ -42,6 +43,24 @@ declare global {
     SpeechRecognition: any;
     webkitSpeechRecognition: any;
   }
+}
+
+// Type definitions to match the API response
+interface ApiResponse {
+  success: boolean;
+  data?: {
+    id: string;
+    address: string;
+    title: string;
+    category: string;
+    locationValue: string;
+  };
+  message?: string;
+  suggestions?: string[];
+  searchQuery?: string;
+  normalizedQuery?: string;
+  matchType?: string;
+  details?: string;
 }
 
 enum STEPS {
@@ -72,6 +91,8 @@ const SearchModal = () => {
   const [scriptsLoaded, setScriptsLoaded] = useState(false);
   const [showSparkles, setShowSparkles] = useState(false);
   const [pulseAnimation, setPulseAnimation] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   const {
     register,
@@ -175,6 +196,7 @@ const SearchModal = () => {
     setStep((v) => v - 1);
     setErrorMessage('');
     setSuccessMessage('');
+    setShowSuggestions(false);
     setPulseAnimation(true);
     setTimeout(() => setPulseAnimation(false), 600);
   }, []);
@@ -183,6 +205,7 @@ const SearchModal = () => {
     setStep((v) => v + 1);
     setErrorMessage('');
     setSuccessMessage('');
+    setShowSuggestions(false);
     setPulseAnimation(true);
     setTimeout(() => setPulseAnimation(false), 600);
     speak('Great! Now let\'s pick your perfect dates! 📅');
@@ -197,8 +220,18 @@ const SearchModal = () => {
     setListeningTarget(null);
     setShowSparkles(false);
     setPulseAnimation(false);
+    setShowSuggestions(false);
+    setSuggestions([]);
     reset();
   }, [searchModal, reset]);
+
+  const handleSuggestionClick = useCallback((suggestion: string) => {
+    setValue('location', suggestion);
+    setShowSuggestions(false);
+    setShowSparkles(true);
+    setTimeout(() => setShowSparkles(false), 2000);
+    speak(`Perfect choice! ${suggestion} sounds amazing!`);
+  }, [setValue, speak]);
 
   const handleVoiceInput = useCallback((target: 'location' | 'dates') => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -311,20 +344,24 @@ const SearchModal = () => {
       setIsLoading(true);
       setErrorMessage('');
       setSuccessMessage('');
+      setShowSuggestions(false);
 
       try {
-        const response = await axios.get('/api/query', { 
+        const response = await axios.get<ApiResponse>('/api/query', { 
           params: { address: data.location },
           timeout: 10000
         });
         
-        if (response.status === 200 && response.data) {
-          const listing = response.data;
+        // Handle successful response
+        if (response.status === 200 && response.data.success && response.data.data) {
+          const listing = response.data.data;
           const currentQuery = params ? qs.parse(params.toString()) : {};
           
           const newQuery: any = { 
             ...currentQuery, 
-            location: listing.address || data.location 
+            location: listing.address || data.location,
+            locationValue: listing.locationValue,
+            listingId: listing.id
           };
           
           if (dateRange.startDate) {
@@ -339,21 +376,51 @@ const SearchModal = () => {
             { skipNull: true }
           );
 
-          setSuccessMessage('🚀 Woohoo! Your perfect adventure awaits!');
+          setSuccessMessage(`🚀 Woohoo! Found "${listing.title}" in ${listing.address}! Your perfect adventure awaits!`);
           setShowSparkles(true);
-          speak('Amazing! I found the perfect spots for you! Get ready for an incredible journey!');
+          speak(`Amazing! I found ${listing.title} in ${listing.address}! Get ready for an incredible journey!`);
           
           setTimeout(() => {
             router.push(url);
             handleClose();
           }, 2000);
         } else {
-          throw new Error('Invalid response from server');
+          throw new Error('Location not found');
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Search error:', error);
-        setErrorMessage('🔍 Oops! Something went wrong. Let\'s try that search again!');
-        speak('Hmm, let\'s try that search one more time!');
+        
+        // Handle 404 - location not found with suggestions
+        if (error.response?.status === 404) {
+          const errorData = error.response.data as ApiResponse;
+          setErrorMessage(`🔍 "${data.location}" not found. ${errorData.details || 'Try a different location!'}`);
+          
+          if (errorData.suggestions && errorData.suggestions.length > 0) {
+            setSuggestions(errorData.suggestions);
+            setShowSuggestions(true);
+            speak(`Hmm, I couldn't find that exact location. But I have some great suggestions for you!`);
+          } else {
+            speak('Hmm, let\'s try searching for a different location!');
+          }
+        } 
+        // Handle other errors
+        else if (error.response?.status === 400) {
+          const errorData = error.response.data;
+          setErrorMessage(`❌ ${errorData.details || 'Please check your search and try again!'}`);
+          speak('Oops, there was an issue with your search. Let\'s try again!');
+        }
+        else if (error.response?.status === 408) {
+          setErrorMessage('⏱️ Search is taking too long. Try a shorter location name!');
+          speak('The search is taking a bit long. Let\'s try a shorter location name!');
+        }
+        else if (error.response?.status === 503) {
+          setErrorMessage('🔧 Service temporarily unavailable. Please try again in a moment!');
+          speak('Our service is temporarily busy. Let\'s try again in a moment!');
+        }
+        else {
+          setErrorMessage('🔍 Oops! Something went wrong. Let\'s try that search again!');
+          speak('Hmm, let\'s try that search one more time!');
+        }
       } finally {
         setIsLoading(false);
       }
@@ -473,7 +540,7 @@ const SearchModal = () => {
                 <Input
                   id="location"
                   label=""
-                  placeholder="✈️ Type a magical place... Paris, Tokyo, Bali..."
+                  placeholder="✈️ Type a magical place... Kumasi, Accra, Takoradi..."
                   register={register}
                   errors={errors}
                   required
@@ -518,6 +585,29 @@ const SearchModal = () => {
                 <div className="flex flex-col items-center space-y-4 p-6 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border-2 border-blue-200 animate-pulse">
                   <VoiceVisualizer />
                   <p className="text-blue-700 font-semibold animate-bounce">🎤 I'm listening for your dream destination...</p>
+                </div>
+              )}
+
+              {/* Suggestions Section */}
+              {showSuggestions && suggestions.length > 0 && (
+                <div className="bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-yellow-200 rounded-xl p-6 animate-fade-in">
+                  <div className="flex items-center gap-2 mb-4">
+                    <FaLightbulb className="text-yellow-500 animate-bounce" />
+                    <h4 className="font-bold text-yellow-700">💡 How about these amazing places?</h4>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {suggestions.map((suggestion, index) => (
+                      <button
+                        key={index}
+                        onClick={() => handleSuggestionClick(suggestion)}
+                        className="bg-white hover:bg-yellow-100 border border-yellow-300 hover:border-yellow-400 rounded-lg p-3 text-left transition-all duration-200 transform hover:scale-105 hover:shadow-md group"
+                      >
+                        <span className="font-semibold text-gray-700 group-hover:text-yellow-700">
+                          🏖️ {suggestion}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
