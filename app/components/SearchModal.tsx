@@ -13,7 +13,6 @@ import {
 } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import useSearchModal from '../hooks/useSearchModal';
-import Modal from './modals/Modal';
 import { DateRange, Range } from 'react-date-range';
 import 'react-date-range/dist/styles.css';
 import 'react-date-range/dist/theme/default.css';
@@ -35,6 +34,7 @@ import {
 } from 'react-icons/fa6';
 import { IoIosArrowForward } from 'react-icons/io';
 import { Loader } from '@googlemaps/js-api-loader';
+import Modal from './modals/Modal';
 // Add proper type definitions
 declare global {
   interface Window {
