@@ -122,41 +122,47 @@ const SearchModal = () => {
   }, [isListening]);
 
   // Load external scripts with better error handling
-  useEffect(() => {
-    if (scriptsLoadedRef.current) return;
+useEffect(() => {
+  if (scriptsLoadedRef.current) return;
 
-    const loadScript = (src: string): Promise<void> => {
-      return new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = src;
-        script.async = true;
-        script.onload = () => resolve();
-        script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
-        document.body.appendChild(script);
-      });
-    };
-
-    const loadScripts = async () => {
-      try {
-        await loadScript('https://code.responsivevoice.org/responsivevoice.js?key=oMsyTFvN');
-        
-        if (process.env.NEXT_PUBLIC_GOOGLE_API_KEY) {
-          await loadScript(
-            `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_API_KEY}&libraries=places&loading=async`
-          );
-        }
-        
-        scriptsLoadedRef.current = true;
-        setScriptsLoaded(true);
-      } catch (error) {
-        console.error('Error loading scripts:', error);
-        // Still set scriptsLoaded to true to prevent infinite retry
-        setScriptsLoaded(true);
+  const loadScript = (src: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (document.querySelector(`script[src="${src}"]`)) {
+        resolve(); // Already loaded
+        return;
       }
-    };
 
-    loadScripts();
-  }, []);
+      const script = document.createElement('script');
+      script.src = src;
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
+      document.body.appendChild(script);
+    });
+  };
+
+  const loadScripts = async () => {
+    try {
+      await loadScript('https://code.responsivevoice.org/responsivevoice.js?key=oMsyTFvN');
+
+      const googleKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
+      if (googleKey) {
+        await loadScript(
+          `https://maps.googleapis.com/maps/api/js?key=${googleKey}&libraries=places`
+        );
+      }
+
+      scriptsLoadedRef.current = true;
+      setScriptsLoaded(true);
+    } catch (error) {
+      console.error('Error loading scripts:', error);
+      setScriptsLoaded(true);
+    }
+  };
+
+  loadScripts();
+}, []);
+
 
   // Initialize Google Places Autocomplete with better error handling
   useEffect(() => {
@@ -185,18 +191,20 @@ const SearchModal = () => {
   }, [scriptsLoaded, setValue, step]);
 
   const speak = useCallback((text: string, voice = 'UK English Female') => {
-    if (window.responsiveVoice && window.responsiveVoice.voiceSupport()) {
-      try {
-        window.responsiveVoice.speak(text, voice, {
-          pitch: 1.1,
-          rate: 0.9,
-          volume: 0.8
-        });
-      } catch (error) {
-        console.error('Speech synthesis error:', error);
-      }
+  const rv = window?.responsiveVoice;
+  if (rv && rv.voiceSupport()) {
+    try {
+      rv.speak(text, voice, {
+        pitch: 1.1,
+        rate: 0.9,
+        volume: 0.8,
+      });
+    } catch (error) {
+      console.error('Speech synthesis error:', error);
     }
-  }, []);
+  }
+}, []);
+
 
   const onBack = useCallback(() => {
     setStep((v) => v - 1);
