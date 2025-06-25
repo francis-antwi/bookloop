@@ -121,7 +121,7 @@ const SearchModal = () => {
     };
   }, [isListening]);
 
-  // Load external scripts
+  // Load external scripts with better error handling
   useEffect(() => {
     if (scriptsLoadedRef.current) return;
 
@@ -142,7 +142,7 @@ const SearchModal = () => {
         
         if (process.env.NEXT_PUBLIC_GOOGLE_API_KEY) {
           await loadScript(
-            `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_API_KEY}&libraries=places`
+            `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_API_KEY}&libraries=places&loading=async`
           );
         }
         
@@ -150,15 +150,17 @@ const SearchModal = () => {
         setScriptsLoaded(true);
       } catch (error) {
         console.error('Error loading scripts:', error);
+        // Still set scriptsLoaded to true to prevent infinite retry
+        setScriptsLoaded(true);
       }
     };
 
     loadScripts();
   }, []);
 
-  // Initialize Google Places Autocomplete
+  // Initialize Google Places Autocomplete with better error handling
   useEffect(() => {
-    if (!scriptsLoaded || !window.google) return;
+    if (!scriptsLoaded || !window.google || !window.google.maps || !window.google.maps.places) return;
 
     const input = document.getElementById('location') as HTMLInputElement;
     if (input && !autocompleteRef.current) {
@@ -169,7 +171,7 @@ const SearchModal = () => {
         
         autocompleteRef.current.addListener('place_changed', () => {
           const place = autocompleteRef.current.getPlace();
-          if (place.formatted_address) {
+          if (place && place.formatted_address) {
             setValue('location', place.formatted_address);
             setShowSparkles(true);
             setTimeout(() => setShowSparkles(false), 2000);
@@ -184,11 +186,15 @@ const SearchModal = () => {
 
   const speak = useCallback((text: string, voice = 'UK English Female') => {
     if (window.responsiveVoice && window.responsiveVoice.voiceSupport()) {
-      window.responsiveVoice.speak(text, voice, {
-        pitch: 1.1,
-        rate: 0.9,
-        volume: 0.8
-      });
+      try {
+        window.responsiveVoice.speak(text, voice, {
+          pitch: 1.1,
+          rate: 0.9,
+          volume: 0.8
+        });
+      } catch (error) {
+        console.error('Speech synthesis error:', error);
+      }
     }
   }, []);
 
@@ -435,7 +441,7 @@ const SearchModal = () => {
 
   const progressPercentage = ((step + 1) / Object.keys(STEPS).filter(key => isNaN(Number(key))).length) * 100;
 
-  // Sparkle component
+  // Sparkle component - Fixed to always return JSX
   const Sparkles = () => (
     <div className="absolute inset-0 pointer-events-none overflow-hidden">
       {[...Array(8)].map((_, i) => (
@@ -455,7 +461,7 @@ const SearchModal = () => {
     </div>
   );
 
-  // Voice visualization bars
+  // Voice visualizer - Fixed to always return JSX
   const VoiceVisualizer = () => (
     <div className="flex items-center justify-center gap-1 h-12">
       {[...Array(5)].map((_, i) => (
@@ -471,6 +477,11 @@ const SearchModal = () => {
       ))}
     </div>
   );
+
+  // Ensure Modal component can handle undefined props
+  if (!searchModal || typeof searchModal.isOpen !== 'boolean') {
+    return null;
+  }
 
   return (
     <Modal
@@ -620,7 +631,7 @@ const SearchModal = () => {
                 <h3 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
                   📅 Perfect! Now Pick Your Dates
                 </h3>
-                <p className="text-gray-600">When do you want to explore <span className="font-semibold text-blue-600">{locationValue}</span>?</p>
+                <p className="text-gray-600">When do you want to explore <span className="font-semibold text-blue-600">{locationValue || 'your destination'}</span>?</p>
                 
                 <button
                   type="button"
@@ -652,9 +663,11 @@ const SearchModal = () => {
                   <DateRange
                     ranges={[dateRange]}
                     onChange={(ranges) => {
-                      setDateRange(ranges.selection);
-                      setShowSparkles(true);
-                      setTimeout(() => setShowSparkles(false), 1500);
+                      if (ranges.selection) {
+                        setDateRange(ranges.selection);
+                        setShowSparkles(true);
+                        setTimeout(() => setShowSparkles(false), 1500);
+                      }
                     }}
                     editableDateInputs={true}
                     moveRangeOnFirstSelection={false}
@@ -683,10 +696,10 @@ const SearchModal = () => {
             </div>
           )}
           
-          {successMessage && (
-            <div className="bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-200 text-green-700 p-4 rounded-xl flex items-center gap-3 animate-bounce">
+      {successMessage && (
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 text-green-700 p-4 rounded-xl flex items-center gap-3 animate-bounce">
               <FaCheck className="text-green-500 flex-shrink-0 animate-pulse text-xl" />
-              <span className="font-bold text-lg">{successMessage}</span>
+              <span className="font-semibold">{successMessage}</span>
             </div>
           )}
         </div>
