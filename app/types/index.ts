@@ -18,12 +18,15 @@ export type SafeUser = Omit<
   createdAt: string;
   updatedAt: string;
   emailVerified: string | null;
-  role: UserRole; // required and explicitly included
+  role: UserRole;
+
+  // ✅ Face Verification Fields
+  selfieImage: string | null;
+  idImage: string | null;
+  faceConfidence: number | null;
+  isFaceVerified: boolean;
 };
 
-/**
- * SafeListing - Strips createdAt Date type to string and ensures listing status
- */
 export type SafeListing = Omit<Listing, "createdAt"> & {
   createdAt: string;
   status: ListingStatus;

@@ -8,24 +8,31 @@ datasource db {
 }
 
 model User {
-  id             String         @id @default(uuid())
-  name           String?
-  email          String?        @unique
-  emailVerified  DateTime?
-  contactPhone   String?
-  image          String?
-  hashedPassword String?
-  role           UserRole       @default(CUSTOMER)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  favouriteIds   String[]
-  resetToken     String?        // ✅ Add this
-  resetTokenExpiry DateTime?    // ✅ Add this
+  id               String         @id @default(uuid())
+  name             String?
+  email            String?        @unique
+  emailVerified    DateTime?
+  contactPhone     String?
+  image            String?
+  hashedPassword   String?
+  role             UserRole       @default(CUSTOMER)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  favouriteIds     String[]
+  resetToken       String?
+  resetTokenExpiry DateTime?
 
-  accounts       Account[]
-  listings       Listing[]
-  reservations   Reservation[]
-  notifications  Notification[]
+  // ✅ Face++ Verification Fields
+  selfieImage      String?
+  idImage          String?
+  faceConfidence   Float?
+  isFaceVerified   Boolean        @default(false)
+
+  // Relations
+  accounts         Account[]
+  listings         Listing[]
+  reservations     Reservation[]
+  notifications    Notification[]
 }
 
 enum UserRole {
@@ -47,6 +54,12 @@ model Account {
   scope              String?
   id_token           String?
   session_state      String?
+
+  // ✅ Face++ Verification Fields
+  selfieImage        String?   // optional selfieImage image (OAuth flow)
+  idImage            String?   // optional ID photo
+  faceConfidence     Float?    // faceConfidence score
+  isFaceVerified     Boolean   @default(false) // verification flag
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

@@ -45,7 +45,7 @@ export const authOptions: AuthOptions = {
     }),
   ],
   pages: {
-    signIn: "/", // Redirect to your login page
+    signIn: "/",
   },
   session: {
     strategy: "jwt",
@@ -54,17 +54,17 @@ export const authOptions: AuthOptions = {
   debug: process.env.NODE_ENV === "development",
 
   callbacks: {
-    async signIn({ user, account }) {
-      if (account?.provider === "google") {
-        const existingUser = await prisma.user.findUnique({
-          where: { email: user.email || "" },
-        });
+    async signIn({ user }) {
+      const existingUser = await prisma.user.findUnique({
+        where: { email: user.email || "" },
+      });
 
-        if (existingUser?.hashedPassword) {
-          throw new Error(
-            "Email already registered with a password. Please sign in using your email and password."
-          );
-        }
+      if (!existingUser) {
+        throw new Error("You must complete face verification before creating an account.");
+      }
+
+      if (!existingUser.role) {
+        throw new Error("You must select your role (Customer or Provider) before signing in.");
       }
 
       return true;
@@ -73,13 +73,15 @@ export const authOptions: AuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.role = user.role;
+        token.isFaceVerified = (user as any).isFaceVerified;
       }
       return token;
     },
 
     async session({ session, token }) {
-      if (session.user && token.role) {
+      if (session.user) {
         session.user.role = token.role;
+        session.user.isFaceVerified = token.isFaceVerified;
       }
       return session;
     },

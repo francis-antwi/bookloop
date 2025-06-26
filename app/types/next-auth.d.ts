@@ -7,17 +7,29 @@ declare module "next-auth" {
       name?: string | null;
       email?: string | null;
       image?: string | null;
-      role?: string; // ✅ Allow role in session
+      role?: string;
+      isFaceVerified?: boolean;
+      selfieImage?: string | null;
+      idImage?: string | null;
+      faceConfidence?: number | null;
     };
   }
 
   interface User {
-    role?: string; // ✅ Allow role in user object from DB
+    role?: string;
+    isFaceVerified?: boolean;
+    selfieImage?: string | null;
+    idImage?: string | null;
+    faceConfidence?: number | null;
   }
 }
 
 declare module "next-auth/jwt" {
   interface JWT {
-    role?: string; // ✅ Allow role in token
+    role?: string;
+    isFaceVerified?: boolean;
+    selfieImage?: string | null;
+    idImage?: string | null;
+    faceConfidence?: number | null;
   }
 }

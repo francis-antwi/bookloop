@@ -21,6 +21,10 @@ export const metadata = {
   title: "BookLoop Services",
   description:
     "BookLoop Services lets you book apartments, cars, event centers, restaurants, and appointments with ease. Explore flexible options, secure reservations, and real-time availability.",
+     metadataBase: new URL(process.env.NODE_ENV === 'production' 
+    ? 'https://bookloop-eight.vercel.app' 
+    : 'http://localhost:3000'
+  ),
   openGraph: {
     title: "BookLoop Services",
     description:

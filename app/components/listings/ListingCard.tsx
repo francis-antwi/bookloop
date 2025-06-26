@@ -92,6 +92,8 @@ const ListingCard: React.FC<ListingCardProps> = ({
                 src={currentImageSrc}
                 alt={`${data.address} - Image ${currentImageIndex + 1}`}
                 fill
+                priority
+                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"  
                 className={`object-cover transition-all duration-500 ${
                   isImageLoading ? 'opacity-0' : 'opacity-100'
                 } group-hover:scale-110`}
