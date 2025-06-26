@@ -11,7 +11,7 @@ import SearchModal from "./components/SearchModal";
 import { getServerSession } from "next-auth";
 import SessionProviderWrapper from "./providers/SessionProviderWrapper";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
-import Script from "next/script"; // ✅ Import Script
+import Script from "next/script"; 
 
 const font = Nunito({
   subsets: ["latin"],
