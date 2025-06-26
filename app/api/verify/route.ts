@@ -2,17 +2,6 @@ import { NextResponse } from "next/server";
 import cloudinary from "cloudinary";
 import axios from "axios";
 
-// === Fail Fast If Missing ===
-if (
-  !process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ||
-  !process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY ||
-  !process.env.CLOUDINARY_API_SECRET ||
-  !process.env.FACEPP_API_KEY ||
-  !process.env.FACEPP_API_SECRET
-) {
-  throw new Error("Missing one or more required environment variables.");
-}
-
 cloudinary.v2.config({
   cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!,
   api_key: process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY!,
@@ -26,7 +15,7 @@ export async function POST(req: Request) {
     const id = formData.get("idImage") as File;
 
     if (!selfie || !id) {
-      return NextResponse.json({ error: "Both images are required." }, { status: 400 });
+      return NextResponse.json({ error: "Both selfie and ID image are required." }, { status: 400 });
     }
 
     const uploadFile = async (file: File) => {
@@ -61,18 +50,30 @@ export async function POST(req: Request) {
       confidence,
       selfieUrl,
       idUrl,
-      match: confidence >= 80,
+      match: confidence >= 86,
     });
 
   } catch (error: any) {
+    let errorMessage = "Face verification failed. Please try again.";
+    let statusCode = 500;
+
+    if (axios.isAxiosError(error)) {
+      const faceppError = error.response?.data?.error_message;
+
+      if (faceppError?.includes("IMAGE_FILE_TOO_LARGE")) {
+        errorMessage = "One of the images is too large. Please upload an image smaller than 2MB.";
+        statusCode = 413; // 413 Payload Too Large
+      } else if (faceppError) {
+        errorMessage = `Verification error: ${faceppError}`;
+        statusCode = 400;
+      }
+    } else if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+
     return NextResponse.json(
-      {
-        error: "Verification failed",
-        detail: axios.isAxiosError(error)
-          ? error.response?.data || error.message
-          : error?.message || "Unknown error",
-      },
-      { status: 500 }
+      { error: errorMessage },
+      { status: statusCode }
     );
   }
 }

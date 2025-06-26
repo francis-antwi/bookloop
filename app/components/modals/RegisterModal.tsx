@@ -110,38 +110,50 @@ const onSubmit: SubmitHandler<FieldValues> = async (data) => {
     return;
   }
 
-  setIsLoading(true);
-const formData = new FormData();
-formData.append(
-  "selfieImage",
-  new File([selfieImageBlob!], "selfie.jpg", { type: "image/jpeg" }) // ✅ Convert Blob to File
-);
-formData.append("idImage", idFile!);
+  // ✅ Check ID file size before proceeding
+  if (idFile.size > 2 * 1024 * 1024) {
+    toast.error("ID image is too large. Please upload one smaller than 2MB.");
+    return;
+  }
 
+  setIsLoading(true);
+
+  const formData = new FormData();
+  formData.append(
+    "selfieImage",
+    new File([selfieImageBlob!], "selfie.jpg", { type: "image/jpeg" })
+  );
+  formData.append("idImage", idFile!);
 
   try {
     const res = await axios.post('/api/verify', formData);
     const { confidence, selfieUrl, idUrl } = res.data;
 
-if (confidence >= 80) {
-  await axios.post('/api/register', {
-    ...data,
-    selfieImage: selfieUrl,
-    idImage: idUrl,
-    faceConfidence: confidence,
-    isFaceVerified: true,
-  });
+    if (confidence >= 80) {
+      await axios.post('/api/register', {
+        ...data,
+        selfieImage: selfieUrl,
+        idImage: idUrl,
+        faceConfidence: confidence,
+        isFaceVerified: true,
+      });
 
-  toast.success('Account created successfully!');
-  loginModal.onOpen();
-  registerModal.onClose();
-} else {
-  toast.error(`Face match failed. Score: ${confidence.toFixed(1)}%`);
-  setMatchStatus({ success: false, faceConfidence: confidence });
-}
+      toast.success('Account created successfully!');
+      loginModal.onOpen();
+      registerModal.onClose();
+    } else {
+      toast.error(`Face match failed. Score: ${confidence.toFixed(1)}%`);
+      setMatchStatus({ success: false, faceConfidence: confidence });
+    }
+  } catch (err: any) {
+    const errorMessage =
+      err.response?.data?.detail?.error_message ||
+      err.response?.data?.detail ||
+      err.response?.data?.error ||
+      err.message ||
+      "Face verification failed.";
 
-  } catch (err) {
-    toast.error('Face verification failed.');
+    toast.error(errorMessage);
   } finally {
     setIsLoading(false);
   }
