@@ -18,7 +18,7 @@ function extractLocationComponents(address: string) {
   return {
     full: normalized,
     city: parts[0] || '',
-    parts: parts.filter(Boolean)
+    parts: parts.filter(p => p.length > 3)
   };
 }
 
@@ -38,13 +38,22 @@ function setCachedResult(key: string, data: any) {
   }
   locationCache.set(key, { data, timestamp: Date.now() });
 }
+
+function generateLocationValue(address: string): string {
+  return address
+    .toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, '-')
+    .substring(0, 50);
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const address = searchParams.get('address');
 
   if (!address || address.length < 2 || address.length > 200) {
     return NextResponse.json({
-      error: 'Invalid address input',
+      success: false,
       details: 'Please provide a location between 2 and 200 characters'
     }, { status: 400 });
   }
@@ -63,57 +72,57 @@ export async function GET(request: NextRequest) {
     const locationComponents = extractLocationComponents(address);
 
     const orConditions = [
+      { address: { equals: normalizedAddress, mode: 'insensitive' } },
       { address: { contains: normalizedAddress, mode: 'insensitive' } },
       ...locationComponents.parts.map(part => ({
         address: { contains: part, mode: 'insensitive' }
-      })),
-      ...address.split(/\s+/).filter(w => w.length > 2).map(word => ({
-        address: { contains: word, mode: 'insensitive' }
       }))
     ];
 
     const listings = await prisma.listing.findMany({
       where: {
-        AND: [{ address: { not: null } }], // ✅ prevent null crash
-        OR: orConditions
+        AND: [
+          { address: { not: null } },
+          { OR: orConditions }
+        ]
       },
       select: {
+        id: true,
+        title: true,
         address: true,
+        category: true,
+        imageSrc: true,         // ✅ Required by ListingCard
+        price: true,            // ✅ Required by ListingCard
+        availableDates: true    // ✅ Optional but used in some views
       },
-      orderBy: [{ createdAt: 'desc' }],
+      orderBy: { createdAt: 'desc' },
       take: 10
     });
 
-    if (listings.length > 0) {
-      const result = {
-        success: true,
-        matchCount: listings.length,
-        listings,
-        searchQuery: address,
-        normalizedQuery: normalizedAddress
-      };
-      setCachedResult(cacheKey, result);
+    const transformedListings = listings.map(listing => ({
+      ...listing,
+      locationValue: generateLocationValue(listing.address)
+    }));
 
-      return NextResponse.json(result, {
-        status: 200,
-        headers: { 'X-Cache': 'MISS' }
-      });
-    }
-
-    const suggestions = await generateSuggestions(address);
-    return NextResponse.json({
-      success: false,
-      message: 'No listings found for this location',
-      listings: [],
+    const result = {
+      success: true,
+      listings: transformedListings,
       searchQuery: address,
-      normalizedQuery: normalizedAddress,
-      suggestions
-    }, { status: 404 }); // 👈 more accurate than 200
+      normalizedQuery: normalizedAddress
+    };
+
+    setCachedResult(cacheKey, result);
+
+    return NextResponse.json(result, {
+      status: 200,
+      headers: { 'X-Cache': listings.length > 0 ? 'MISS' : 'MISS' }
+    });
+
   } catch (error: any) {
     console.error('Search failed:', error);
     return NextResponse.json({
-      error: 'Search failed',
-      details: error.message || 'Unknown error'
+      success: false,
+      details: error.message || 'An unexpected error occurred while searching'
     }, { status: 500 });
   }
 }
