@@ -78,10 +78,7 @@ export async function GET(request: NextRequest) {
         OR: orConditions
       },
       select: {
-        id: true,
-        title: true,
         address: true,
-        category: true,
       },
       orderBy: [{ createdAt: 'desc' }],
       take: 10

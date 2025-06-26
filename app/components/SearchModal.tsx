@@ -333,7 +333,7 @@ const SearchModal = () => {
             ...currentQuery,
             address: listing.address, 
             locationValue: listing.locationValue,
-            listingId: listing.id,
+           
           };
 
           if (dateRange.startDate) {
