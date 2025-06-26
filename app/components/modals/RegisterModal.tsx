@@ -294,20 +294,20 @@ if (confidence >= 80) {
   <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-400 transition-colors duration-200">
     <FiUpload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
     <input
-      type="file"
-      accept="image/*"
-      capture="environment" // 💡 This enables camera on supported mobile devices
-      onChange={(e) => setIdFile(e.target.files?.[0] || null)}
-      disabled={isLoading}
-      className="hidden"
-      id="id-upload"
-    />
-    <label
-      htmlFor="id-upload"
-      className="cursor-pointer text-blue-600 hover:text-blue-700 font-medium"
-    >
-      Click to upload or take a photo of your ID
-    </label>
+  type="file"
+  accept="image/*"
+  onChange={(e) => setIdFile(e.target.files?.[0] || null)}
+  disabled={isLoading}
+  className="hidden"
+  id="id-upload"
+/>
+<label
+  htmlFor="id-upload"
+  className="cursor-pointer text-blue-600 hover:text-blue-700 font-medium"
+>
+  Click to upload or take a photo of your ID
+</label>
+
     <p className="text-gray-500 text-sm mt-2">
       PNG, JPG or JPEG (max. 10MB). You can take a photo with your camera.
     </p>
