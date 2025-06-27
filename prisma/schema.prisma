@@ -6,18 +6,17 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
-
 model User {
-  id               String         @id @default(uuid())
+  id               String   @id @default(uuid())
   name             String?
-  email            String?        @unique
+  email            String? @unique
   emailVerified    DateTime?
   contactPhone     String?
   image            String?
   hashedPassword   String?
-  role             UserRole       @default(CUSTOMER)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  role             UserRole @default(CUSTOMER)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
   favouriteIds     String[]
   resetToken       String?
   resetTokenExpiry DateTime?
@@ -26,7 +25,14 @@ model User {
   selfieImage      String?
   idImage          String?
   faceConfidence   Float?
-  isFaceVerified   Boolean        @default(false)
+  isFaceVerified   Boolean  @default(false)
+
+  // ✅ Extracted ID Info
+  idName           String?
+  idNumber         String?
+  idDOB            DateTime?   // ← updated
+  idExpiryDate     DateTime?   // ← updated
+  idIssuer         String?
 
   // Relations
   accounts         Account[]
@@ -35,12 +41,12 @@ model User {
   notifications    Notification[]
 }
 
+
 enum UserRole {
   CUSTOMER
   PROVIDER
   ADMIN
 }
-
 model Account {
   id                 String   @id @default(uuid())
   userId             String
@@ -56,15 +62,23 @@ model Account {
   session_state      String?
 
   // ✅ Face++ Verification Fields
-  selfieImage        String?   // optional selfieImage image (OAuth flow)
-  idImage            String?   // optional ID photo
-  faceConfidence     Float?    // faceConfidence score
-  isFaceVerified     Boolean   @default(false) // verification flag
+  selfieImage        String?
+  idImage            String?
+  faceConfidence     Float?
+  isFaceVerified     Boolean  @default(false)
+
+  // ✅ Extracted ID Info
+  idName             String?
+  idNumber           String?
+  idDOB              DateTime?   // ← updated
+  idExpiryDate       DateTime?   // ← updated
+  idIssuer           String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
+
 model Listing {
   id               String         @id @default(uuid())
   title            String

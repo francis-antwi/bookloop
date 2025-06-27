@@ -221,7 +221,8 @@ const ListingCard: React.FC<ListingCardProps> = ({
           {/* Price */}
           <div className="mb-4">
             <div className="flex items-baseline">
-              <span className="text-2xl font-bold text-gray-900">GH₵{price.toFixed(2)}</span>
+              <span className="text-2xl font-bold text-gray-900">GH₵{typeof price === "number" ? price.toFixed(2) : "0.00"}
+</span>
               {!reservation && (
                 <span className="text-sm text-gray-500 ml-1"></span>
               )}

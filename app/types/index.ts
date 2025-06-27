@@ -6,11 +6,6 @@ import {
   ReservationStatus,
   UserRole,
 } from "@prisma/client";
-
-/**
- * SafeUser - A type-safe user object that formats Date objects as strings
- * and ensures role is present.
- */
 export type SafeUser = Omit<
   User,
   "createdAt" | "updatedAt" | "emailVerified"
@@ -19,12 +14,15 @@ export type SafeUser = Omit<
   updatedAt: string;
   emailVerified: string | null;
   role: UserRole;
-
-  // ✅ Face Verification Fields
   selfieImage: string | null;
   idImage: string | null;
   faceConfidence: number | null;
   isFaceVerified: boolean;
+  idName: string | null;
+  idNumber: string | null;
+  idDOB: string | null;
+  idExpiryDate: string | null;
+  idIssuer: string | null;
 };
 
 export type SafeListing = Omit<Listing, "createdAt"> & {

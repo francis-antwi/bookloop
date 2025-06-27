@@ -27,6 +27,25 @@ import {
 } from 'react-icons/fi';
 import Camera from '../inputs/Camera';
 
+interface VerificationResponse {
+  verification: {
+    faceMatch: boolean;
+    confidence: number;
+    threshold: number;
+  };
+  document: {
+    imageUrl: string;
+    idName: string;
+    idNumber: string;
+    idDOB: string;
+    idExpiryDate: string;
+    idIssuer: string;
+  };
+  selfie: {
+    imageUrl: string;
+  };
+}
+
 const RegisterModal = () => {
   const registerModal = useRegisterModal();
   const loginModal = useLoginModal();
@@ -35,7 +54,10 @@ const RegisterModal = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [selfieImageBlob, setSelfieImageBlob] = useState<Blob | null>(null);
   const [idFile, setIdFile] = useState<File | null>(null);
-  const [matchStatus, setMatchStatus] = useState<{ success: boolean; faceConfidence: number } | null>(null);
+  const [matchStatus, setMatchStatus] = useState<{
+    success: boolean;
+    faceConfidence: number | null;
+  } | null>(null);
 
   const {
     register,
@@ -104,61 +126,66 @@ const RegisterModal = () => {
     },
   ];
 
-const onSubmit: SubmitHandler<FieldValues> = async (data) => {
-  if (!selfieImageBlob || !idFile) {
-    toast.error('Please capture a selfie and upload your ID photo.');
-    return;
-  }
-
-  // ✅ Check ID file size before proceeding
-  if (idFile.size > 2 * 1024 * 1024) {
-    toast.error("ID image is too large. Please upload one smaller than 2MB.");
-    return;
-  }
-
-  setIsLoading(true);
-
-  const formData = new FormData();
-  formData.append(
-    "selfieImage",
-    new File([selfieImageBlob!], "selfie.jpg", { type: "image/jpeg" })
-  );
-  formData.append("idImage", idFile!);
-
-  try {
-    const res = await axios.post('/api/verify', formData);
-    const { confidence, selfieUrl, idUrl } = res.data;
-
-    if (confidence >= 80) {
-      await axios.post('/api/register', {
-        ...data,
-        selfieImage: selfieUrl,
-        idImage: idUrl,
-        faceConfidence: confidence,
-        isFaceVerified: true,
-      });
-
-      toast.success('Account created successfully!');
-      loginModal.onOpen();
-      registerModal.onClose();
-    } else {
-      toast.error(`Face match failed. Score: ${confidence.toFixed(1)}%`);
-      setMatchStatus({ success: false, faceConfidence: confidence });
+  const onSubmit: SubmitHandler<FieldValues> = async (data) => {
+    if (!selfieImageBlob || !idFile) {
+      toast.error('Please capture a selfie and upload your ID photo.');
+      return;
     }
-  } catch (err: any) {
-    const errorMessage =
-      err.response?.data?.detail?.error_message ||
-      err.response?.data?.detail ||
-      err.response?.data?.error ||
-      err.message ||
-      "Face verification failed.";
 
-    toast.error(errorMessage);
-  } finally {
-    setIsLoading(false);
-  }
-};
+    if (idFile.size > 2 * 1024 * 1024) {
+      toast.error("ID image is too large. Please upload one smaller than 2MB.");
+      return;
+    }
 
+    setIsLoading(true);
+    const formData = new FormData();
+    formData.append("selfieImage", new File([selfieImageBlob], "selfie.jpg", { type: "image/jpeg" }));
+    formData.append("idImage", idFile);
+
+    try {
+      // Verify identity first
+      const verifyRes = await axios.post<VerificationResponse>('/api/verify', formData);
+      const { verification, document, selfie } = verifyRes.data;
+      const confidence = verification.confidence || 0;
+      const isVerified = verification.faceMatch && confidence >= verification.threshold;
+
+      if (isVerified) {
+        // Register user if verification succeeds
+        await axios.post('/api/register', {
+          ...data,
+          selfieImage: selfie.imageUrl,
+          idImage: document.imageUrl,
+          faceConfidence: confidence,
+          isFaceVerified: true,
+          idName: document.idName,
+          idNumber: document.idNumber,
+          idDOB: document.idDOB,
+          idExpiryDate: document.idExpiryDate,
+          idIssuer: document.idIssuer,
+        });
+
+        toast.success('Account created successfully!');
+        loginModal.onOpen();
+        registerModal.onClose();
+      } else {
+        const score = confidence.toFixed(1);
+        toast.error(`Face match failed (${score}%). Please try again.`);
+        setMatchStatus({ 
+          success: false, 
+          faceConfidence: confidence 
+        });
+      }
+    } catch (err: any) {
+      console.error('Registration error:', err);
+      const errorMessage = err.response?.data?.error || 
+                          err.response?.data?.message || 
+                          err.message || 
+                          "Registration failed. Please try again.";
+      toast.error(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const toggle = useCallback(() => {
     loginModal.onOpen();
@@ -303,36 +330,34 @@ const onSubmit: SubmitHandler<FieldValues> = async (data) => {
               </div>
             ) : currentField.field === 'idImage' ? (
               <div className="space-y-4">
-  <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-400 transition-colors duration-200">
-    <FiUpload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-    <input
-  type="file"
-  accept="image/*"
-  onChange={(e) => setIdFile(e.target.files?.[0] || null)}
-  disabled={isLoading}
-  className="hidden"
-  id="id-upload"
-/>
-<label
-  htmlFor="id-upload"
-  className="cursor-pointer text-blue-600 hover:text-blue-700 font-medium"
->
-  Click to upload or take a photo of your ID
-</label>
+                <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-400 transition-colors duration-200">
+                  <FiUpload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setIdFile(e.target.files?.[0] || null)}
+                    disabled={isLoading}
+                    className="hidden"
+                    id="id-upload"
+                  />
+                  <label
+                    htmlFor="id-upload"
+                    className="cursor-pointer text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    Click to upload or take a photo of your ID
+                  </label>
+                  <p className="text-gray-500 text-sm mt-2">
+                    PNG, JPG or JPEG (max. 2MB). You can take a photo with your camera.
+                  </p>
+                </div>
 
-    <p className="text-gray-500 text-sm mt-2">
-      PNG, JPG or JPEG (max. 10MB). You can take a photo with your camera.
-    </p>
-  </div>
-
-  {idFile && (
-    <div className="flex items-center gap-2 text-green-600 bg-green-50 p-3 rounded-xl">
-      <FiCheck className="w-5 h-5" />
-      <span className="text-sm font-medium">ID selected: {idFile.name}</span>
-    </div>
-  )}
-</div>
-
+                {idFile && (
+                  <div className="flex items-center gap-2 text-green-600 bg-green-50 p-3 rounded-xl">
+                    <FiCheck className="w-5 h-5" />
+                    <span className="text-sm font-medium">ID selected: {idFile.name}</span>
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="space-y-2">
                 <div className="relative">
@@ -401,11 +426,34 @@ const onSubmit: SubmitHandler<FieldValues> = async (data) => {
           {/* Match Status */}
           {matchStatus && !matchStatus.success && (
             <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-xl">
-              <div className="flex items-center gap-2 text-red-700">
-                <span className="text-lg">❌</span>
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 mt-0.5">
+                  <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
                 <div>
-                  <p className="font-medium">Verification Failed</p>
-                  <p className="text-sm">Match score: {matchStatus.faceConfidence.toFixed(1)}% (minimum required: 80%)</p>
+                  <p className="font-medium text-red-800">Verification Failed</p>
+                  <p className="text-sm text-red-600 mt-1">
+  Face match score: {typeof matchStatus?.faceConfidence === 'number' 
+  ? matchStatus.faceConfidence.toFixed(1) 
+  : '0.0'}%
+
+  <br />
+  Minimum required score is 80%. Please try again with clearer photos.
+</p>
+
+                  <button
+                    onClick={() => {
+                      setSelfieImageBlob(null);
+                      setIdFile(null);
+                      setMatchStatus(null);
+                      setCurrentStep(steps.length - 2); // Go back to selfie step
+                    }}
+                    className="mt-2 text-sm font-medium text-red-600 hover:text-red-800 transition-colors"
+                  >
+                    Retry Verification
+                  </button>
                 </div>
               </div>
             </div>

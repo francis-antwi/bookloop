@@ -1,4 +1,4 @@
-// types/next-auth.d.ts
+
 import NextAuth from "next-auth";
 
 declare module "next-auth" {
@@ -12,6 +12,13 @@ declare module "next-auth" {
       selfieImage?: string | null;
       idImage?: string | null;
       faceConfidence?: number | null;
+
+      // ✅ Extracted ID fields
+      idName?: string | null;
+      idNumber?: string | null;
+      idDOB?: string | null;
+      idExpiryDate?: string | null;
+      idIssuer?: string | null;
     };
   }
 
@@ -21,6 +28,13 @@ declare module "next-auth" {
     selfieImage?: string | null;
     idImage?: string | null;
     faceConfidence?: number | null;
+
+    // ✅ Extracted ID fields
+    idName?: string | null;
+    idNumber?: string | null;
+    idDOB?: string | null;
+    idExpiryDate?: string | null;
+    idIssuer?: string | null;
   }
 }
 
@@ -31,5 +45,12 @@ declare module "next-auth/jwt" {
     selfieImage?: string | null;
     idImage?: string | null;
     faceConfidence?: number | null;
+
+    // ✅ Extracted ID fields
+    idName?: string | null;
+    idNumber?: string | null;
+    idDOB?: string | null;
+    idExpiryDate?: string | null;
+    idIssuer?: string | null;
   }
 }

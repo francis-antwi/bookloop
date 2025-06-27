@@ -37,8 +37,8 @@ const Logo = () => {
         <Image
           alt="logo"
           className="transition-all duration-200 group-hover:brightness-110"
-          height={60}
-          width={60}
+          height={120}
+          width={120}
           src="/images/app.png"
         />
       </div>
