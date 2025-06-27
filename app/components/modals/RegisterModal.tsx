@@ -1,3 +1,5 @@
+'use client';
+
 import axios from 'axios';
 import { IoMdClose } from 'react-icons/io';
 import { useCallback, useState, useEffect } from 'react';
