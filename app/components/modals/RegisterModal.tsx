@@ -122,13 +122,13 @@ const RegisterModal = () => {
       field: 'idImage', 
       label: 'Upload ID',
       icon: FiUpload,
-      description: 'Upload a photo of your government ID'
+      description: 'Upload a photo of your Ghana Card'
     },
   ];
 
   const onSubmit: SubmitHandler<FieldValues> = async (data) => {
     if (!selfieImageBlob || !idFile) {
-      toast.error('Please capture a selfie and upload your ID photo.');
+      toast.error('Please capture a selfie and upload your Ghana Card.');
       return;
     }
 
@@ -344,7 +344,7 @@ const RegisterModal = () => {
                     htmlFor="id-upload"
                     className="cursor-pointer text-blue-600 hover:text-blue-700 font-medium"
                   >
-                    Click to upload or take a photo of your ID
+                    Click to upload or take a photo of your Ghana Card
                   </label>
                   <p className="text-gray-500 text-sm mt-2">
                     PNG, JPG or JPEG (max. 2MB). You can take a photo with your camera.
