@@ -5,7 +5,7 @@ import { FiUserCheck, FiCamera, FiUpload, FiCheck, FiLoader } from 'react-icons/
 import { useSession } from 'next-auth/react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import Camera from '../inputs/Camera';
+import Camera from '../components/inputs/Camera';
 
 interface RoleVerificationProps {
   onComplete: () => void;
