@@ -1,7 +1,9 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { Calendar, Check, Bell, X, Settings, Archive } from 'lucide-react';
+export const dynamic = 'force-dynamic';
 
+import { getServerSession } from "next-auth";
 type Notification = {
   id: string;
   message: string;
