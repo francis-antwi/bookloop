@@ -9,8 +9,8 @@ export const authOptions: AuthOptions = {
   adapter: PrismaAdapter(prisma),
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID as string,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
     CredentialsProvider({
       name: "credentials",
@@ -20,7 +20,7 @@ export const authOptions: AuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error("Invalid credentials");
+          throw new Error("Missing credentials");
         }
 
         const user = await prisma.user.findUnique({
@@ -40,12 +40,21 @@ export const authOptions: AuthOptions = {
           throw new Error("Invalid credentials");
         }
 
+        if (!user.isFaceVerified) {
+          throw new Error("Face verification is required before signing in.");
+        }
+
+        if (!user.role) {
+          throw new Error("Please select a role before signing in.");
+        }
+
         return user;
       },
     }),
   ],
   pages: {
-    signIn: "/",
+    signIn: "/", // Custom login page
+    error: "/auth/callback-error", // Handles OAuth or login errors
   },
   session: {
     strategy: "jwt",
@@ -54,17 +63,29 @@ export const authOptions: AuthOptions = {
   debug: process.env.NODE_ENV === "development",
 
   callbacks: {
-    async signIn({ user }) {
-      const existingUser = await prisma.user.findUnique({
-        where: { email: user.email || "" },
-      });
+    async signIn({ user, account }) {
+      if (account?.provider === "google") {
+        const existingUser = await prisma.user.findUnique({
+          where: { email: user.email ?? "" },
+        });
 
-      if (!existingUser) {
-        throw new Error("You must complete face verification before creating an account.");
-      }
+        if (!existingUser) {
+          await prisma.user.create({
+            data: {
+              email: user.email!,
+              name: user.name ?? "",
+              image: user.image ?? "",
+              isFaceVerified: false,
+              isOtpVerified: false,
+              role: null,
+            },
+          });
+          return "/verify-id"; // Redirect new Google users to verify
+        }
 
-      if (!existingUser.role) {
-        throw new Error("You must select your role (Customer or Provider) before signing in.");
+        if (!existingUser.isFaceVerified || !existingUser.role) {
+          return "/verify-id"; // Redirect incomplete Google users
+        }
       }
 
       return true;
@@ -78,18 +99,15 @@ export const authOptions: AuthOptions = {
         token.idImage = (user as any).idImage;
         token.faceConfidence = (user as any).faceConfidence;
 
-        // ✅ Extracted ID data
         token.idName = (user as any).idName;
         token.idNumber = (user as any).idNumber;
         token.idDOB = (user as any).idDOB;
         token.idExpiryDate = (user as any).idExpiryDate;
         token.idIssuer = (user as any).idIssuer;
 
-        // ✅ NEW FIELDS
         token.personalIdNumber = (user as any).personalIdNumber;
         token.idIssueDate = (user as any).idIssueDate;
 
-        // ✅ OTP fields
         token.isOtpVerified = (user as any).isOtpVerified;
         token.otpCode = (user as any).otpCode ?? null;
         token.otpExpiresAt = (user as any).otpExpiresAt
@@ -107,18 +125,15 @@ export const authOptions: AuthOptions = {
         session.user.idImage = token.idImage;
         session.user.faceConfidence = token.faceConfidence;
 
-        // ✅ ID fields
         session.user.idName = token.idName;
         session.user.idNumber = token.idNumber;
         session.user.idDOB = token.idDOB;
         session.user.idExpiryDate = token.idExpiryDate;
         session.user.idIssuer = token.idIssuer;
 
-        // ✅ NEW FIELDS
         session.user.personalIdNumber = token.personalIdNumber;
         session.user.idIssueDate = token.idIssueDate;
 
-        // ✅ OTP fields
         session.user.isOtpVerified = token.isOtpVerified;
         session.user.otpCode = token.otpCode;
         session.user.otpExpiresAt = token.otpExpiresAt;

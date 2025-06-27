@@ -1,10 +1,8 @@
-// app/api/send-otp/route.ts
-
 import { NextResponse } from "next/server";
 import prisma from "@/app/libs/prismadb";
 import axios from "axios";
 
-// Formats phone numbers (defaults to Ghana: +233)
+// ✅ Format phone numbers to international format (Ghana default)
 function formatPhone(raw: string): string {
   const trimmed = raw.replace(/\s+/g, "");
   if (trimmed.startsWith("+")) return trimmed;
@@ -18,29 +16,27 @@ export async function POST(req: Request) {
 
     if (!contactPhone) {
       return NextResponse.json(
-        { success: false, error: "Phone number is required" },
+        { success: false, error: "Phone number is required." },
         { status: 400 }
       );
     }
 
     const formattedPhone = formatPhone(contactPhone);
 
-    // Validate Ghana number format
+    // ✅ Validate Ghanaian phone format
     const ghanaRegex = /^\+233\d{9}$/;
     if (!ghanaRegex.test(formattedPhone)) {
       return NextResponse.json(
-        { success: false, error: "Invalid Ghana phone number format" },
+        { success: false, error: "Invalid Ghana phone number format." },
         { status: 400 }
       );
     }
 
-    // Generate OTP
+    // ✅ Generate OTP & expiry
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
-    // Set expiry to 5 minutes from now
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-
-    // Find or create user by phone
+    // ✅ Find or create user by contactPhone
     let user = await prisma.user.findFirst({
       where: { contactPhone: formattedPhone },
     });
@@ -65,17 +61,28 @@ export async function POST(req: Request) {
       });
     }
 
-    // Prepare WhatsApp message via Twilio
+    // ✅ Check env vars before Twilio call
+    const { TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM, TWILIO_TEMPLATE_SID } = process.env;
+
+    if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_WHATSAPP_FROM || !TWILIO_TEMPLATE_SID) {
+      console.warn("⚠️ Twilio environment variables are missing.");
+      return NextResponse.json(
+        { success: false, error: "Server configuration error." },
+        { status: 500 }
+      );
+    }
+
+    // ✅ Send OTP via Twilio WhatsApp API
     const payload = new URLSearchParams({
       To: `whatsapp:${formattedPhone}`,
-      From: process.env.TWILIO_WHATSAPP_FROM!,
-      ContentSid: process.env.TWILIO_TEMPLATE_SID!,
+      From: TWILIO_WHATSAPP_FROM,
+      ContentSid: TWILIO_TEMPLATE_SID,
       ContentVariables: JSON.stringify({ "1": "User", "2": otp }),
     });
 
     const auth = {
-      username: process.env.TWILIO_ACCOUNT_SID!,
-      password: process.env.TWILIO_AUTH_TOKEN!,
+      username: TWILIO_ACCOUNT_SID,
+      password: TWILIO_AUTH_TOKEN,
     };
 
     const twilioResponse = await axios.post(
@@ -84,14 +91,18 @@ export async function POST(req: Request) {
       { auth }
     );
 
+    console.log("✅ OTP sent to", formattedPhone, "| SID:", twilioResponse.data.sid);
+
     return NextResponse.json({
       success: true,
       messageSid: twilioResponse.data.sid,
     });
   } catch (error: any) {
-    console.error("Send OTP error:", error.response?.data || error.message);
+    const msg = error.response?.data?.message || error.message || "Unknown error";
+    console.error("🔴 Send OTP error:", msg);
+
     return NextResponse.json(
-      { success: false, error: "Failed to send OTP" },
+      { success: false, error: "Failed to send OTP. Please try again." },
       { status: 500 }
     );
   }
