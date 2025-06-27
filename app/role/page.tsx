@@ -27,7 +27,7 @@ const RoleVerification = ({ onComplete }: RoleVerificationProps) => {
   const handleRoleSelect = async (role: string) => {
     setIsLoading(true);
     try {
-      await axios.post('/api/assign-role', { role });
+      await axios.post('/api/role', { role });
       await update({ role });
       setSelectedRole(role);
       setCurrentStep('selfie');
