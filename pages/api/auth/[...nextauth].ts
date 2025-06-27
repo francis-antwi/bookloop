@@ -63,33 +63,42 @@ export const authOptions: AuthOptions = {
   debug: process.env.NODE_ENV === "development",
 
   callbacks: {
-    async signIn({ user, account }) {
-      if (account?.provider === "google") {
-        const existingUser = await prisma.user.findUnique({
-          where: { email: user.email ?? "" },
+async signIn({ user, account, profile }) {
+  if (account?.provider === "google") {
+    let existingUser = await prisma.user.findUnique({
+      where: { email: user.email ?? "" },
+    });
+
+    // If this is a first-time Google login
+    if (!existingUser) {
+      try {
+        existingUser = await prisma.user.create({
+          data: {
+            email: user.email!,
+            name: user.name ?? "",
+            image: user.image ?? "",
+            isFaceVerified: false,
+            isOtpVerified: false,
+            role: null,
+          },
         });
 
-        if (!existingUser) {
-          await prisma.user.create({
-            data: {
-              email: user.email!,
-              name: user.name ?? "",
-              image: user.image ?? "",
-              isFaceVerified: false,
-              isOtpVerified: false,
-              role: null,
-            },
-          });
-          return "/verify-id"; // Redirect new Google users to verify
-        }
-
-        if (!existingUser.isFaceVerified || !existingUser.role) {
-          return "/verify-id"; // Redirect incomplete Google users
-        }
+        // Force redirect to ID verification
+        return "/verify-id";
+      } catch (err) {
+        console.error("🔴 Error creating new Google user:", err);
+        return "/auth/callback-error?reason=account-creation-failed";
       }
+    }
 
-      return true;
-    },
+    // Redirect if role is missing or face not verified
+    if (!existingUser.role || !existingUser.isFaceVerified) {
+      return "/verify-id";
+    }
+  }
+
+  return true;
+},
 
     async jwt({ token, user }) {
       if (user) {

@@ -76,6 +76,8 @@ const RegisterModal = () => {
     formState: { errors },
     watch,
     trigger,
+    setValue,
+    getValues,
   } = useForm<FieldValues>({
     defaultValues: {
       name: '',
@@ -157,75 +159,75 @@ const RegisterModal = () => {
   ];
 
   // Send OTP function
-const sendOtp = async () => {
-  const contactPhone = watchedValues.contactPhone;
-  if (!contactPhone || contactPhone.trim().length === 0) {
-    toast.error('Please enter a phone number first');
-    return;
-  }
+  const sendOtp = async () => {
+    const contactPhone = watchedValues.contactPhone;
+    if (!contactPhone || contactPhone.trim().length === 0) {
+      toast.error('Please enter a phone number first');
+      return;
+    }
 
-  setIsSendingOtp(true);
-  try {
-    await axios.post('/api/send-otp', { contactPhone }); // ✅ Fixed
-    setIsOtpSent(true);
-    setOtpTimer(60); // 60 seconds countdown
-    setCanResendOtp(false);
-    toast.success('OTP sent successfully!');
-  } catch (error: any) {
-    console.error('Error sending OTP:', error);
-    toast.error(error.response?.data?.error || 'Failed to send OTP');
-  } finally {
-    setIsSendingOtp(false);
-  }
-};
+    setIsSendingOtp(true);
+    try {
+      await axios.post('/api/send-otp', { contactPhone });
+      setIsOtpSent(true);
+      setOtpTimer(60); // 60 seconds countdown
+      setCanResendOtp(false);
+      toast.success('OTP sent successfully!');
+    } catch (error: any) {
+      console.error('Error sending OTP:', error);
+      toast.error(error.response?.data?.error || 'Failed to send OTP');
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
 
-// Verify OTP function
-const verifyOtp = async () => {
-  const otpCode = otp.join('');
-  if (otpCode.length !== 6) {
-    toast.error('Please enter the complete 6-digit code');
-    return;
-  }
+  // Verify OTP function
+  const verifyOtp = async () => {
+    const otpCode = otp.join('');
+    if (otpCode.length !== 6) {
+      toast.error('Please enter the complete 6-digit code');
+      return;
+    }
 
-  setIsVerifyingOtp(true);
-  try {
-    await axios.post('/api/verify-otp', {
-      contactPhone: watchedValues.contactPhone, // ✅ Fixed
-      otp: otpCode,
-    });
-    setIsOtpVerified(true);
-    toast.success('Phone number verified successfully!');
-  } catch (error: any) {
-    console.error('Error verifying OTP:', error);
-    toast.error(error.response?.data?.error || 'Invalid OTP code');
-    setOtp(['', '', '', '', '', '']);
-  } finally {
-    setIsVerifyingOtp(false);
-  }
-};
+    setIsVerifyingOtp(true);
+    try {
+      await axios.post('/api/verify-otp', {
+        contactPhone: watchedValues.contactPhone,
+        otp: otpCode,
+      });
+      setIsOtpVerified(true);
+      toast.success('Phone number verified successfully!');
+    } catch (error: any) {
+      console.error('Error verifying OTP:', error);
+      toast.error(error.response?.data?.error || 'Invalid OTP code');
+      setOtp(['', '', '', '', '', '']);
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  };
 
-// Handle OTP input change
-const handleOtpChange = (index: number, value: string) => {
-  if (value.length > 1) return; // Only allow single digit
+  // Handle OTP input change
+  const handleOtpChange = (index: number, value: string) => {
+    if (!/^\d*$/.test(value)) return; // Only allow digits
+    
+    const newOtp = [...otp];
+    newOtp[index] = value;
+    setOtp(newOtp);
 
-  const newOtp = [...otp];
-  newOtp[index] = value;
-  setOtp(newOtp);
+    // Auto-focus next input
+    if (value && index < 5) {
+      const nextInput = document.getElementById(`otp-${index + 1}`);
+      nextInput?.focus();
+    }
+  };
 
-  // Auto-focus next input
-  if (value && index < 5) {
-    const nextInput = document.getElementById(`otp-${index + 1}`);
-    nextInput?.focus();
-  }
-};
-
-// Handle OTP backspace
-const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
-  if (e.key === 'Backspace' && !otp[index] && index > 0) {
-    const prevInput = document.getElementById(`otp-${index - 1}`);
-    prevInput?.focus();
-  }
-};
+  // Handle OTP backspace
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+      const prevInput = document.getElementById(`otp-${index - 1}`);
+      prevInput?.focus();
+    }
+  };
 
   const onSubmit: SubmitHandler<FieldValues> = async (data) => {
     if (!selfieImageBlob || !idFile) {
@@ -285,9 +287,9 @@ const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
     } catch (err: any) {
       console.error('Registration error:', err);
       const errorMessage = err.response?.data?.error || 
-                          err.response?.data?.message || 
-                          err.message || 
-                          "Registration failed. Please try again.";
+                        err.response?.data?.message || 
+                        err.message || 
+                        "Registration failed. Please try again.";
       toast.error(errorMessage);
     } finally {
       setIsLoading(false);
@@ -339,6 +341,13 @@ const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
     }
   };
 
+  // Allow jumping to any completed step
+  const jumpToStep = (stepIndex: number) => {
+    if (stepIndex < currentStep || isStepValid(stepIndex)) {
+      setCurrentStep(stepIndex);
+    }
+  };
+
   const isStepValid = (stepIndex: number) => {
     const field = steps[stepIndex].field;
     if (field === 'phoneVerification') return isOtpVerified;
@@ -358,11 +367,11 @@ const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
   const progress = ((currentStep + 1) / steps.length) * 100;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
-      <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden transform transition-all duration-300">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 overflow-y-auto">
+      <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden transform transition-all duration-300 my-8">
         
         {/* Header */}
-        <div className="relative bg-gradient-to-r from-blue-600 to-purple-600 px-8 py-6 text-white">
+        <div className="relative bg-gradient-to-r from-blue-600 to-purple-600 px-6 py-5 sm:px-8 sm:py-6 text-white">
           <button 
             onClick={registerModal.onClose} 
             disabled={isLoading}
@@ -372,63 +381,81 @@ const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
           </button>
           
           <div className="mb-4">
-            <h2 className="text-2xl font-bold">Join Us</h2>
-            <p className="text-blue-100 text-sm">Create your account in a few simple steps</p>
+            <h2 className="text-xl sm:text-2xl font-bold">Join Us</h2>
+            <p className="text-blue-100 text-xs sm:text-sm">Create your account in a few simple steps</p>
           </div>
 
-          {/* Progress Bar */}
+          {/* Progress Bar with clickable steps */}
           <div className="relative">
             <div className="flex justify-between text-xs mb-2">
               <span>Step {currentStep + 1} of {steps.length}</span>
               <span>{Math.round(progress)}% Complete</span>
             </div>
-            <div className="w-full bg-white/20 rounded-full h-2">
+            <div className="w-full bg-white/20 rounded-full h-2 mb-1">
               <div 
                 className="bg-white h-2 rounded-full transition-all duration-500 ease-out"
                 style={{ width: `${progress}%` }}
               />
             </div>
+            <div className="flex justify-between px-1">
+              {steps.map((step, index) => (
+                <button
+                  key={index}
+                  onClick={() => jumpToStep(index)}
+                  disabled={index > currentStep && !isStepValid(index)}
+                  className={`w-4 h-4 rounded-full transition-colors duration-200 ${
+                    index <= currentStep || isStepValid(index)
+                      ? 'bg-white cursor-pointer hover:bg-blue-200'
+                      : 'bg-white/30 cursor-not-allowed'
+                  } ${
+                    index === currentStep ? 'ring-2 ring-blue-300' : ''
+                  }`}
+                  aria-label={`Go to step ${index + 1}: ${step.label}`}
+                />
+              ))}
+            </div>
           </div>
         </div>
 
         {/* Content */}
-        <div className="px-8 py-6">
+        <div className="px-6 py-5 sm:px-8 sm:py-6">
           {/* Step Header */}
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-100 to-purple-100 rounded-2xl mb-4">
-              <IconComponent className="w-8 h-8 text-blue-600" />
+          <div className="text-center mb-6 sm:mb-8">
+            <div className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-r from-blue-100 to-purple-100 rounded-2xl mb-3 sm:mb-4">
+              <IconComponent className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-800 mb-2">
+            <h3 className="text-lg sm:text-xl font-semibold text-gray-800 mb-1 sm:mb-2">
               {currentField.label}
             </h3>
-            <p className="text-gray-500 text-sm">
+            <p className="text-gray-500 text-xs sm:text-sm">
               {currentField.description}
             </p>
           </div>
 
           {/* Form Fields */}
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {currentField.field === 'phoneVerification' ? (
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
                 {/* Phone number display */}
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
-                  <p className="text-sm text-blue-600 mb-1">Code sent to:</p>
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 sm:p-4 text-center">
+                  <p className="text-xs sm:text-sm text-blue-600 mb-1">Code sent to:</p>
                   <p className="font-medium text-blue-800">{watchedValues.contactPhone}</p>
                 </div>
 
                 {/* OTP Input */}
-                <div className="space-y-4">
-                  <div className="flex justify-center gap-3">
+                <div className="space-y-3 sm:space-y-4">
+                  <div className="flex justify-center gap-2 sm:gap-3">
                     {otp.map((digit, index) => (
                       <input
                         key={index}
                         id={`otp-${index}`}
                         type="text"
+                        inputMode="numeric"
                         maxLength={1}
                         value={digit}
                         onChange={(e) => handleOtpChange(index, e.target.value)}
                         onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                        className="w-12 h-12 text-center text-lg font-semibold border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none transition-colors duration-200"
+                        className="w-10 h-10 sm:w-12 sm:h-12 text-center text-base sm:text-lg font-semibold border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none transition-colors duration-200"
                         disabled={isVerifyingOtp || isOtpVerified}
                       />
                     ))}
@@ -439,7 +466,7 @@ const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
                     <button
                       onClick={verifyOtp}
                       disabled={otp.join('').length !== 6 || isVerifyingOtp}
-                      className={`w-full py-3 rounded-xl font-medium transition-all duration-200 ${
+                      className={`w-full py-2 sm:py-3 rounded-xl font-medium transition-all duration-200 ${
                         otp.join('').length === 6 && !isVerifyingOtp
                           ? 'bg-blue-600 text-white hover:bg-blue-700'
                           : 'bg-gray-200 text-gray-400 cursor-not-allowed'
@@ -458,25 +485,25 @@ const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
 
                   {/* Success Message */}
                   {isOtpVerified && (
-                    <div className="flex items-center gap-2 text-green-600 bg-green-50 p-3 rounded-xl">
-                      <FiCheck className="w-5 h-5" />
-                      <span className="text-sm font-medium">Phone number verified successfully!</span>
+                    <div className="flex items-center gap-2 text-green-600 bg-green-50 p-2 sm:p-3 rounded-xl text-sm">
+                      <FiCheck className="w-4 h-4 sm:w-5 sm:h-5" />
+                      <span className="font-medium">Phone number verified successfully!</span>
                     </div>
                   )}
 
                   {/* Resend OTP */}
                   <div className="text-center">
                     {otpTimer > 0 ? (
-                      <p className="text-sm text-gray-500">
+                      <p className="text-xs sm:text-sm text-gray-500">
                         Resend code in {otpTimer} seconds
                       </p>
                     ) : canResendOtp && !isOtpVerified ? (
                       <button
                         onClick={sendOtp}
                         disabled={isSendingOtp}
-                        className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1 mx-auto"
+                        className="text-xs sm:text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1 mx-auto"
                       >
-                        <FiRefreshCw className={`w-4 h-4 ${isSendingOtp ? 'animate-spin' : ''}`} />
+                        <FiRefreshCw className={`w-3 h-3 sm:w-4 sm:h-4 ${isSendingOtp ? 'animate-spin' : ''}`} />
                         {isSendingOtp ? 'Sending...' : 'Resend Code'}
                       </button>
                     ) : null}
@@ -484,15 +511,15 @@ const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
                 </div>
               </div>
             ) : currentField.field === 'role' ? (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 gap-3">
+              <div className="space-y-3 sm:space-y-4">
+                <div className="grid grid-cols-1 gap-2 sm:gap-3">
                   {[
                     { value: 'CUSTOMER', label: 'Customer', desc: 'Looking for services' },
                     { value: 'PROVIDER', label: 'Provider', desc: 'Offering services' }
                   ].map((option) => (
                     <label
                       key={option.value}
-                      className={`relative flex items-center p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                      className={`relative flex items-center p-3 sm:p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
                         watchedValues.role === option.value
                           ? 'border-blue-500 bg-blue-50'
                           : 'border-gray-200 hover:border-gray-300'
@@ -506,36 +533,36 @@ const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
                         className="sr-only"
                       />
                       <div className="flex-1">
-                        <div className="font-medium text-gray-800">{option.label}</div>
-                        <div className="text-sm text-gray-500">{option.desc}</div>
+                        <div className="font-medium text-gray-800 text-sm sm:text-base">{option.label}</div>
+                        <div className="text-xs sm:text-sm text-gray-500">{option.desc}</div>
                       </div>
                       {watchedValues.role === option.value && (
-                        <FiCheck className="w-5 h-5 text-blue-600" />
+                        <FiCheck className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
                       )}
                     </label>
                   ))}
                 </div>
                 {errors.role && (
-                  <p className="text-red-500 text-sm flex items-center gap-2">
+                  <p className="text-red-500 text-xs sm:text-sm flex items-center gap-2">
                     <span className="w-1 h-1 bg-red-500 rounded-full"></span>
                     {errors.role.message}
                   </p>
                 )}
               </div>
             ) : currentField.field === 'selfieImage' ? (
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 <Camera onCapture={(blob) => setSelfieImageBlob(blob)} />
                 {selfieImageBlob && (
-                  <div className="flex items-center gap-2 text-green-600 bg-green-50 p-3 rounded-xl">
-                    <FiCheck className="w-5 h-5" />
-                    <span className="text-sm font-medium">Selfie captured successfully</span>
+                  <div className="flex items-center gap-2 text-green-600 bg-green-50 p-2 sm:p-3 rounded-xl text-sm">
+                    <FiCheck className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <span className="font-medium">Selfie captured successfully</span>
                   </div>
                 )}
               </div>
             ) : currentField.field === 'idImage' ? (
-              <div className="space-y-4">
-                <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-400 transition-colors duration-200">
-                  <FiUpload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <div className="space-y-3 sm:space-y-4">
+                <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 sm:p-8 text-center hover:border-blue-400 transition-colors duration-200">
+                  <FiUpload className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-3 sm:mb-4" />
                   <input
                     type="file"
                     accept="image/*"
@@ -543,36 +570,37 @@ const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
                     disabled={isLoading}
                     className="hidden"
                     id="id-upload"
+                    capture="environment"
                   />
                   <label
                     htmlFor="id-upload"
-                    className="cursor-pointer text-blue-600 hover:text-blue-700 font-medium"
+                    className="cursor-pointer text-blue-600 hover:text-blue-700 font-medium text-sm sm:text-base"
                   >
                     Click to upload or take a photo of your Ghana Card
                   </label>
-                  <p className="text-gray-500 text-sm mt-2">
+                  <p className="text-gray-500 text-xs sm:text-sm mt-1 sm:mt-2">
                     PNG, JPG or JPEG (max. 2MB). You can take a photo with your camera.
                   </p>
                 </div>
 
                 {idFile && (
-                  <div className="flex items-center gap-2 text-green-600 bg-green-50 p-3 rounded-xl">
-                    <FiCheck className="w-5 h-5" />
-                    <span className="text-sm font-medium">ID selected: {idFile.name}</span>
+                  <div className="flex items-center gap-2 text-green-600 bg-green-50 p-2 sm:p-3 rounded-xl text-sm">
+                    <FiCheck className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <span className="font-medium">ID selected: {idFile.name}</span>
                   </div>
                 )}
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-1 sm:space-y-2">
                 <div className="relative">
-                  <div className={`flex items-center border-2 rounded-xl px-4 py-3 transition-all duration-200 ${
+                  <div className={`flex items-center border-2 rounded-xl px-3 py-2 sm:px-4 sm:py-3 transition-all duration-200 ${
                     errors[currentField.field] 
                       ? 'border-red-300 bg-red-50' 
                       : watchedValues[currentField.field]?.trim().length > 0 
                         ? 'border-green-300 bg-green-50'
                         : 'border-gray-200 hover:border-gray-300 focus-within:border-blue-500'
                   }`}>
-                    <IconComponent className={`w-5 h-5 mr-3 ${
+                    <IconComponent className={`w-4 h-4 sm:w-5 sm:h-5 mr-2 sm:mr-3 ${
                       errors[currentField.field] 
                         ? 'text-red-400' 
                         : watchedValues[currentField.field]?.trim().length > 0 
@@ -609,7 +637,7 @@ const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
                           ? 'tel'
                           : 'text'
                       }
-                      className="flex-1 bg-transparent outline-none text-gray-800 placeholder-gray-400"
+                      className="flex-1 bg-transparent outline-none text-gray-800 placeholder-gray-400 text-sm sm:text-base"
                       disabled={isLoading}
                     />
                     {currentField.field === 'password' && (
@@ -618,16 +646,16 @@ const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
                         onClick={() => setShowPassword(!showPassword)}
                         className="p-1 text-gray-400 hover:text-gray-600 transition-colors duration-200"
                       >
-                        {showPassword ? <FiEyeOff className="w-5 h-5" /> : <FiEye className="w-5 h-5" />}
+                        {showPassword ? <FiEyeOff className="w-4 h-4 sm:w-5 sm:h-5" /> : <FiEye className="w-4 h-4 sm:w-5 sm:h-5" />}
                       </button>
                     )}
                     {watchedValues[currentField.field]?.trim().length > 0 && !errors[currentField.field] && (
-                      <FiCheck className="w-5 h-5 text-green-500" />
+                      <FiCheck className="w-4 h-4 sm:w-5 sm:h-5 text-green-500" />
                     )}
                   </div>
                 </div>
                 {errors[currentField.field] && (
-                  <p className="text-red-500 text-sm flex items-center gap-2 mt-2">
+                  <p className="text-red-500 text-xs sm:text-sm flex items-center gap-2 mt-1 sm:mt-2">
                     <span className="w-1 h-1 bg-red-500 rounded-full"></span>
                     {errors[currentField.field]?.message}
                   </p>
@@ -638,16 +666,16 @@ const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
 
           {/* Match Status */}
           {matchStatus && !matchStatus.success && (
-            <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-xl">
-              <div className="flex items-start gap-3">
+            <div className="mt-4 sm:mt-6 p-3 sm:p-4 bg-red-50 border border-red-200 rounded-xl">
+              <div className="flex items-start gap-2 sm:gap-3">
                 <div className="flex-shrink-0 mt-0.5">
-                  <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
                 <div>
-                  <p className="font-medium text-red-800">Verification Failed</p>
-                  <p className="text-sm text-red-600 mt-1">
+                  <p className="font-medium text-red-800 text-sm sm:text-base">Verification Failed</p>
+                  <p className="text-xs sm:text-sm text-red-600 mt-1">
                     Face match score: {typeof matchStatus?.faceConfidence === 'number' 
                       ? matchStatus.faceConfidence.toFixed(1) 
                       : '0.0'}%
@@ -661,7 +689,7 @@ const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
                       setMatchStatus(null);
                       setCurrentStep(steps.length - 2); // Go back to selfie step
                     }}
-                    className="mt-2 text-sm font-medium text-red-600 hover:text-red-800 transition-colors"
+                    className="mt-1 sm:mt-2 text-xs sm:text-sm font-medium text-red-600 hover:text-red-800 transition-colors"
                   >
                     Retry Verification
                   </button>
@@ -672,15 +700,15 @@ const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
         </div>
 
         {/* Footer */}
-        <div className="px-8 py-6 bg-gray-50 border-t border-gray-100">
+        <div className="px-6 py-5 sm:px-8 sm:py-6 bg-gray-50 border-t border-gray-100">
           <div className="flex justify-between items-center">
             {currentStep > 0 ? (
               <button
                 onClick={handlePrev}
                 disabled={isLoading}
-                className="flex items-center gap-2 px-6 py-2 text-gray-600 hover:text-gray-800 transition-colors duration-200"
+                className="flex items-center gap-1 sm:gap-2 px-4 sm:px-6 py-1 sm:py-2 text-gray-600 hover:text-gray-800 transition-colors duration-200 text-sm sm:text-base"
               >
-                <FiArrowLeft className="w-4 h-4" />
+                <FiArrowLeft className="w-3 h-3 sm:w-4 sm:h-4" />
                 Previous
               </button>
             ) : (
@@ -691,7 +719,7 @@ const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
               <button
                 onClick={handleNext}
                 disabled={!canProceed || isLoading || isSendingOtp}
-                className={`flex items-center gap-2 px-8 py-3 rounded-xl font-medium transition-all duration-200 ${
+                className={`flex items-center gap-1 sm:gap-2 px-6 sm:px-8 py-2 sm:py-3 rounded-xl font-medium transition-all duration-200 text-sm sm:text-base ${
                   canProceed && !isLoading && !isSendingOtp
                     ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl'
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
@@ -699,21 +727,21 @@ const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
               >
                 {isSendingOtp ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                    <div className="w-3 h-3 sm:w-4 sm:h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
                     Sending OTP...
                   </>
                 ) : (
                   <>
                     Continue
-                    <FiArrowRight className="w-4 h-4" />
+                    <FiArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
                   </>
                 )}
               </button>
             ) : (
-            <button
+              <button
                 onClick={handleSubmit(onSubmit)}
                 disabled={!allFieldsComplete || isLoading}
-                className={`flex items-center gap-2 px-8 py-3 rounded-xl font-medium transition-all duration-200 ${
+                className={`flex items-center gap-1 sm:gap-2 px-6 sm:px-8 py-2 sm:py-3 rounded-xl font-medium transition-all duration-200 text-sm sm:text-base ${
                   allFieldsComplete && !isLoading
                     ? 'bg-gradient-to-r from-green-600 to-blue-600 text-white hover:from-green-700 hover:to-blue-700 shadow-lg hover:shadow-xl'
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
@@ -721,13 +749,13 @@ const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
               >
                 {isLoading ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <div className="w-3 h-3 sm:w-4 sm:h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                     Creating Account...
                   </>
                 ) : (
                   <>
                     Create Account
-                    <FiCheck className="w-4 h-4" />
+                    <FiCheck className="w-3 h-3 sm:w-4 sm:h-4" />
                   </>
                 )}
               </button>
@@ -735,8 +763,8 @@ const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
           </div>
 
           {/* Login Link */}
-          <div className="text-center mt-6 pt-4 border-t border-gray-200">
-            <p className="text-gray-600 text-sm">
+          <div className="text-center mt-4 sm:mt-6 pt-3 sm:pt-4 border-t border-gray-200">
+            <p className="text-gray-600 text-xs sm:text-sm">
               Already have an account?{' '}
               <button
                 onClick={toggle}
