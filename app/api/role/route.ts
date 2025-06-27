@@ -1,18 +1,22 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
+import { getServerSession } from "next-auth";
 import prisma from "@/app/libs/prismadb";
 import { UserRole } from "@prisma/client";
-import { authOptions } from "@/pages/api/auth/[...nextauth]";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route"; // ✅ FIXED PATH
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user?.email) {
+    console.error("❌ No session found");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = await req.json();
   const { role } = body;
+
+  console.log("🔹 Session email:", session.user.email);
+  console.log("🔹 Requested role:", role);
 
   if (!role) {
     return NextResponse.json({ error: "Role is required" }, { status: 400 });
@@ -59,7 +63,8 @@ export async function POST(req: Request) {
         return NextResponse.json(
           {
             error: "Verification required",
-            message: "Complete identity verification to become a provider",
+            message:
+              "You must complete identity verification to become a provider",
           },
           { status: 403 }
         );
@@ -68,7 +73,7 @@ export async function POST(req: Request) {
 
     await prisma.user.update({
       where: { email: session.user.email },
-      data: { role },
+      data: { role: role as UserRole },
     });
 
     return NextResponse.json(
@@ -76,7 +81,7 @@ export async function POST(req: Request) {
       { status: 200 }
     );
   } catch (error) {
-    console.error("Role update error:", error);
+    console.error("❌ Role update error:", error);
     return NextResponse.json(
       {
         error: "Internal server error",
