@@ -39,53 +39,35 @@ export async function POST(request: Request) {
       personalIdNumber,
     } = body;
 
-    if (!email || !name || !password || !role) {
+    // ✅ Basic required fields for all users
+    if (!email || !name || !password || !role || !contactPhone) {
       return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return NextResponse.json({ error: "Invalid email format." }, { status: 400 });
-    }
-
-    if (password.length < 8) {
-      return NextResponse.json({ error: "Password must be at least 8 characters long." }, { status: 400 });
-    }
-
-    if (!selfieImage || !idImage || typeof faceConfidence !== "number" || isFaceVerified !== true) {
-      return NextResponse.json({ error: "Face verification required before registration." }, { status: 400 });
-    }
-
-    if (!idName || !idNumber) {
-      return NextResponse.json({ error: "Incomplete ID information extracted." }, { status: 400 });
-    }
-
+    // ✅ Validate role
     const validRoles: UserRole[] = ["CUSTOMER", "PROVIDER"];
     if (!validRoles.includes(role)) {
       return NextResponse.json({ error: "Invalid role selected." }, { status: 400 });
     }
 
-    const parsedDOB = idDOB ? parseDate(idDOB) : null;
-    const parsedExpiry = idExpiryDate ? parseDate(idExpiryDate) : null;
-    const parsedIssueDate = idIssueDate ? parseDate(idIssueDate) : null;
-
-    if (!parsedDOB) console.warn("⚠️ Invalid DOB parsed:", idDOB);
-    if (!parsedExpiry) console.warn("⚠️ Invalid expiry date parsed:", idExpiryDate);
-    if (!parsedIssueDate && idIssueDate) console.warn("⚠️ Invalid issue date parsed:", idIssueDate);
-
-    if (parsedDOB && (parsedDOB.getFullYear() < 1900 || parsedDOB.getFullYear() > new Date().getFullYear())) {
-      return NextResponse.json({ error: "Invalid date of birth." }, { status: 400 });
+    // ✅ Email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return NextResponse.json({ error: "Invalid email format." }, { status: 400 });
     }
 
-    if (parsedExpiry && (parsedExpiry.getFullYear() < 2020 || parsedExpiry.getFullYear() > 2100)) {
-      return NextResponse.json({ error: "Invalid ID expiry date." }, { status: 400 });
+    // ✅ Password length
+    if (password.length < 8) {
+      return NextResponse.json({ error: "Password must be at least 8 characters long." }, { status: 400 });
     }
 
+    // ✅ Check if email already exists
     const emailExists = await prisma.user.findUnique({ where: { email } });
     if (emailExists) {
       return NextResponse.json({ error: "Email already in use." }, { status: 409 });
     }
 
+    // ✅ Ensure phone number has been verified via OTP
     const phoneUser = await prisma.user.findFirst({
       where: { contactPhone, isOtpVerified: true },
     });
@@ -98,8 +80,42 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "OTP expired. Please verify again." }, { status: 403 });
     }
 
+    // ✅ If PROVIDER, require ID and face verification
+    let parsedDOB = null;
+    let parsedExpiry = null;
+    let parsedIssueDate = null;
+
+    if (role === "PROVIDER") {
+      if (!selfieImage || !idImage || typeof faceConfidence !== "number" || isFaceVerified !== true) {
+        return NextResponse.json({ error: "Face verification required before registration." }, { status: 400 });
+      }
+
+      if (!idName || !idNumber) {
+        return NextResponse.json({ error: "Incomplete ID information extracted." }, { status: 400 });
+      }
+
+      // ✅ Parse and validate dates
+      parsedDOB = idDOB ? parseDate(idDOB) : null;
+      parsedExpiry = idExpiryDate ? parseDate(idExpiryDate) : null;
+      parsedIssueDate = idIssueDate ? parseDate(idIssueDate) : null;
+
+      if (!parsedDOB) console.warn("⚠️ Invalid DOB parsed:", idDOB);
+      if (!parsedExpiry) console.warn("⚠️ Invalid expiry date parsed:", idExpiryDate);
+      if (!parsedIssueDate && idIssueDate) console.warn("⚠️ Invalid issue date parsed:", idIssueDate);
+
+      if (parsedDOB && (parsedDOB.getFullYear() < 1900 || parsedDOB.getFullYear() > new Date().getFullYear())) {
+        return NextResponse.json({ error: "Invalid date of birth." }, { status: 400 });
+      }
+
+      if (parsedExpiry && (parsedExpiry.getFullYear() < 2020 || parsedExpiry.getFullYear() > 2100)) {
+        return NextResponse.json({ error: "Invalid ID expiry date." }, { status: 400 });
+      }
+    }
+
+    // ✅ Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
+    // ✅ Update existing OTP-verified user
     const updatedUser = await prisma.user.update({
       where: { id: phoneUser.id },
       data: {
@@ -107,17 +123,17 @@ export async function POST(request: Request) {
         name,
         hashedPassword,
         role,
-        selfieImage,
-        idImage,
-        faceConfidence,
-        isFaceVerified: true,
-        idName,
-        idNumber,
-        idDOB: parsedDOB,
-        idExpiryDate: parsedExpiry,
-        idIssueDate: parsedIssueDate,
-        idIssuer,
-        personalIdNumber,
+        isFaceVerified: role === "PROVIDER" ? true : false,
+        selfieImage: role === "PROVIDER" ? selfieImage : undefined,
+        idImage: role === "PROVIDER" ? idImage : undefined,
+        faceConfidence: role === "PROVIDER" ? faceConfidence : undefined,
+        idName: role === "PROVIDER" ? idName : undefined,
+        idNumber: role === "PROVIDER" ? idNumber : undefined,
+        idDOB: role === "PROVIDER" ? parsedDOB : undefined,
+        idExpiryDate: role === "PROVIDER" ? parsedExpiry : undefined,
+        idIssueDate: role === "PROVIDER" ? parsedIssueDate : undefined,
+        idIssuer: role === "PROVIDER" ? idIssuer : undefined,
+        personalIdNumber: role === "PROVIDER" ? personalIdNumber : undefined,
       },
       select: {
         id: true,
@@ -139,10 +155,9 @@ export async function POST(request: Request) {
       },
     });
 
-    // ✅ Create JWT
+    // ✅ Generate and set JWT token
     const token = jwt.sign({ id: updatedUser.id }, process.env.JWT_SECRET!, { expiresIn: "1d" });
 
-    // ✅ Set secure cookie
     cookies().set("token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

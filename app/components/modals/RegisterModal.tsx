@@ -1,5 +1,3 @@
-'use client';
-
 import axios from 'axios';
 import { IoMdClose } from 'react-icons/io';
 import { useCallback, useState, useEffect } from 'react';
@@ -148,15 +146,27 @@ const RegisterModal = () => {
       field: 'selfieImage', 
       label: 'Verify Identity',
       icon: FiCamera,
-      description: 'Take a clear photo of yourself'
+      description: 'Take a clear photo of yourself',
+      providerOnly: true
     },
     { 
       field: 'idImage', 
       label: 'Upload ID',
       icon: FiUpload,
-      description: 'Upload a photo of your Ghana Card'
+      description: 'Upload a photo of your Ghana Card',
+      providerOnly: true
     },
   ];
+
+  // Filter steps based on user role
+  const getFilteredSteps = () => {
+    if (watchedValues.role === 'CUSTOMER') {
+      return steps.filter(step => !step.providerOnly);
+    }
+    return steps;
+  };
+
+  const filteredSteps = getFilteredSteps();
 
   // Send OTP function
   const sendOtp = async () => {
@@ -230,13 +240,40 @@ const RegisterModal = () => {
   };
 
   const onSubmit: SubmitHandler<FieldValues> = async (data) => {
-    if (!selfieImageBlob || !idFile) {
-      toast.error('Please capture a selfie and upload your Ghana Card.');
+    // All users must verify phone number
+    if (!isOtpVerified) {
+      toast.error('Please verify your phone number first.');
       return;
     }
 
-    if (!isOtpVerified) {
-      toast.error('Please verify your phone number first.');
+    // If user is a customer, skip ID/face verification
+    if (data.role === 'CUSTOMER') {
+      setIsLoading(true);
+      try {
+        await axios.post('/api/register', {
+          ...data,
+          isPhoneVerified: true,
+          isFaceVerified: false, // Customers don't need face verification
+        });
+        toast.success('Account created successfully!');
+        loginModal.onOpen();
+        registerModal.onClose();
+      } catch (err: any) {
+        console.error('Registration error:', err);
+        const errorMessage = err.response?.data?.error || 
+                          err.response?.data?.message || 
+                          err.message || 
+                          "Registration failed. Please try again.";
+        toast.error(errorMessage);
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    // For service providers, proceed with verification
+    if (!selfieImageBlob || !idFile) {
+      toast.error('Please capture a selfie and upload your Ghana Card.');
       return;
     }
 
@@ -302,7 +339,7 @@ const RegisterModal = () => {
   }, [loginModal, registerModal]);
 
   const handleNext = async () => {
-    const current = steps[currentStep];
+    const current = filteredSteps[currentStep];
     
     // Handle phone verification step
     if (current.field === 'phoneVerification') {
@@ -320,6 +357,16 @@ const RegisterModal = () => {
       if (valid) {
         await sendOtp();
         setCurrentStep((prev) => prev + 1);
+      }
+      return;
+    }
+
+    // If user selects customer, skip verification steps
+    if (current.field === 'role' && watchedValues.role === 'CUSTOMER') {
+      const valid = await trigger(current.field);
+      if (valid) {
+        // Jump directly to the end (submit step)
+        setCurrentStep(filteredSteps.length - 1);
       }
       return;
     }
@@ -349,7 +396,7 @@ const RegisterModal = () => {
   };
 
   const isStepValid = (stepIndex: number) => {
-    const field = steps[stepIndex].field;
+    const field = filteredSteps[stepIndex].field;
     if (field === 'phoneVerification') return isOtpVerified;
     if (field === 'selfieImage') return !!selfieImageBlob;
     if (field === 'idImage') return !!idFile;
@@ -358,13 +405,13 @@ const RegisterModal = () => {
   };
 
   const canProceed = isStepValid(currentStep);
-  const allFieldsComplete = steps.every((_, i) => isStepValid(i));
+  const allFieldsComplete = filteredSteps.every((_, i) => isStepValid(i));
 
   if (!registerModal.isOpen) return null;
 
-  const currentField = steps[currentStep];
+  const currentField = filteredSteps[currentStep];
   const IconComponent = currentField.icon;
-  const progress = ((currentStep + 1) / steps.length) * 100;
+  const progress = ((currentStep + 1) / filteredSteps.length) * 100;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 overflow-y-auto">
@@ -388,7 +435,7 @@ const RegisterModal = () => {
           {/* Progress Bar with clickable steps */}
           <div className="relative">
             <div className="flex justify-between text-xs mb-2">
-              <span>Step {currentStep + 1} of {steps.length}</span>
+              <span>Step {currentStep + 1} of {filteredSteps.length}</span>
               <span>{Math.round(progress)}% Complete</span>
             </div>
             <div className="w-full bg-white/20 rounded-full h-2 mb-1">
@@ -398,7 +445,7 @@ const RegisterModal = () => {
               />
             </div>
             <div className="flex justify-between px-1">
-              {steps.map((step, index) => (
+              {filteredSteps.map((step, index) => (
                 <button
                   key={index}
                   onClick={() => jumpToStep(index)}
@@ -715,7 +762,7 @@ const RegisterModal = () => {
               <div></div>
             )}
 
-            {currentStep < steps.length - 1 ? (
+            {currentStep < filteredSteps.length - 1 ? (
               <button
                 onClick={handleNext}
                 disabled={!canProceed || isLoading || isSendingOtp}
