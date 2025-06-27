@@ -14,7 +14,7 @@ model User {
   contactPhone     String?
   image            String?
   hashedPassword   String?
-  role             UserRole @default(CUSTOMER)
+  role             UserRole 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   favouriteIds     String[]
