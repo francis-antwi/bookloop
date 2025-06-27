@@ -8,11 +8,17 @@ import {
 } from "@prisma/client";
 export type SafeUser = Omit<
   User,
-  "createdAt" | "updatedAt" | "emailVerified"
+  "createdAt" | "updatedAt" | "emailVerified" | "otpExpiresAt"
 > & {
   createdAt: string;
   updatedAt: string;
   emailVerified: string | null;
+
+  // Optional OTP fields
+  otpCode?: string | null;
+  otpExpiresAt?: string | null;
+  isOtpVerified: boolean;
+
   role: UserRole;
   selfieImage: string | null;
   idImage: string | null;
@@ -23,7 +29,10 @@ export type SafeUser = Omit<
   idDOB: string | null;
   idExpiryDate: string | null;
   idIssuer: string | null;
+  personalIdNumber: string | null;
+  idIssueDate: string | null;
 };
+
 
 export type SafeListing = Omit<Listing, "createdAt"> & {
   createdAt: string;

@@ -33,6 +33,11 @@ model User {
   idDOB            DateTime?   // ← updated
   idExpiryDate     DateTime?   // ← updated
   idIssuer         String?
+  personalIdNumber String?
+  idIssueDate      DateTime?
+  otpCode            String?       // Store OTP here
+  otpExpiresAt       DateTime?     // Optional expiry time
+  isOtpVerified      Boolean?      // Optional flag
 
   // Relations
   accounts         Account[]
@@ -70,9 +75,12 @@ model Account {
   // ✅ Extracted ID Info
   idName             String?
   idNumber           String?
+  personalIdNumber String?
+  idIssueDate      DateTime?
   idDOB              DateTime?   // ← updated
   idExpiryDate       DateTime?   // ← updated
   idIssuer           String?
+  
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

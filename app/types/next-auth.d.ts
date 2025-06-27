@@ -1,4 +1,3 @@
-
 import NextAuth from "next-auth";
 
 declare module "next-auth" {
@@ -8,6 +7,13 @@ declare module "next-auth" {
       email?: string | null;
       image?: string | null;
       role?: string;
+
+      // ✅ OTP fields
+      isOtpVerified?: boolean;
+      otpCode?: string | null;
+      otpExpiresAt?: string | null;
+
+      // ✅ Face verification
       isFaceVerified?: boolean;
       selfieImage?: string | null;
       idImage?: string | null;
@@ -19,11 +25,22 @@ declare module "next-auth" {
       idDOB?: string | null;
       idExpiryDate?: string | null;
       idIssuer?: string | null;
+
+      // ✅ NEW: Additional ID fields
+      personalIdNumber?: string | null;
+      idIssueDate?: string | null;
     };
   }
 
   interface User {
     role?: string;
+
+    // ✅ OTP fields
+    isOtpVerified?: boolean;
+    otpCode?: string | null;
+    otpExpiresAt?: string | null;
+
+    // ✅ Face verification
     isFaceVerified?: boolean;
     selfieImage?: string | null;
     idImage?: string | null;
@@ -35,12 +52,23 @@ declare module "next-auth" {
     idDOB?: string | null;
     idExpiryDate?: string | null;
     idIssuer?: string | null;
+
+    // ✅ NEW: Additional ID fields
+    personalIdNumber?: string | null;
+    idIssueDate?: string | null;
   }
 }
 
 declare module "next-auth/jwt" {
   interface JWT {
     role?: string;
+
+    // ✅ OTP fields
+    isOtpVerified?: boolean;
+    otpCode?: string | null;
+    otpExpiresAt?: string | null;
+
+    // ✅ Face verification
     isFaceVerified?: boolean;
     selfieImage?: string | null;
     idImage?: string | null;
@@ -52,5 +80,9 @@ declare module "next-auth/jwt" {
     idDOB?: string | null;
     idExpiryDate?: string | null;
     idIssuer?: string | null;
+
+    // ✅ NEW: Additional ID fields
+    personalIdNumber?: string | null;
+    idIssueDate?: string | null;
   }
 }

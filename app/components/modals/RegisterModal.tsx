@@ -2,7 +2,7 @@
 
 import axios from 'axios';
 import { IoMdClose } from 'react-icons/io';
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import {
   FieldValues,
   SubmitHandler,
@@ -23,7 +23,9 @@ import {
   FiArrowLeft,
   FiCamera,
   FiUpload,
-  FiUserCheck
+  FiUserCheck,
+  FiShield,
+  FiRefreshCw
 } from 'react-icons/fi';
 import Camera from '../inputs/Camera';
 
@@ -58,6 +60,15 @@ const RegisterModal = () => {
     success: boolean;
     faceConfidence: number | null;
   } | null>(null);
+  
+  // OTP related states
+  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [isOtpSent, setIsOtpSent] = useState(false);
+  const [isOtpVerified, setIsOtpVerified] = useState(false);
+  const [otpTimer, setOtpTimer] = useState(0);
+  const [canResendOtp, setCanResendOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
 
   const {
     register,
@@ -76,6 +87,19 @@ const RegisterModal = () => {
   });
 
   const watchedValues = watch();
+
+  // OTP Timer effect
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (otpTimer > 0) {
+      interval = setInterval(() => {
+        setOtpTimer((prev) => prev - 1);
+      }, 1000);
+    } else if (otpTimer === 0 && isOtpSent) {
+      setCanResendOtp(true);
+    }
+    return () => clearInterval(interval);
+  }, [otpTimer, isOtpSent]);
 
   const steps = [
     { 
@@ -98,6 +122,12 @@ const RegisterModal = () => {
       icon: FiPhone, 
       placeholder: 'Enter your phone number',
       description: 'For account security and notifications'
+    },
+    { 
+      field: 'phoneVerification', 
+      label: 'Verify Phone Number',
+      icon: FiShield,
+      description: 'Enter the 6-digit code sent to your WhatsApp'
     },
     { 
       field: 'password', 
@@ -126,9 +156,85 @@ const RegisterModal = () => {
     },
   ];
 
+  // Send OTP function
+const sendOtp = async () => {
+  const contactPhone = watchedValues.contactPhone;
+  if (!contactPhone || contactPhone.trim().length === 0) {
+    toast.error('Please enter a phone number first');
+    return;
+  }
+
+  setIsSendingOtp(true);
+  try {
+    await axios.post('/api/send-otp', { contactPhone }); // ✅ Fixed
+    setIsOtpSent(true);
+    setOtpTimer(60); // 60 seconds countdown
+    setCanResendOtp(false);
+    toast.success('OTP sent successfully!');
+  } catch (error: any) {
+    console.error('Error sending OTP:', error);
+    toast.error(error.response?.data?.error || 'Failed to send OTP');
+  } finally {
+    setIsSendingOtp(false);
+  }
+};
+
+// Verify OTP function
+const verifyOtp = async () => {
+  const otpCode = otp.join('');
+  if (otpCode.length !== 6) {
+    toast.error('Please enter the complete 6-digit code');
+    return;
+  }
+
+  setIsVerifyingOtp(true);
+  try {
+    await axios.post('/api/verify-otp', {
+      contactPhone: watchedValues.contactPhone, // ✅ Fixed
+      otp: otpCode,
+    });
+    setIsOtpVerified(true);
+    toast.success('Phone number verified successfully!');
+  } catch (error: any) {
+    console.error('Error verifying OTP:', error);
+    toast.error(error.response?.data?.error || 'Invalid OTP code');
+    setOtp(['', '', '', '', '', '']);
+  } finally {
+    setIsVerifyingOtp(false);
+  }
+};
+
+// Handle OTP input change
+const handleOtpChange = (index: number, value: string) => {
+  if (value.length > 1) return; // Only allow single digit
+
+  const newOtp = [...otp];
+  newOtp[index] = value;
+  setOtp(newOtp);
+
+  // Auto-focus next input
+  if (value && index < 5) {
+    const nextInput = document.getElementById(`otp-${index + 1}`);
+    nextInput?.focus();
+  }
+};
+
+// Handle OTP backspace
+const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
+  if (e.key === 'Backspace' && !otp[index] && index > 0) {
+    const prevInput = document.getElementById(`otp-${index - 1}`);
+    prevInput?.focus();
+  }
+};
+
   const onSubmit: SubmitHandler<FieldValues> = async (data) => {
     if (!selfieImageBlob || !idFile) {
       toast.error('Please capture a selfie and upload your Ghana Card.');
+      return;
+    }
+
+    if (!isOtpVerified) {
+      toast.error('Please verify your phone number first.');
       return;
     }
 
@@ -157,6 +263,7 @@ const RegisterModal = () => {
           idImage: document.imageUrl,
           faceConfidence: confidence,
           isFaceVerified: true,
+          isPhoneVerified: true,
           idName: document.idName,
           idNumber: document.idNumber,
           idDOB: document.idDOB,
@@ -194,6 +301,27 @@ const RegisterModal = () => {
 
   const handleNext = async () => {
     const current = steps[currentStep];
+    
+    // Handle phone verification step
+    if (current.field === 'phoneVerification') {
+      if (!isOtpVerified) {
+        toast.error('Please verify your phone number first');
+        return;
+      }
+      setCurrentStep((prev) => prev + 1);
+      return;
+    }
+
+    // Handle phone number step - send OTP
+    if (current.field === 'contactPhone') {
+      const valid = await trigger(current.field);
+      if (valid) {
+        await sendOtp();
+        setCurrentStep((prev) => prev + 1);
+      }
+      return;
+    }
+
     if (['selfieImage', 'idImage'].includes(current.field)) {
       setCurrentStep((prev) => prev + 1);
       return;
@@ -213,6 +341,7 @@ const RegisterModal = () => {
 
   const isStepValid = (stepIndex: number) => {
     const field = steps[stepIndex].field;
+    if (field === 'phoneVerification') return isOtpVerified;
     if (field === 'selfieImage') return !!selfieImageBlob;
     if (field === 'idImage') return !!idFile;
     if (field === 'role') return !!watchedValues.role && !errors.role;
@@ -279,7 +408,82 @@ const RegisterModal = () => {
 
           {/* Form Fields */}
           <div className="space-y-6">
-            {currentField.field === 'role' ? (
+            {currentField.field === 'phoneVerification' ? (
+              <div className="space-y-6">
+                {/* Phone number display */}
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+                  <p className="text-sm text-blue-600 mb-1">Code sent to:</p>
+                  <p className="font-medium text-blue-800">{watchedValues.contactPhone}</p>
+                </div>
+
+                {/* OTP Input */}
+                <div className="space-y-4">
+                  <div className="flex justify-center gap-3">
+                    {otp.map((digit, index) => (
+                      <input
+                        key={index}
+                        id={`otp-${index}`}
+                        type="text"
+                        maxLength={1}
+                        value={digit}
+                        onChange={(e) => handleOtpChange(index, e.target.value)}
+                        onKeyDown={(e) => handleOtpKeyDown(index, e)}
+                        className="w-12 h-12 text-center text-lg font-semibold border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none transition-colors duration-200"
+                        disabled={isVerifyingOtp || isOtpVerified}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Verify Button */}
+                  {!isOtpVerified && (
+                    <button
+                      onClick={verifyOtp}
+                      disabled={otp.join('').length !== 6 || isVerifyingOtp}
+                      className={`w-full py-3 rounded-xl font-medium transition-all duration-200 ${
+                        otp.join('').length === 6 && !isVerifyingOtp
+                          ? 'bg-blue-600 text-white hover:bg-blue-700'
+                          : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      }`}
+                    >
+                      {isVerifyingOtp ? (
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          Verifying...
+                        </div>
+                      ) : (
+                        'Verify Code'
+                      )}
+                    </button>
+                  )}
+
+                  {/* Success Message */}
+                  {isOtpVerified && (
+                    <div className="flex items-center gap-2 text-green-600 bg-green-50 p-3 rounded-xl">
+                      <FiCheck className="w-5 h-5" />
+                      <span className="text-sm font-medium">Phone number verified successfully!</span>
+                    </div>
+                  )}
+
+                  {/* Resend OTP */}
+                  <div className="text-center">
+                    {otpTimer > 0 ? (
+                      <p className="text-sm text-gray-500">
+                        Resend code in {otpTimer} seconds
+                      </p>
+                    ) : canResendOtp && !isOtpVerified ? (
+                      <button
+                        onClick={sendOtp}
+                        disabled={isSendingOtp}
+                        className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1 mx-auto"
+                      >
+                        <FiRefreshCw className={`w-4 h-4 ${isSendingOtp ? 'animate-spin' : ''}`} />
+                        {isSendingOtp ? 'Sending...' : 'Resend Code'}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ) : currentField.field === 'role' ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 gap-3">
                   {[
@@ -384,6 +588,13 @@ const RegisterModal = () => {
                             message: 'Please enter a valid email address',
                           },
                         }),
+                        ...(currentField.field === 'contactPhone' && {
+                          pattern: {
+                            value: /^[0-9+\-\s()]+$/,
+                            message: 'Please enter a valid phone number',
+                          },
+                          minLength: { value: 10, message: 'Phone number must be at least 10 digits' },
+                        }),
                         ...(currentField.field === 'password' && {
                           minLength: { value: 6, message: 'Password must be at least 6 characters' },
                         }),
@@ -394,6 +605,8 @@ const RegisterModal = () => {
                           ? 'password'
                           : currentField.field === 'email'
                           ? 'email'
+                          : currentField.field === 'contactPhone'
+                          ? 'tel'
                           : 'text'
                       }
                       className="flex-1 bg-transparent outline-none text-gray-800 placeholder-gray-400"
@@ -435,14 +648,12 @@ const RegisterModal = () => {
                 <div>
                   <p className="font-medium text-red-800">Verification Failed</p>
                   <p className="text-sm text-red-600 mt-1">
-  Face match score: {typeof matchStatus?.faceConfidence === 'number' 
-  ? matchStatus.faceConfidence.toFixed(1) 
-  : '0.0'}%
-
-  <br />
-  Minimum required score is 80%. Please try again with clearer photos.
-</p>
-
+                    Face match score: {typeof matchStatus?.faceConfidence === 'number' 
+                      ? matchStatus.faceConfidence.toFixed(1) 
+                      : '0.0'}%
+                    <br />
+                    Minimum required score is 80%. Please try again with clearer photos.
+                  </p>
                   <button
                     onClick={() => {
                       setSelfieImageBlob(null);
@@ -479,30 +690,39 @@ const RegisterModal = () => {
             {currentStep < steps.length - 1 ? (
               <button
                 onClick={handleNext}
-                disabled={!canProceed || isLoading}
+                disabled={!canProceed || isLoading || isSendingOtp}
                 className={`flex items-center gap-2 px-8 py-3 rounded-xl font-medium transition-all duration-200 ${
-                  canProceed && !isLoading
+                  canProceed && !isLoading && !isSendingOtp
                     ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl'
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 }`}
               >
-                Continue
-                <FiArrowRight className="w-4 h-4" />
+                {isSendingOtp ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                    Sending OTP...
+                  </>
+                ) : (
+                  <>
+                    Continue
+                    <FiArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
             ) : (
-              <button
+            <button
                 onClick={handleSubmit(onSubmit)}
                 disabled={!allFieldsComplete || isLoading}
                 className={`flex items-center gap-2 px-8 py-3 rounded-xl font-medium transition-all duration-200 ${
                   allFieldsComplete && !isLoading
-                    ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white hover:from-green-700 hover:to-emerald-700 shadow-lg hover:shadow-xl'
+                    ? 'bg-gradient-to-r from-green-600 to-blue-600 text-white hover:from-green-700 hover:to-blue-700 shadow-lg hover:shadow-xl'
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 }`}
               >
                 {isLoading ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Verifying...
+                    Creating Account...
                   </>
                 ) : (
                   <>
@@ -514,14 +734,16 @@ const RegisterModal = () => {
             )}
           </div>
 
-          <div className="text-center mt-6">
+          {/* Login Link */}
+          <div className="text-center mt-6 pt-4 border-t border-gray-200">
             <p className="text-gray-600 text-sm">
               Already have an account?{' '}
-              <button 
-                onClick={toggle} 
-                className="text-blue-600 hover:text-blue-700 font-medium transition-colors duration-200"
+              <button
+                onClick={toggle}
+                disabled={isLoading}
+                className="font-medium text-blue-600 hover:text-blue-700 transition-colors duration-200"
               >
-                Sign in instead
+                Sign in here
               </button>
             </p>
           </div>

@@ -33,6 +33,8 @@ export async function POST(request: Request) {
       idDOB,
       idExpiryDate,
       idIssuer,
+      idIssueDate,
+      personalIdNumber
     } = body;
 
     // ✅ Validate required fields
@@ -40,18 +42,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return NextResponse.json({ error: "Invalid email format" }, { status: 400 });
     }
 
-    // Validate password strength
     if (password.length < 8) {
       return NextResponse.json({ error: "Password must be at least 8 characters long" }, { status: 400 });
     }
 
-    // Face verification validation
     if (
       !selfieImage ||
       !idImage ||
@@ -61,44 +60,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Face verification required before registration" }, { status: 400 });
     }
 
-    // Debug: Log extracted ID fields before validation
-    console.log("📄 Extracted ID info:", {
-      idName,
-      idNumber,
-      idDOB,
-      idExpiryDate,
-      idIssuer,
-    });
-
     if (!idName || !idNumber) {
-      return NextResponse.json(
-        { error: "Incomplete ID information extracted." },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Incomplete ID information extracted." }, { status: 400 });
     }
 
-    // ✅ Role validation
     const validRoles: UserRole[] = ["CUSTOMER", "PROVIDER"];
     if (!validRoles.includes(role)) {
       return NextResponse.json({ error: "Invalid role selected" }, { status: 400 });
     }
 
-    // Parse and validate dates
     const parsedDOB = idDOB ? parseDate(idDOB) : null;
     const parsedExpiry = idExpiryDate ? parseDate(idExpiryDate) : null;
+    const parsedIssueDate = idIssueDate ? parseDate(idIssueDate) : null;
 
     if (!parsedDOB) console.warn("⚠️ Invalid DOB parsed:", idDOB);
     if (!parsedExpiry) console.warn("⚠️ Invalid expiry date parsed:", idExpiryDate);
+    if (!parsedIssueDate && idIssueDate) console.warn("⚠️ Invalid issue date parsed:", idIssueDate);
 
     if (
       parsedDOB &&
-      (parsedDOB.getFullYear() < 1900 ||
-        parsedDOB.getFullYear() > new Date().getFullYear())
+      (parsedDOB.getFullYear() < 1900 || parsedDOB.getFullYear() > new Date().getFullYear())
     ) {
-      return NextResponse.json(
-        { error: "Invalid date of birth extracted from ID." },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Invalid date of birth extracted from ID." }, { status: 400 });
     }
 
     if (
@@ -108,22 +91,42 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid ID expiry date." }, { status: 400 });
     }
 
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
+    // Check if email already exists
+    const existingEmailUser = await prisma.user.findUnique({ where: { email } });
+    if (existingEmailUser) {
+      return NextResponse.json({ error: "Email already exists" }, { status: 409 });
+    }
+
+    // ✅ Check if phone number was OTP verified
+    const phoneUser = await prisma.user.findFirst({
+      where: {
+        contactPhone,
+        isOtpVerified: true,
+      },
     });
 
-    if (existingUser) {
-      return NextResponse.json({ error: "Email already exists" }, { status: 409 });
+    if (!phoneUser) {
+      return NextResponse.json(
+        { error: "Phone number must be verified with OTP before registration." },
+        { status: 403 }
+      );
+    }
+
+    if (phoneUser.otpExpiresAt && new Date(phoneUser.otpExpiresAt) < new Date()) {
+      return NextResponse.json(
+        { error: "OTP has expired. Please request a new one." },
+        { status: 403 }
+      );
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    const user = await prisma.user.create({
+    // ✅ Update verified user record instead of creating a new one
+    const user = await prisma.user.update({
+      where: { id: phoneUser.id },
       data: {
         email,
         name,
-        contactPhone,
         hashedPassword,
         role,
         selfieImage,
@@ -134,7 +137,9 @@ export async function POST(request: Request) {
         idNumber,
         idDOB: parsedDOB,
         idExpiryDate: parsedExpiry,
+        idIssueDate: parsedIssueDate,
         idIssuer,
+        personalIdNumber,
       },
       select: {
         id: true,
@@ -149,6 +154,8 @@ export async function POST(request: Request) {
         idNumber: true,
         idDOB: true,
         idExpiryDate: true,
+        idIssueDate: true,
+        personalIdNumber: true,
         idIssuer: true,
         createdAt: true,
       },

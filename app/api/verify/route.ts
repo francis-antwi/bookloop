@@ -122,6 +122,20 @@ function extractIDNumber(lines: string[]): string | null {
   return null;
 }
 
+function extractPersonalIdNumber(lines: string[]): string | null {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].toLowerCase();
+    if (line.includes("personal id")) {
+      const nextLine = lines[i + 1];
+      if (nextLine) {
+        const match = nextLine.match(/[A-Z0-9]{6,}/);
+        if (match) return match[0];
+      }
+    }
+  }
+  return null;
+}
+
 function extractPlaceOfIssue(lines: string[]): string | null {
   const placeKeywords = ['place', 'issued', 'lieu'];
 
@@ -157,6 +171,7 @@ function extractIDInfo(parsedText: string) {
   return {
     idName: extractName(lines),
     idNumber: extractIDNumber(lines),
+    personalIdNumber: extractPersonalIdNumber(lines),
     idDOB: sortedDates[0]?.date || null,
     idIssueDate: sortedDates[1]?.date || null,
     idExpiryDate: sortedDates[sortedDates.length - 1]?.date || null,
@@ -283,10 +298,8 @@ export async function POST(req: Request) {
       document: {
         type: "ID",
         imageUrl: idUpload.secure_url,
+        selfieUrl: selfieUpload.secure_url,
         ...extractedInfo
-      },
-      selfie: {
-        imageUrl: selfieUpload.secure_url
       }
     });
 
