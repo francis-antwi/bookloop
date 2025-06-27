@@ -104,7 +104,7 @@ export const authOptions: AuthOptions = {
           existingUser.role === UserRole.PROVIDER &&
           existingUser.isFaceVerified === false
         ) {
-          return "/verify-id";
+          return "/verify";
         }
       }
 
