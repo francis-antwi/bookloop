@@ -2,8 +2,8 @@ import bcrypt from "bcrypt";
 import prisma from "@/app/libs/prismadb";
 import { NextResponse } from "next/server";
 import { UserRole } from "@prisma/client";
-import jwt from "jsonwebtoken";
 import { cookies } from "next/headers";
+import jwt from "jsonwebtoken";
 
 function parseDate(dateStr: string): Date | null {
   const parts = dateStr.split(/[\/\-\.]/).map(p => p.trim());
