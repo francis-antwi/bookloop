@@ -4,46 +4,81 @@ import { cookies } from "next/headers";
 import prisma from "@/app/libs/prismadb";
 import { authOptions } from "../auth/authOptions";
 
-export async function getSession() {
-  return await getServerSession(authOptions);
+interface SessionUser {
+  email?: string | null;
 }
 
-export default async function getCurrentUser() {
+interface TokenUser {
+  email?: string;
+}
+
+interface SanitizedUser {
+  id: string;
+  name: string | null;
+  email: string;
+  emailVerified: string | null;
+  image: string | null;
+  createdAt: string;
+  updatedAt: string;
+  // Add other user fields as needed
+}
+
+export async function getSession() {
   try {
-    let email: string | null = null;
+    return await getServerSession(authOptions);
+  } catch (error) {
+    console.error("Error getting session:", error);
+    return null;
+  }
+}
 
+export default async function getCurrentUser(): Promise<SanitizedUser | null> {
+  try {
+    // Attempt to get email from session first
     const session = await getSession();
+    const sessionEmail = session?.user?.email;
 
-    if (session?.user?.email) {
-      email = session.user.email;
-    } else {
-      // 🔁 Fallback: Try getting JWT directly from cookies
-      const token = await getToken({
-        req: { headers: { cookie: cookies().toString() } },
-        secret: process.env.NEXTAUTH_SECRET,
-      });
+    // Fallback to token if no session email
+    const tokenEmail = !sessionEmail 
+      ? (await getFallbackToken())?.email 
+      : null;
 
-      if (token?.email) {
-        email = token.email as string;
-      }
-    }
-
+    const email = sessionEmail || tokenEmail;
     if (!email) return null;
 
+    // Fetch user from database
     const currentUser = await prisma.user.findUnique({
       where: { email },
     });
 
     if (!currentUser) return null;
 
-    return {
-      ...currentUser,
-      createdAt: currentUser.createdAt.toISOString(),
-      updatedAt: currentUser.updatedAt.toISOString(),
-      emailVerified: currentUser.emailVerified?.toISOString() || null,
-    };
+    // Sanitize and format dates
+    return sanitizeUser(currentUser);
   } catch (error) {
     console.error("Error getting current user:", error);
     return null;
   }
+}
+
+async function getFallbackToken(): Promise<TokenUser | null> {
+  try {
+    const token = await getToken({
+      req: { headers: { cookie: cookies().toString() } },
+      secret: process.env.NEXTAUTH_SECRET,
+    });
+    return token as TokenUser | null;
+  } catch (error) {
+    console.error("Error getting fallback token:", error);
+    return null;
+  }
+}
+
+function sanitizeUser(user: any): SanitizedUser {
+  return {
+    ...user,
+    createdAt: user.createdAt.toISOString(),
+    updatedAt: user.updatedAt.toISOString(),
+    emailVerified: user.emailVerified?.toISOString() || null,
+  };
 }
