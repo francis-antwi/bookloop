@@ -6,11 +6,8 @@ export default withAuth(
     const { pathname } = req.nextUrl;
     const token = req.nextauth.token;
 
-    // ✅ Allow unauthenticated access to /role, /verify, /auth/error
-    if (
-      !token?.role &&
-      !["/role", "/verify", "/auth"].includes(pathname)
-    ) {
+    // ⛔ Redirect users who have no role, except for unprotected pages
+    if (!token?.role) {
       return NextResponse.redirect(new URL("/role", req.url));
     }
 
@@ -19,7 +16,7 @@ export default withAuth(
       return NextResponse.redirect(new URL("/403", req.url));
     }
 
-    // ⛔ Block non-PROVIDER users from provider-only pages
+    // ⛔ Block non-PROVIDER users from /my-listings or /approvals
     if (
       (pathname.startsWith("/my-listings") || pathname.startsWith("/approvals")) &&
       token?.role !== "PROVIDER"
@@ -31,7 +28,7 @@ export default withAuth(
   },
   {
     callbacks: {
-      authorized: ({ token }) => !!token, // ✅ Ensure user is logged in
+      authorized: ({ token }) => !!token, // require login
     },
   }
 );
@@ -44,6 +41,6 @@ export const config = {
     "/my-listings/:path*",
     "/notifications/:path*",
     "/admin/:path*",
-  
+    // ❌ do NOT include /role, /verify, or /auth — these stay fully public
   ],
 };
