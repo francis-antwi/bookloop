@@ -1,4 +1,6 @@
 import { getServerSession } from "next-auth/next";
+import { getToken } from "next-auth/jwt";
+import { cookies } from "next/headers";
 import prisma from "@/app/libs/prismadb";
 import { authOptions } from "../auth/authOptions";
 
@@ -8,21 +10,31 @@ export async function getSession() {
 
 export default async function getCurrentUser() {
   try {
+    let email: string | null = null;
+
     const session = await getSession();
 
-    if (!session?.user?.email) {
-      return null;
+    if (session?.user?.email) {
+      email = session.user.email;
+    } else {
+      // 🔁 Fallback: Try getting JWT directly from cookies
+      const token = await getToken({
+        req: { headers: { cookie: cookies().toString() } },
+        secret: process.env.NEXTAUTH_SECRET,
+      });
+
+      if (token?.email) {
+        email = token.email as string;
+      }
     }
+
+    if (!email) return null;
 
     const currentUser = await prisma.user.findUnique({
-      where: {
-        email: session.user.email as string,
-      },
+      where: { email },
     });
 
-    if (!currentUser) {
-      return null;
-    }
+    if (!currentUser) return null;
 
     return {
       ...currentUser,
