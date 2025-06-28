@@ -13,14 +13,15 @@ export async function POST(req: NextRequest) {
   }
 
   const email = session.user.email;
-  let role: string;
 
+  let body: { role?: string } = {};
   try {
-    const body = await req.json();
-    role = body.role;
-  } catch (error) {
+    body = await req.json();
+  } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
+
+  const { role } = body;
 
   if (!role) {
     return NextResponse.json({ error: "Role is required" }, { status: 400 });
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
     let user = await prisma.user.findUnique({ where: { email } });
 
     if (!user) {
-      // First-time Google login — create user now
+      // First-time Google login — create user with selected role
       user = await prisma.user.create({
         data: {
           email,
@@ -46,19 +47,22 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      return NextResponse.json({ success: true, message: "User created" }, { status: 201 });
+      return NextResponse.json({ success: true, message: "User created with role" }, { status: 201 });
     }
 
     if (user.role === role) {
       return NextResponse.json({ success: true, message: "Role already set" }, { status: 200 });
     }
 
-    // For PROVIDER, ensure verification
-    if (role === "PROVIDER" && (!user.isFaceVerified || !user.selfieImage || !user.idImage)) {
+    // If selecting PROVIDER, ensure verification is complete
+    if (
+      role === "PROVIDER" &&
+      (!user.isFaceVerified || !user.selfieImage || !user.idImage)
+    ) {
       return NextResponse.json(
         {
           error: "Verification required",
-          message: "Complete identity verification to become a provider",
+          message: "You must complete ID and face verification before becoming a provider",
         },
         { status: 403 }
       );
