@@ -13,7 +13,7 @@ interface RoleSelectorProps {
 const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
   const { data: session } = useSession();
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedRole, setSelectedRole] = useState(session?.user?.role || null);
+  const [selectedRole, setSelectedRole] = useState(null); // Changed: removed auto-selection from session
 
   const handleRoleSelect = async (role: string) => {
     if (selectedRole === role) return;
