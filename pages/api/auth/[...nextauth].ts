@@ -66,7 +66,7 @@ export const authOptions: AuthOptions = {
     signOut: "/auth/signout",
     error: "/auth/error",
     verifyRequest: "/auth/verify-request",
-    newUser: "/auth/select-role", // New users will be redirected here to select role
+    newUser: "/role", // New users will be redirected here to select role
   },
   session: {
     strategy: "jwt",
@@ -104,7 +104,7 @@ export const authOptions: AuthOptions = {
         }
 
         if (!existingUser.role) {
-          return "/auth/select-role";
+          return "/role";
         }
 
         if (
