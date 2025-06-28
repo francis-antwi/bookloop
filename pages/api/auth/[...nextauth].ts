@@ -63,7 +63,10 @@ export const authOptions: AuthOptions = {
   ],
   pages: {
     signIn: "/",
-    error: "/auth/callback-error",
+    signOut: "/auth/signout",
+    error: "/auth/error",
+    verifyRequest: "/auth/verify-request",
+    newUser: "/auth/select-role", // New users will be redirected here to select role
   },
   session: {
     strategy: "jwt",
@@ -72,37 +75,44 @@ export const authOptions: AuthOptions = {
   debug: process.env.NODE_ENV === "development",
 
   callbacks: {
-    async signIn({ user, account }) {
+    async signIn({ user, account, profile }) {
       if (account?.provider === "google") {
-        let existingUser = await prisma.user.findUnique({
+        // Check if user already exists
+        const existingUser = await prisma.user.findUnique({
           where: { email: user.email ?? "" },
         });
 
+        // If user doesn't exist, we'll create a temporary user without a role
+        // and redirect to role selection page
         if (!existingUser) {
           try {
-            existingUser = await prisma.user.create({
+            await prisma.user.create({
               data: {
                 email: user.email!,
                 name: user.name ?? "",
                 image: user.image ?? "",
                 isOtpVerified: true, // Skip OTP for Google
                 isFaceVerified: false,
-                role: UserRole.CUSTOMER, // Default for Google users
+                // Don't set role here - user will select it on the next page
               },
             });
+            // Redirect to role selection page
+            return "/role";
           } catch (err) {
             console.error("Error creating Google user:", err);
             return "/auth/callback-error?reason=account-creation-failed";
           }
         }
 
+        // If user exists but has no role, redirect to role selection
         if (!existingUser.role) {
-          return "/auth/callback-error?reason=missing-role";
+          return "/role";
         }
 
+        // If user is a provider but not face verified, redirect to verification
         if (
           existingUser.role === UserRole.PROVIDER &&
-          existingUser.isFaceVerified === false
+          !existingUser.isFaceVerified
         ) {
           return "/verify";
         }
@@ -111,7 +121,17 @@ export const authOptions: AuthOptions = {
       return true;
     },
 
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
+      // Handle role updates from the client
+      if (trigger === "update" && session?.role) {
+        token.role = session.role;
+        
+        // If role is provider, we'll need verification
+        if (session.role === UserRole.PROVIDER) {
+          token.isFaceVerified = false;
+        }
+      }
+
       if (user) {
         token.id = user.id;
         token.name = user.name;
