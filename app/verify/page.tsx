@@ -7,6 +7,7 @@ import {
   FiCheck,
   FiLoader,
   FiArrowLeft,
+  FiArrowRight,
   FiShield,
   FiUser,
   FiFileText
@@ -146,35 +147,29 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
                 </div>
               )}
 
-              {/* Action Button */}
-              <button
-                onClick={() => setCurrentStep('id')}
-                disabled={!selfieImage}
-                className="w-full py-4 px-6 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 disabled:from-gray-300 disabled:to-gray-400 disabled:transform-none disabled:shadow-md"
-              >
-                Continue to ID Verification
-              </button>
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setCurrentStep('id')}
+                  disabled={!selfieImage}
+                  className="flex-1 py-4 px-6 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 disabled:from-gray-300 disabled:to-gray-400 disabled:transform-none disabled:shadow-md flex items-center justify-center gap-2"
+                >
+                  <span>Continue to ID Verification</span>
+                  <FiArrowRight className="text-sm" />
+                </button>
+              </div>
             </div>
           )}
 
           {currentStep === 'id' && (
             <div className="space-y-6">
               {/* Step Header */}
-              <div className="flex items-center justify-between">
-                <button
-                  onClick={() => setCurrentStep('selfie')}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                >
-                  <FiArrowLeft className="text-gray-600" />
-                </button>
-                <div className="text-center flex-1">
-                  <div className="inline-flex items-center justify-center w-12 h-12 bg-indigo-100 rounded-full mb-3">
-                    <FiFileText className="text-xl text-indigo-600" />
-                  </div>
-                  <h2 className="text-xl font-semibold text-gray-900 mb-2">ID Verification</h2>
-                  <p className="text-gray-600 text-sm">Upload a government-issued ID document</p>
+              <div className="text-center">
+                <div className="inline-flex items-center justify-center w-12 h-12 bg-indigo-100 rounded-full mb-3">
+                  <FiFileText className="text-xl text-indigo-600" />
                 </div>
-                <div className="w-10"></div>
+                <h2 className="text-xl font-semibold text-gray-900 mb-2">ID Verification</h2>
+                <p className="text-gray-600 text-sm">Upload a government-issued ID document</p>
               </div>
 
               {/* Error State */}
@@ -243,24 +238,34 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
                 </div>
               )}
 
-              {/* Submit Button */}
-              <button
-                onClick={submitVerification}
-                disabled={!idFile || isLoading}
-                className="w-full py-4 px-6 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 disabled:from-gray-300 disabled:to-gray-400 disabled:transform-none disabled:shadow-md flex items-center justify-center gap-3"
-              >
-                {isLoading ? (
-                  <>
-                    <FiLoader className="animate-spin text-lg" />
-                    <span>Verifying Identity...</span>
-                  </>
-                ) : (
-                  <>
-                    <FiShield className="text-lg" />
-                    <span>Complete Verification</span>
-                  </>
-                )}
-              </button>
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setCurrentStep('selfie')}
+                  className="px-6 py-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-all duration-200 flex items-center gap-2"
+                >
+                  <FiArrowLeft className="text-sm" />
+                  <span>Back</span>
+                </button>
+                
+                <button
+                  onClick={submitVerification}
+                  disabled={!idFile || isLoading}
+                  className="flex-1 py-4 px-6 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 disabled:from-gray-300 disabled:to-gray-400 disabled:transform-none disabled:shadow-md flex items-center justify-center gap-3"
+                >
+                  {isLoading ? (
+                    <>
+                      <FiLoader className="animate-spin text-lg" />
+                      <span>Verifying Identity...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FiShield className="text-lg" />
+                      <span>Complete Verification</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           )}
         </div>

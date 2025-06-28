@@ -3,296 +3,224 @@ import cloudinary from "cloudinary";
 import axios from "axios";
 import sharp from "sharp";
 
+// Configure Cloudinary
 cloudinary.v2.config({
-  cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!,
-  api_key: process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY!,
-  api_secret: process.env.CLOUDINARY_API_SECRET!,
+  cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-function cleanText(text: string): string {
+// Type definitions
+interface IDInfo {
+  idName: string | null;
+  idNumber: string | null;
+  personalIdNumber: string | null;
+  idDOB: string | null;
+  idIssueDate: string | null;
+  idExpiryDate: string | null;
+  idIssuer: string | null;
+  placeOfIssue: string | null;
+  rawText: string;
+}
+
+interface VerificationResult {
+  success: boolean;
+  verification: {
+    faceMatch: boolean;
+    confidence: number;
+    threshold: number;
+  };
+  document: {
+    type: string;
+    imageUrl: string;
+    selfieUrl: string;
+  } & IDInfo;
+}
+
+// Text processing utilities
+const cleanText = (text: string): string => {
   return text
     .replace(/[^\x00-\x7F\r\n]/g, " ")
     .replace(/REPI[\\]?BLIC|REPIBLIC/gi, "REPUBLIC")
     .replace(/[^a-zA-Z0-9\/\-\s]/g, " ")
     .trim();
-}
+};
 
-function getLines(text: string): string[] {
+const getLines = (text: string): string[] => {
   return text.split(/\r?\n/).map(line => cleanText(line)).filter(line => line.length > 0);
-}
+};
 
-function extractName(lines: string[]): string | null {
-  let surname = null;
-  let firstname = null;
+// Information extraction functions
+const extractName = (lines: string[]): string | null => {
+  // ... (keep your existing extractName implementation)
+};
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].toLowerCase().trim();
+const extractDates = (lines: string[]): { date: string, line: string, index: number }[] => {
+  // ... (keep your existing extractDates implementation)
+};
 
-    if ((line.includes('surname') || line.includes('nom')) && !surname && i + 1 < lines.length) {
-      surname = lines[i + 1].trim();
-      i++;
-    }
+const normalizeDate = (dateStr: string): Date => {
+  // ... (keep your existing normalizeDate implementation)
+};
 
-    if ((line.includes('firstname') || line.includes('prénom') || line.includes('firstnames/prénoms')) && !firstname && i + 1 < lines.length) {
-      firstname = lines[i + 1].trim();
-      i++;
-    }
-  }
+const extractIDNumber = (lines: string[]): string | null => {
+  // ... (keep your existing extractIDNumber implementation)
+};
 
-  if (surname && firstname) {
-    return `${surname} ${firstname}`.replace(/\s+/g, ' ').trim();
-  }
+const extractIDInfo = (parsedText: string): IDInfo => {
+  // ... (keep your existing extractIDInfo implementation)
+};
 
-  for (const line of lines) {
-    if (line.match(/^[A-Z][a-zA-Z-]+ [A-Z][a-zA-Z-]+$/) &&
-        line.length > 5 && line.length < 30 &&
-        !line.match(/number|date|id|card|ghana|ecowas|republic|expiry|issue|place|nationality|sex/i)) {
-      return line.trim();
-    }
-  }
+// File processing
+const processImageFile = async (file: File): Promise<Buffer> => {
+  const buffer = Buffer.from(await file.arrayBuffer());
+  return sharp(buffer)
+    .resize({ width: 800 })
+    .grayscale()
+    .normalize()
+    .jpeg({ quality: 85 })
+    .toBuffer();
+};
 
-  return null;
-}
-
-function extractDates(lines: string[]): { date: string, line: string, index: number }[] {
-  const datePatterns = [
-    /(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/g,
-    /(\d{2,4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2})/g
-  ];
-
-  const allDates: { date: string, line: string, index: number }[] = [];
-
-  lines.forEach((line, index) => {
-    datePatterns.forEach(pattern => {
-      const matches = line.match(pattern);
-      if (matches) {
-        matches.forEach(match => {
-          if (match.length >= 8) {
-            allDates.push({ date: match.trim(), line, index });
-          }
-        });
-      }
-    });
+const uploadToCloudinary = async (buffer: Buffer, fileType: string): Promise<{ secure_url: string }> => {
+  const dataURI = `data:${fileType};base64,${buffer.toString("base64")}`;
+  return cloudinary.v2.uploader.upload(dataURI, {
+    folder: "face_compare",
+    timeout: 30000
   });
+};
 
-  return allDates;
-}
-
-function normalizeDate(dateStr: string): Date {
-  const parts = dateStr.split(/[\/\-\.]/).map(p => p.trim());
-  if (parts.length === 3) {
-    let [day, month, year] = parts;
-
-    if (year.length === 2) {
-      year = parseInt(year) > 30 ? `19${year}` : `20${year}`;
+// API endpoints
+const performOCR = async (imageBuffer: Buffer): Promise<string> => {
+  const base64Image = `data:image/jpeg;base64,${imageBuffer.toString("base64")}`;
+  
+  const response = await axios.post(
+    "https://api.ocr.space/parse/image",
+    new URLSearchParams({
+      apikey: process.env.OCR_SPACE_API_KEY!,
+      base64Image,
+      language: "eng",
+      OCREngine: "2"
+    }),
+    { 
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      timeout: 20000 
     }
+  );
 
-    return new Date(`${year}-${month}-${day}`);
-  }
-  return new Date(dateStr);
-}
-
-function extractIDNumber(lines: string[]): string | null {
-  const patterns = [
-    /(GHA[\- ]?[A-Z0-9]{7,})/i,
-    /([A-Z]{2}\d{6,})/,
-    /(\d{6,}[A-Z]{0,2})/
-  ];
-
-  const idKeywords = ['id number', 'document', 'card no', 'number'];
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].toLowerCase();
-    if (idKeywords.some(keyword => line.includes(keyword))) {
-      const searchLines = [lines[i], lines[i + 1]].filter(Boolean);
-      for (const searchLine of searchLines) {
-        for (const pattern of patterns) {
-          const match = searchLine.match(pattern);
-          if (match) return match[0];
-        }
-      }
-    }
+  if (!response.data?.ParsedResults?.[0]?.ParsedText) {
+    throw new Error("Could not extract text from ID");
   }
 
-  const fullText = lines.join(' ');
-  for (const pattern of patterns) {
-    const match = fullText.match(pattern);
-    if (match) return match[0];
+  return response.data.ParsedResults[0].ParsedText;
+};
+
+const compareFaces = async (selfieUrl: string, idUrl: string): Promise<{ confidence: number }> => {
+  const response = await axios.post(
+    "https://api-us.faceplusplus.com/facepp/v3/compare",
+    new URLSearchParams({
+      api_key: process.env.FACEPP_API_KEY!,
+      api_secret: process.env.FACEPP_API_SECRET!,
+      image_url1: selfieUrl,
+      image_url2: idUrl,
+      return_landmark: "0",
+      return_attributes: "none"
+    }),
+    { timeout: 15000 }
+  );
+
+  if (!response.data?.faces1?.[0] || !response.data?.faces2?.[0]) {
+    throw new Error("Could not detect faces in one or both images");
   }
-
-  return null;
-}
-
-function extractPersonalIdNumber(lines: string[]): string | null {
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].toLowerCase();
-    if (line.includes("personal id")) {
-      const nextLine = lines[i + 1];
-      if (nextLine) {
-        const match = nextLine.match(/[A-Z0-9]{6,}/);
-        if (match) return match[0];
-      }
-    }
-  }
-  return null;
-}
-
-function extractPlaceOfIssue(lines: string[]): string | null {
-  const placeKeywords = ['place', 'issued', 'lieu'];
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].toLowerCase();
-    if (placeKeywords.some(keyword => line.includes(keyword))) {
-      const nextLine = lines[i + 1];
-      if (nextLine && nextLine.match(/^[A-Z]{2,}$/)) {
-        return nextLine;
-      }
-      const placeMatch = line.match(/accra|kumasi|tema|cape coast|takoradi/i);
-      if (placeMatch) return placeMatch[0].toUpperCase();
-    }
-  }
-
-  for (const line of lines) {
-    if (line === 'ACCRA') return line;
-  }
-
-  return null;
-}
-
-function extractIDInfo(parsedText: string) {
-  const lines = getLines(parsedText);
-  const allDates = extractDates(lines);
-
-  const sortedDates = allDates.sort((a, b) => {
-    const dateA = normalizeDate(a.date);
-    const dateB = normalizeDate(b.date);
-    return dateA.getTime() - dateB.getTime();
-  });
 
   return {
-    idName: extractName(lines),
-    idNumber: extractIDNumber(lines),
-    personalIdNumber: extractPersonalIdNumber(lines),
-    idDOB: sortedDates[0]?.date || null,
-    idIssueDate: sortedDates[1]?.date || null,
-    idExpiryDate: sortedDates[sortedDates.length - 1]?.date || null,
-    idIssuer: /REPUBLIC OF GHANA/i.test(parsedText) ? "Republic of Ghana" : null,
-    placeOfIssue: extractPlaceOfIssue(lines),
-    rawText: parsedText
+    confidence: Number(response.data.confidence) || 0
   };
-}
+};
 
-export async function POST(req: Request) {
+// Main API handler
+export async function POST(req: Request): Promise<NextResponse<VerificationResult | { error: string }>> {
   try {
     const formData = await req.formData();
     const selfie = formData.get("selfieImage") as File;
     const id = formData.get("idImage") as File;
 
+    // Input validation
     if (!selfie || !id) {
-      return NextResponse.json({ error: "Both selfie and ID image are required." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Both selfie and ID image are required." }, 
+        { status: 400 }
+      );
     }
 
-    if (
-      !(selfie.type?.startsWith("image/")) ||
-      !(id.type?.startsWith("image/")) ||
-      selfie.size > 5 * 1024 * 1024 ||
-      id.size > 5 * 1024 * 1024
-    ) {
-      return NextResponse.json({ error: "Invalid image files. Must be <5MB." }, { status: 400 });
+    if (!selfie.type?.startsWith("image/") || !id.type?.startsWith("image/")) {
+      return NextResponse.json(
+        { error: "Invalid file type. Only images are allowed." },
+        { status: 400 }
+      );
     }
 
-    const uploadFile = async (file: File): Promise<{ secure_url: string }> => {
-      const buffer = Buffer.from(await file.arrayBuffer());
-      const optimizedBuffer = await sharp(buffer)
-        .resize({ width: 800 })
-        .grayscale()
-        .normalize()
-        .jpeg({ quality: 85 })
-        .toBuffer();
+    if (selfie.size > 5 * 1024 * 1024 || id.size > 5 * 1024 * 1024) {
+      return NextResponse.json(
+        { error: "Image files must be smaller than 5MB." },
+        { status: 400 }
+      );
+    }
 
-      const dataURI = `data:${file.type};base64,${optimizedBuffer.toString("base64")}`;
-      return await cloudinary.v2.uploader.upload(dataURI, {
-        folder: "face_compare",
-        timeout: 30000
-      });
-    };
-
-    const [selfieUpload, idUpload] = await Promise.all([
-      uploadFile(selfie),
-      uploadFile(id)
+    // Process images in parallel
+    const [selfieBuffer, idBuffer] = await Promise.all([
+      processImageFile(selfie),
+      processImageFile(id)
     ]);
 
-    const idBuffer = Buffer.from(await id.arrayBuffer());
-    const base64Image = `data:image/jpeg;base64,${await sharp(idBuffer)
-      .resize({ width: 800 })
-      .grayscale()
-      .normalize()
-      .jpeg({ quality: 85 })
-      .toBuffer()
-      .then(b => b.toString("base64"))}`;
+    const [selfieUpload, idUpload] = await Promise.all([
+      uploadToCloudinary(selfieBuffer, selfie.type),
+      uploadToCloudinary(idBuffer, id.type)
+    ]);
 
-    const ocrRes = await axios.post(
-      "https://api.ocr.space/parse/image",
-      new URLSearchParams({
-        apikey: process.env.OCR_SPACE_API_KEY!,
-        base64Image,
-        language: "eng",
-        OCREngine: "2"
-      }),
-      { headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 20000 }
-    );
+    // Perform OCR and face comparison in parallel
+    const [parsedText, faceComparison] = await Promise.all([
+      performOCR(idBuffer),
+      compareFaces(selfieUpload.secure_url, idUpload.secure_url)
+    ]);
 
-    if (!ocrRes.data?.ParsedResults?.[0]?.ParsedText) {
-      return NextResponse.json({ error: "Could not extract text from ID. Please try a clearer image." }, { status: 400 });
-    }
-
-    const parsedText = ocrRes.data.ParsedResults[0].ParsedText;
-
+    // Validate ID document
     const idKeywords = ["passport", "driver", "license", "identity", "id card", "ghana card", "ecowas"];
     if (!idKeywords.some(keyword => parsedText.toLowerCase().includes(keyword))) {
-      return NextResponse.json({ error: "The uploaded image doesn't appear to be a valid ID document." }, { status: 400 });
+      return NextResponse.json(
+        { error: "The uploaded image doesn't appear to be a valid ID document." },
+        { status: 400 }
+      );
     }
 
+    // Extract ID information
     const extractedInfo = extractIDInfo(parsedText);
-
     if (!extractedInfo.idName || !extractedInfo.idNumber || !extractedInfo.idDOB) {
-      return NextResponse.json({ error: "Could not extract required ID information." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Could not extract required ID information (name, number, or date of birth)." },
+        { status: 400 }
+      );
     }
 
+    // Validate date of birth
     const dob = normalizeDate(extractedInfo.idDOB);
     const age = new Date().getFullYear() - dob.getFullYear();
     if (age < 15 || age > 100) {
-      return NextResponse.json({ error: "ID date of birth seems invalid." }, { status: 400 });
+      return NextResponse.json(
+        { error: "The date of birth on the ID appears to be invalid." },
+        { status: 400 }
+      );
     }
 
-    const faceRes = await axios.post(
-      "https://api-us.faceplusplus.com/facepp/v3/compare",
-      new URLSearchParams({
-        api_key: process.env.FACEPP_API_KEY!,
-        api_secret: process.env.FACEPP_API_SECRET!,
-        image_url1: selfieUpload.secure_url,
-        image_url2: idUpload.secure_url,
-        return_landmark: "0",
-        return_attributes: "none"
-      }),
-      { timeout: 15000 }
-    );
-
-    if (!faceRes.data?.faces1?.[0] || !faceRes.data?.faces2?.[0]) {
-      return NextResponse.json({ error: "Could not detect faces in one or both images." }, { status: 400 });
-    }
-
+    // Prepare response
     const matchThreshold = 80;
-    let confidence = 0;
-
-    try {
-      confidence = Number(faceRes.data.confidence) || 0;
-    } catch (_) {}
+    const confidence = parseFloat(faceComparison.confidence.toFixed(2));
 
     return NextResponse.json({
       success: true,
       verification: {
         faceMatch: confidence >= matchThreshold,
-        confidence: parseFloat(confidence.toFixed(2)),
+        confidence,
         threshold: matchThreshold
       },
       document: {
@@ -303,9 +231,19 @@ export async function POST(req: Request) {
       }
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Verification error:", error);
-    const errorMessage = error instanceof Error ? error.message : "Verification failed";
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    
+    let errorMessage = "Verification failed";
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    } else if (axios.isAxiosError(error)) {
+      errorMessage = error.response?.data?.message || error.message;
+    }
+
+    return NextResponse.json(
+      { error: errorMessage },
+      { status: 500 }
+    );
   }
 }
