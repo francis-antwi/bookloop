@@ -17,20 +17,20 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
 
   const handleRoleSelect = async (role: string) => {
     if (selectedRole === role) return;
-    
-    setIsLoading(true);
-   try {
-  await axios.post('/api/role', { role }, { withCredentials: true });
-  await update({ role });
-  setSelectedRole(role);
-  onRoleSelected(role);
-  toast.success('Role selected successfully');
-} catch {
-  toast.error('Failed to select role');
-} finally {
-  setIsLoading(false);
-}
 
+    setIsLoading(true);
+    try {
+      await axios.post('/api/role', { role }, { withCredentials: true });
+      await update({ role });
+      setSelectedRole(role);
+      onRoleSelected(role);
+      toast.success('Role selected successfully');
+    } catch {
+      toast.error('Failed to select role');
+    } finally {
+      setIsLoading(false);
+    }
+  }; // ✅ Closing brace added here
 
   const roles = [
     { 
