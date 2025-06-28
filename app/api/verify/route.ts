@@ -42,11 +42,12 @@ interface VerificationResult {
 // Constants
 const OCR_MAX_RETRIES = 3;
 const OCR_TIMEOUT_MS = 60000;
-const MIN_IMAGE_SIZE = 50000; // 50KB
+const ABSOLUTE_MIN_SIZE = 20000; // 20KB absolute minimum
+const RECOMMENDED_MIN_SIZE = 50000; // 50KB recommended minimum
 const MAX_IMAGE_SIZE = 5000000; // 5MB
 const MIN_REQUIRED_FIELDS = 1; // At least one of name, ID number, or DOB must be present
 
-// Helpers
+// Helper Functions
 const cleanText = (text: string): string => {
   const cleaned = text
     .replace(/[^\x00-\x7F\r\n]/g, " ")
@@ -73,7 +74,7 @@ const extractName = (lines: string[]): string | null => {
     /name[:\s]([a-zA-Z\s]{3,})/i,
     /full name[:\s]([a-zA-Z\s]{3,})/i,
     /surname[:\s]([a-zA-Z\s]{3,})/i,
-    /([A-Z][a-z]+ [A-Z][a-z]+)/ // Fallback for names without labels
+    /([A-Z][a-z]+ [A-Z][a-z]+)/
   ];
 
   for (const line of lines) {
@@ -158,35 +159,22 @@ const extractIDInfo = (parsedText: string): IDInfo => {
   const idNumber = extractIDNumber(lines);
   const dates = extractDates(lines);
 
-  // Sort dates by line number to get chronological order
   dates.sort((a, b) => a.index - b.index);
 
-  // Try to identify dates based on common patterns
   let idDOB = null, idIssueDate = null, idExpiryDate = null;
-  
-  // First date is likely DOB if it's the earliest in the document
   if (dates.length > 0) idDOB = normalizeDate(dates[0]?.date);
-  
-  // Last date is likely expiry if multiple dates exist
   if (dates.length > 1) {
     idExpiryDate = normalizeDate(dates[dates.length - 1]?.date);
     idIssueDate = normalizeDate(dates[1]?.date);
   }
-
-  // If only one date, check if it looks like an expiry date (future date)
   if (dates.length === 1) {
     const dateStr = normalizeDate(dates[0]?.date);
     if (dateStr) {
       const dateObj = new Date(dateStr);
-      if (dateObj > new Date()) {
-        idExpiryDate = dateStr;
-      } else {
-        idDOB = dateStr;
-      }
+      dateObj > new Date() ? (idExpiryDate = dateStr) : (idDOB = dateStr);
     }
   }
 
-  // Check for issuer information
   let idIssuer = null;
   const issuerPatterns = [/issued by (.+)/i, /authority (.+)/i, /department (.+)/i];
   for (const line of lines) {
@@ -200,7 +188,6 @@ const extractIDInfo = (parsedText: string): IDInfo => {
     if (idIssuer) break;
   }
 
-  // Check for place of issue
   let placeOfIssue = null;
   const placePatterns = [/place of issue (.+)/i, /issued at (.+)/i, /location (.+)/i];
   for (const line of lines) {
@@ -214,7 +201,6 @@ const extractIDInfo = (parsedText: string): IDInfo => {
     if (placeOfIssue) break;
   }
 
-  // Generate warnings for missing fields
   if (!idName) warnings.push("Name not found");
   if (!idNumber) warnings.push("ID number not found");
   if (!idDOB) warnings.push("Date of birth not found");
@@ -246,9 +232,166 @@ const extractIDInfo = (parsedText: string): IDInfo => {
   };
 };
 
-// ... (keep all other helper functions the same as previous implementation)
+const processImageForOCR = async (file: File): Promise<Buffer> => {
+  console.log(`🖼️ Optimizing image for OCR: ${file.name} (${file.size} bytes)`);
+  
+  if (file.size < ABSOLUTE_MIN_SIZE) {
+    throw new Error(`Image too small (${file.size} bytes). Minimum size is ${ABSOLUTE_MIN_SIZE} bytes.`);
+  }
+  
+  if (file.size > MAX_IMAGE_SIZE) {
+    throw new Error(`Image too large (${file.size} bytes). Maximum size is ${MAX_IMAGE_SIZE} bytes.`);
+  }
 
-// Update the POST handler to allow partial extraction
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const processingOptions = {
+    width: file.size < RECOMMENDED_MIN_SIZE ? 1200 : 800,
+    sharpenRadius: file.size < RECOMMENDED_MIN_SIZE ? 2 : 1,
+    quality: file.size < RECOMMENDED_MIN_SIZE ? 95 : 85
+  };
+
+  console.log(`⚙️ Using processing options:`, processingOptions);
+  
+  return sharp(buffer)
+    .resize({ width: processingOptions.width, withoutEnlargement: true })
+    .grayscale()
+    .normalize()
+    .sharpen({ sigma: 1, m1: processingOptions.sharpenRadius, m2: processingOptions.sharpenRadius })
+    .jpeg({ quality: processingOptions.quality, mozjpeg: true })
+    .toBuffer();
+};
+
+const uploadToCloudinary = async (buffer: Buffer, fileType: string): Promise<{ secure_url: string }> => {
+  console.log(`☁️ Uploading to Cloudinary (${fileType}, ${buffer.length} bytes)`);
+  const dataURI = `data:${fileType};base64,${buffer.toString("base64")}`;
+  
+  try {
+    const result = await cloudinary.v2.uploader.upload(dataURI, {
+      folder: "face_compare",
+      timeout: 30000,
+      quality_analysis: true
+    });
+    console.log(`✅ Cloudinary upload successful. URL: ${result.secure_url.substring(0, 50)}...`);
+    return result;
+  } catch (error) {
+    console.error(`❌ Cloudinary upload failed: ${error}`);
+    throw new Error("Failed to upload image to Cloudinary");
+  }
+};
+
+const performOCR = async (imageBuffer: Buffer): Promise<string> => {
+  console.log(`🔍 Performing OCR on image (${imageBuffer.length} bytes)`);
+  const base64Image = `data:image/jpeg;base64,${imageBuffer.toString("base64")}`;
+  
+  try {
+    const response = await axios.post(
+      "https://api.ocr.space/parse/image",
+      new URLSearchParams({
+        apikey: process.env.OCR_SPACE_API_KEY!,
+        base64Image,
+        language: "eng",
+        OCREngine: "2",
+        isTable: "true",
+        detectOrientation: "true",
+        scale: "true"
+      }),
+      {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        timeout: OCR_TIMEOUT_MS,
+      }
+    );
+
+    if (response.data?.IsErroredOnProcessing) {
+      const errorDetails = response.data.ErrorMessage || response.data.ErrorDetails || "Unknown OCR error";
+      console.error(`❌ OCR processing error: ${errorDetails}`);
+      throw new Error(`OCR processing failed: ${errorDetails}`);
+    }
+
+    const parsedText = response.data?.ParsedResults?.[0]?.ParsedText;
+    if (!parsedText || parsedText.trim().length < 10) {
+      console.error("❌ Insufficient text extracted from ID:", parsedText?.substring(0, 100) || "EMPTY");
+      throw new Error("The ID image didn't contain readable text. Please ensure the image is clear and all text is visible.");
+    }
+
+    console.log(`✅ OCR successful. Extracted ${parsedText.length} characters of text`);
+    return parsedText;
+  } catch (error) {
+    console.error("❌ OCR API call failed:", {
+      message: error.message,
+      code: error.code,
+      stack: error.stack
+    });
+    throw error;
+  }
+};
+
+const performOCRWithRetry = async (imageBuffer: Buffer, retries = OCR_MAX_RETRIES): Promise<string> => {
+  let lastError: any = null;
+  
+  for (let i = 0; i < retries; i++) {
+    try {
+      console.log(`🔍 OCR Attempt ${i + 1} of ${retries}`);
+      return await performOCR(imageBuffer);
+    } catch (error) {
+      lastError = error;
+      if (i < retries - 1) {
+        const delay = Math.pow(2, i) * 1000;
+        console.log(`⏳ Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  console.error(`❌ All ${retries} OCR attempts failed`);
+  throw lastError;
+};
+
+const compareFaces = async (selfieUrl: string, idUrl: string): Promise<{ confidence: number }> => {
+  console.log(`🤳 Comparing faces:\nSelfie: ${selfieUrl.substring(0, 50)}...\nID: ${idUrl.substring(0, 50)}...`);
+  
+  try {
+    const response = await axios.post(
+      "https://api-us.faceplusplus.com/facepp/v3/compare",
+      new URLSearchParams({
+        api_key: process.env.FACEPP_API_KEY!,
+        api_secret: process.env.FACEPP_API_SECRET!,
+        image_url1: selfieUrl,
+        image_url2: idUrl,
+        return_landmark: "0",
+        return_attributes: "none"
+      }),
+      { timeout: 20000 }
+    );
+
+    const confidence = Number(response.data?.confidence || 0);
+    const threshold = response.data?.thresholds?.["1e-5"] || 80;
+    
+    console.log("🧠 Face comparison results:", {
+      confidence,
+      threshold,
+      faces1: response.data?.faces1?.length || 0,
+      faces2: response.data?.faces2?.length || 0,
+      timeUsed: response.data?.time_used || 0
+    });
+
+    if (!response.data?.faces1?.[0] || !response.data?.faces2?.[0]) {
+      const errorDetails = {
+        selfieFaces: response.data?.faces1?.length || 0,
+        idFaces: response.data?.faces2?.length || 0,
+        error: "Could not detect faces in one or both images"
+      };
+      console.error("❌ Face detection failed:", errorDetails);
+      throw new Error(JSON.stringify(errorDetails));
+    }
+
+    return { confidence };
+  } catch (error) {
+    console.error("❌ Face comparison failed:", error);
+    throw new Error("Failed to compare faces");
+  }
+};
+
+// API Route
 export async function POST(req: Request): Promise<NextResponse<VerificationResult | { error: string }>> {
   const startTime = Date.now();
   const requestId = Math.random().toString(36).substring(2, 8);
@@ -277,10 +420,22 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
       return NextResponse.json({ error: "Invalid file type. Only images are allowed." }, { status: 400 });
     }
 
-    const [selfieBuffer, idBuffer] = await Promise.all([
-      processImageForOCR(selfie),
-      processImageForOCR(id)
-    ]);
+    // Process images with fallback for small images
+    let selfieBuffer, idBuffer;
+    try {
+      [selfieBuffer, idBuffer] = await Promise.all([
+        processImageForOCR(selfie),
+        processImageForOCR(id)
+      ]);
+    } catch (processError) {
+      if (processError.message.includes('too small') && id.size >= ABSOLUTE_MIN_SIZE) {
+        console.warn(`⚠️ [${requestId}] Small image detected, attempting to process anyway`);
+        idBuffer = Buffer.from(await id.arrayBuffer());
+        selfieBuffer = Buffer.from(await selfie.arrayBuffer());
+      } else {
+        throw processError;
+      }
+    }
 
     const [selfieUpload, idUpload] = await Promise.all([
       uploadToCloudinary(selfieBuffer, selfie.type),
@@ -295,7 +450,6 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
     console.log(`🔑 [${requestId}] ID keyword matches:`, keywordMatches);
     if (keywordMatches.length === 0) {
       console.warn(`⚠️ [${requestId}] OCR output does not match any known ID keywords. Full text:`, parsedText.substring(0, 200) + "...");
-      // Continue anyway since we want to attempt extraction regardless
     }
 
     const extractedInfo = extractIDInfo(parsedText);
@@ -379,11 +533,20 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
 
   } catch (error: unknown) {
     const processingTime = (Date.now() - startTime) / 1000;
-    const errorMessage = axios.isAxiosError(error) 
-      ? error.response?.data?.message || error.message
-      : error instanceof Error 
-        ? error.message
-        : "Verification failed. Please try again.";
+    let errorMessage = "Verification failed. Please try again.";
+    let statusCode = 500;
+    
+    if (error instanceof Error) {
+      if (error.message.includes('too small')) {
+        errorMessage = `Image quality is too low for verification. Minimum size is ${ABSOLUTE_MIN_SIZE} bytes (recommended ${RECOMMENDED_MIN_SIZE} bytes).`;
+        statusCode = 400;
+      } else if (error.message.includes('too large')) {
+        errorMessage = `Image is too large. Maximum size is ${MAX_IMAGE_SIZE} bytes.`;
+        statusCode = 400;
+      } else {
+        errorMessage = error.message;
+      }
+    }
 
     console.error(`❌ [${requestId}] Verification failed after ${processingTime}s:`, error);
     
@@ -391,9 +554,12 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
       { 
         error: errorMessage,
         requestId,
-        processingTime 
+        processingTime,
+        suggestion: errorMessage.includes('too small') 
+          ? "Try taking a clearer photo with better lighting and higher resolution" 
+          : undefined
       }, 
-      { status: 500 }
+      { status: statusCode }
     );
   }
 }
