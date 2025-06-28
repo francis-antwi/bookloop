@@ -41,7 +41,6 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
     rentModal.onOpen();
   }, [currentUser, loginModal, rentModal]);
 
-  // Close dropdown when clicking outside, pressing Escape, or touching outside
   useEffect(() => {
     const handleInteraction = (event: MouseEvent | KeyboardEvent | TouchEvent) => {
       if (event instanceof KeyboardEvent && event.key === "Escape") {
@@ -51,9 +50,11 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
       }
 
       const target = event.target as Node;
-      if (dropdownRef.current && 
-          !dropdownRef.current.contains(target) &&
-          !buttonRef.current?.contains(target)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(target) &&
+        !buttonRef.current?.contains(target)
+      ) {
         setIsOpen(false);
       }
     };
@@ -69,7 +70,6 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
     };
   }, []);
 
-  // Focus management and keyboard navigation
   useEffect(() => {
     if (!isOpen) return;
 
@@ -103,7 +103,6 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, activeIndex]);
 
-  // Set focus to first menu item when opening
   useEffect(() => {
     if (isOpen) {
       setActiveIndex(0);
@@ -114,7 +113,7 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
     setIsSigningOut(true);
     try {
       await signOut({ redirect: false });
-      router.push('/');
+      router.push("/");
     } finally {
       setIsSigningOut(false);
     }
@@ -135,7 +134,11 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
         ...(session?.user?.role === "PROVIDER"
           ? [{ onClick: onRent, label: "Get Listed" }]
           : []),
-        { onClick: handleSignOut, label: "Logout", className: "text-red-600 hover:bg-red-50" },
+        {
+          onClick: handleSignOut,
+          label: "Logout",
+          className: "text-red-600 hover:bg-red-50",
+        },
       ]
     : [
         { onClick: loginModal.onOpen, label: "Login" },
@@ -152,16 +155,20 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
             className="hidden md:flex items-center gap-2 text-sm font-semibold py-3 px-6 rounded-full bg-gradient-to-r from-rose-500 to-pink-500 text-white hover:from-rose-600 hover:to-pink-600 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2"
             aria-label="List your property"
           >
-            <svg 
-              xmlns="http://www.w3.org/2000/svg" 
-              fill="none" 
-              viewBox="0 0 24 24" 
-              strokeWidth={1.5} 
-              stroke="currentColor" 
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.5}
+              stroke="currentColor"
               className="w-4 h-4"
               aria-hidden="true"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 4.5v15m7.5-7.5h-15"
+              />
             </svg>
             Get Listed
           </button>
@@ -182,8 +189,10 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
             <div className="relative">
               <Avatar src={currentUser?.image} />
               {currentUser && (
-                <span className="sr-only">Online status</span>
-                <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 border-2 border-white rounded-full" aria-hidden="true" />
+                <>
+                  <span className="sr-only">Online status</span>
+                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 border-2 border-white rounded-full" aria-hidden="true" />
+                </>
               )}
             </div>
           </div>
@@ -216,8 +225,12 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
                   <div className="flex items-center gap-2">
                     <Avatar src={currentUser.image} />
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">{currentUser.name || "User"}</p>
-                      <p className="text-xs text-slate-600 truncate">{currentUser.email}</p>
+                      <p className="font-medium text-sm truncate">
+                        {currentUser.name || "User"}
+                      </p>
+                      <p className="text-xs text-slate-600 truncate">
+                        {currentUser.email}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -232,7 +245,11 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
                       item.onClick();
                       setIsOpen(false);
                     }}
-                    label={item.label === "Logout" && isSigningOut ? "Signing out..." : item.label}
+                    label={
+                      item.label === "Logout" && isSigningOut
+                        ? "Signing out..."
+                        : item.label
+                    }
                     className={item.className}
                     role="menuitem"
                     tabIndex={-1}
