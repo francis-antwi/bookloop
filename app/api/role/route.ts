@@ -5,7 +5,8 @@ import prisma from "@/app/libs/prismadb";
 import { UserRole } from "@prisma/client";
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
+  const session = await getServerSession({ req, ...authOptions });
+
 
   if (!session?.user?.email) {
     console.error("❌ No session found");
