@@ -66,7 +66,7 @@ export const authOptions: AuthOptions = {
     signOut: "/auth/signout",
     error: "/auth/error",
     verifyRequest: "/auth/verify-request",
-    newUser: "/role",
+    newUser: "/role", // optional override
   },
   session: {
     strategy: "jwt",
@@ -82,6 +82,7 @@ export const authOptions: AuthOptions = {
         });
 
         if (!existingUser) {
+          // Fix: Provide required role ("CUSTOMER") to satisfy schema
           await prisma.user.create({
             data: {
               email: user.email!,
@@ -89,11 +90,11 @@ export const authOptions: AuthOptions = {
               image: user.image ?? "",
               isOtpVerified: true,
               isFaceVerified: false,
-              role: null,
+              role: "CUSTOMER", // Required by schema
             },
           });
 
-          // Safe redirect to /auth/error, then client will route to /role
+          // Still ask them to confirm or switch role
           return "/auth/error?error=ROLE_SELECTION_REQUIRED";
         }
 
