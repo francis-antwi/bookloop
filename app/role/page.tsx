@@ -16,73 +16,36 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
   const [selectedRole, setSelectedRole] = useState(session?.user?.role || null);
 
   const handleRoleSelect = async (role: string) => {
-    if (selectedRole === role) {
-      console.log("Role already selected, returning.");
-      return;
-    }
+    if (selectedRole === role) return;
 
     setIsLoading(true);
-    console.log("Attempting to select role:", role);
 
     try {
-      console.log("Sending Axios POST request to /api/role...");
       const response = await axios.post('/api/role', { role }, { withCredentials: true });
-      console.log("Axios POST response received:", response.status, response.data);
 
       if (response.status >= 200 && response.status < 300) {
-        console.log("API call successful.");
-
         setSelectedRole(role);
-
-        if (typeof onRoleSelected === 'function') {
-          onRoleSelected(role);
-        } else {
-          console.warn("⚠️ onRoleSelected is not a function or not provided.");
-        }
-
+        onRoleSelected?.(role);
         toast.success('Role selected successfully');
 
-        if (role === 'PROVIDER') {
-          console.log("Redirecting to /verify...");
-          window.location.href = '/verify';
-        } else {
-          console.log("Redirecting to /...");
-          window.location.href = '/';
-        }
+        window.location.href = role === 'PROVIDER' ? '/verify' : '/';
       } else {
-        console.error("API call returned non-success status:", response.status, response.data);
-        const message = response?.data?.message || 'Unexpected issue after successful response';
+        const message = response?.data?.message || 'Unexpected response';
         toast.error(message);
       }
     } catch (err: any) {
-      console.error("❌ An error occurred during role selection or session update:");
-
-      if (err instanceof Error) {
-        console.error("Error message:", err.message);
-        console.error("Stack trace:", err.stack);
-      }
-
-      if (err?.response) {
-        console.error("Error response status:", err.response.status);
-        console.error("Error response data:", err.response.data);
-      } else {
-        console.error("Full error object:", err);
-      }
-
       const status = err?.response?.status;
       const message = err?.response?.data?.message || err?.message || 'Failed to select role';
 
       toast.error(message);
 
       if (status === 403 && err?.response?.data?.error === 'Verification required') {
-        console.log("Verification required (403), redirecting to /verify after delay...");
         setTimeout(() => {
           window.location.href = '/verify';
         }, 1000);
       }
     } finally {
       setIsLoading(false);
-      console.log("Loading state set to false.");
     }
   };
 
@@ -145,7 +108,6 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
                   <div className="text-gray-600 text-sm mt-1">{role.desc}</div>
                 </div>
               </div>
-
               <div className="flex items-center">
                 {isLoading && selectedRole === role.value ? (
                   <FiLoader className="text-blue-500 animate-spin" />
@@ -158,7 +120,6 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
                 )}
               </div>
             </div>
-
             {selectedRole === role.value && (
               <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-b-xl" />
             )}
