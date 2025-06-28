@@ -3,6 +3,7 @@
 import axios from 'axios';
 import { IoMdClose } from 'react-icons/io';
 import { useCallback, useState, useEffect } from 'react';
+import { signIn } from "next-auth/react";
 import {
   FieldValues,
   SubmitHandler,
@@ -248,30 +249,45 @@ const RegisterModal = () => {
       return;
     }
 
-    // If user is a customer, skip ID/face verification
-    if (data.role === 'CUSTOMER') {
-      setIsLoading(true);
-      try {
-        await axios.post('/api/register', {
-          ...data,
-          isPhoneVerified: true,
-          isFaceVerified: false, // Customers don't need face verification
-        });
-        toast.success('Account created successfully!');
-        loginModal.onOpen();
-        registerModal.onClose();
-      } catch (err: any) {
-        console.error('Registration error:', err);
-        const errorMessage = err.response?.data?.error || 
-                          err.response?.data?.message || 
-                          err.message || 
-                          "Registration failed. Please try again.";
-        toast.error(errorMessage);
-      } finally {
-        setIsLoading(false);
-      }
-      return;
+
+
+// If user is a customer, skip ID/face verification
+if (data.role === 'CUSTOMER') {
+  setIsLoading(true);
+  try {
+    await axios.post('/api/register', {
+      ...data,
+      isPhoneVerified: true,
+      isFaceVerified: false, // Customers don't need face verification
+    });
+
+    // Automatically log in the customer
+    const loginRes = await signIn("credentials", {
+      redirect: false,
+      email: data.email,
+      password: data.password,
+    });
+
+    if (loginRes?.ok) {
+      toast.success('Account created and logged in!');
+      registerModal.onClose();
+    } else {
+      toast.error('Registration succeeded, but auto-login failed.');
+      loginModal.onOpen();
     }
+  } catch (err: any) {
+    console.error('Registration error:', err);
+    const errorMessage = err.response?.data?.error || 
+                      err.response?.data?.message || 
+                      err.message || 
+                      "Registration failed. Please try again.";
+    toast.error(errorMessage);
+  } finally {
+    setIsLoading(false);
+  }
+  return;
+}
+
 
     // For service providers, proceed with verification
     if (!selfieImageBlob || !idFile) {
