@@ -70,70 +70,21 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
   return (
     <div className="relative" ref={dropdownRef}>
       <div className="flex flex-row items-center gap-3">
-        {/* ✅ Get Listed only for PROVIDER */}
         {currentUser?.role === "PROVIDER" && (
           <button
             onClick={onRent}
-            className="
-              hidden
-              md:flex
-              items-center
-              gap-2
-              text-sm
-              font-semibold
-              py-3
-              px-6
-              rounded-full
-              bg-gradient-to-r
-              from-rose-500
-              to-pink-500
-              text-white
-              hover:from-rose-600
-              hover:to-pink-600
-              transform
-              hover:scale-105
-              transition-all
-              duration-200
-              shadow-lg
-              hover:shadow-xl
-            "
+            className="hidden md:flex items-center gap-2 text-sm font-semibold py-3 px-6 rounded-full bg-gradient-to-r from-rose-500 to-pink-500 text-white hover:from-rose-600 hover:to-pink-600 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-              className="w-4 h-4"
-            >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
             Get Listed
           </button>
         )}
 
-        {/* Menu Toggle */}
         <button
           onClick={toggleOpen}
-          className="
-            p-3
-            md:py-2
-            md:px-3
-            border
-            border-slate-200
-            flex
-            flex-row
-            items-center
-            gap-3
-            rounded-full
-            cursor-pointer
-            hover:shadow-lg
-            hover:border-slate-300
-            transition-all
-            duration-200
-            bg-white
-            hover:bg-slate-50
-          "
+          className="p-3 md:py-2 md:px-3 border border-slate-200 flex flex-row items-center gap-3 rounded-full cursor-pointer hover:shadow-lg hover:border-slate-300 transition-all duration-200 bg-white hover:bg-slate-50"
         >
           <div className="text-slate-600 hover:text-slate-800 transition-colors">
             <AiOutlineMenu size={16} />
@@ -149,27 +100,10 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
         </button>
       </div>
 
-      {/* Dropdown */}
       {isOpen && (
         <>
           <div className="fixed inset-0 z-40 bg-black/20" onClick={() => setIsOpen(false)} />
-          <div
-            className="
-              absolute
-              z-50
-              right-0
-              top-14
-              w-60
-              bg-white
-              rounded-xl
-              shadow-2xl
-              border
-              border-slate-200
-              animate-in
-              slide-in-from-top-2
-              duration-200
-            "
-          >
+          <div className="absolute z-50 right-0 top-14 w-60 bg-white rounded-xl shadow-2xl border border-slate-200 animate-in slide-in-from-top-2 duration-200">
             {currentUser ? (
               <>
                 <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
@@ -186,38 +120,16 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
                   <MenuItem onClick={() => { router.push("/"); setIsOpen(false); }} label="Home" />
                   <MenuItem onClick={() => { router.push("/favourites"); setIsOpen(false); }} label="Favourites" />
                   <MenuItem onClick={() => { router.push("/bookings"); setIsOpen(false); }} label="Bookings" />
-                 {currentUser?.role === "PROVIDER" && (
-  <>
-    <MenuItem
-      onClick={() => {
-        router.push("/my-listings");
-        setIsOpen(false);
-      }}
-      label="Listings"
-      icon={
-        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 21v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21m0 0h4.5V9.75a2.25 2.25 0 00-2.25-2.25h-13.5a2.25 2.25 0 00-2.25-2.25v7.875c0 .621.504 1.125 1.125 1.125H6.75a2.25 2.25 0 002.25-2.25v-4.875c0-.621.504-1.125 1.125-1.125z" />
-        </svg>
-      }
-    />
-    <MenuItem
-      onClick={() => {
-        router.push("/approvals");
-        setIsOpen(false);
-      }}
-      label="Approvals"
-      icon={
-        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      }
-    />
-  </>
-)}
+
+                  {currentUser?.role === "PROVIDER" && (
+                    <>
+                      <MenuItem onClick={() => { router.push("/my-listings"); setIsOpen(false); }} label="Listings" />
+                      <MenuItem onClick={() => { router.push("/approvals"); setIsOpen(false); }} label="Approvals" />
+                    </>
+                  )}
 
                   <MenuItem onClick={() => { router.push("/notifications"); setIsOpen(false); }} label="Notifications" />
 
-                  {/* ✅ Show 'Get Listed' for PROVIDER in dropdown */}
                   {session?.user?.role === "PROVIDER" && (
                     <MenuItem onClick={() => { onRent(); setIsOpen(false); }} label="Get Listed" />
                   )}
