@@ -6,16 +6,24 @@ export default withAuth(
     const { pathname } = req.nextUrl;
     const token = req.nextauth.token;
 
-    // 🚫 If user tries to access /admin and is not an admin
+    // ⛔ Block non-ADMIN from /admin
     if (pathname.startsWith("/admin") && token?.role !== "ADMIN") {
-      return NextResponse.redirect(new URL("/403", req.url)); // 🔁 Redirect to custom 403 page
+      return NextResponse.redirect(new URL("/403", req.url));
     }
 
-    return NextResponse.next(); // ✅ Allow access
+    // ⛔ Block non-PROVIDER from /my-listings or /approvals
+    if (
+      (pathname.startsWith("/my-listings") || pathname.startsWith("/approvals")) &&
+      token?.role !== "PROVIDER"
+    ) {
+      return NextResponse.redirect(new URL("/403", req.url));
+    }
+
+    return NextResponse.next();
   },
   {
     callbacks: {
-      authorized: ({ token }) => !!token, // ✅ Protect all routes for signed-in users
+      authorized: ({ token }) => !!token, // Require login
     },
   }
 );
@@ -28,6 +36,5 @@ export const config = {
     "/my-listings/:path*",
     "/notifications/:path*",
     "/admin/:path*",
-  
   ],
 };
