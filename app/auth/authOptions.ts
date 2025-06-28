@@ -7,13 +7,7 @@ import bcrypt from "bcrypt";
 import { UserRole } from "@prisma/client";
 
 export const authOptions: AuthOptions = {
-  adapter: {
-    ...PrismaAdapter(prisma),
-    async createUser(profile) {
-      // Override default user creation to delay user creation
-      return Promise.resolve(null as any); // prevent default user creation
-    },
-  },
+  adapter: PrismaAdapter(prisma), // ✅ use as-is, do NOT override createUser here
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -59,15 +53,13 @@ export const authOptions: AuthOptions = {
           throw new Error("Account is missing a role.");
         }
 
-        return {
-          ...user,
-        };
+        return user;
       },
     }),
   ],
   pages: {
     signIn: "/",
-    newUser: "/role", // unused due to adapter override
+    newUser: "/role", // optional
     error: "/auth",
   },
   session: {
@@ -86,19 +78,19 @@ export const authOptions: AuthOptions = {
         });
 
         if (!existingUser) {
-          // defer user creation until after role selection
-          return "/auth?error=ROLE_SELECTION_REQUIRED";
+          // user hasn't selected a role yet — you must create user manually after role selection
+          return "/role?email=" + encodeURIComponent(user.email ?? "");
         }
 
         if (!existingUser.role) {
-          return "/auth?error=ROLE_SELECTION_REQUIRED";
+          return "/role?email=" + encodeURIComponent(user.email ?? "");
         }
 
         if (
           existingUser.role === UserRole.PROVIDER &&
           !existingUser.isFaceVerified
         ) {
-          return "/auth?error=PROVIDER_VERIFICATION_REQUIRED";
+          return "/verify?email=" + encodeURIComponent(user.email ?? "");
         }
       }
 
@@ -107,14 +99,11 @@ export const authOptions: AuthOptions = {
 
     async jwt({ token, user, trigger, session }) {
       if (user) {
-        token = {
-          ...token,
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          image: user.image,
-          role: user.role,
-        };
+        token.id = user.id;
+        token.email = user.email;
+        token.name = user.name;
+        token.image = user.image;
+        token.role = user.role ?? null;
       }
 
       if (trigger === "update" && session?.role) {
@@ -135,11 +124,11 @@ export const authOptions: AuthOptions = {
         email: token.email,
         name: token.name,
         image: token.image,
-        role: token.role,
+        role: token.role ?? null,
       };
-
       return session;
     },
   },
 };
+
 export default NextAuth(authOptions);

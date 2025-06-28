@@ -8,7 +8,16 @@ export async function POST(req: Request) {
   const cookieStore = cookies();
   console.log("🍪 Incoming Cookies:", cookieStore.getAll());
 
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  // ✅ Fix: Adapt to getToken expecting Node-like req
+  const token = await getToken({
+    req: {
+      headers: {
+        cookie: cookies().toString(),
+      },
+    } as any,
+    secret: process.env.NEXTAUTH_SECRET,
+  });
+
   console.log("🔐 JWT Token:", token);
 
   if (!token || !token.email) {
@@ -46,7 +55,7 @@ export async function POST(req: Request) {
     });
 
     if (!user) {
-      // 🆕 User doesn't exist yet (first-time Google login)
+      // 🆕 First-time Google OAuth user
       user = await prisma.user.create({
         data: {
           email,
@@ -64,7 +73,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // ✅ User exists — check role
     if (user.role === role) {
       return NextResponse.json(
         { success: true, message: "Role already set" },
@@ -89,7 +97,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // ✅ Update user role
     await prisma.user.update({
       where: { email },
       data: { role: role as UserRole },

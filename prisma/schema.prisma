@@ -6,18 +6,45 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+enum UserRole {
+  CUSTOMER
+  PROVIDER
+  ADMIN
+}
+
+enum ListingStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ReservationStatus {
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  PENDING
+}
+
+enum NotificationType {
+  BOOKING
+  SYSTEM
+}
+
 model User {
-  id               String   @id @default(uuid())
+  id               String     @id @default(uuid())
   name             String?
-  email            String? @unique
+  email            String?    @unique
   emailVerified    DateTime?
   contactPhone     String?
   image            String?
   hashedPassword   String?
-  role            UserRole? 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  role             UserRole?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
   favouriteIds     String[]
+
   resetToken       String?
   resetTokenExpiry DateTime?
 
@@ -25,39 +52,36 @@ model User {
   selfieImage      String?
   idImage          String?
   faceConfidence   Float?
-  isFaceVerified   Boolean  @default(false)
+  isFaceVerified   Boolean    @default(false)
 
   // ✅ Extracted ID Info
   idName           String?
   idNumber         String?
-  idDOB            DateTime?   // ← updated
-  idExpiryDate     DateTime?   // ← updated
+  idDOB            DateTime?
+  idExpiryDate     DateTime?
   idIssuer         String?
   personalIdNumber String?
   idIssueDate      DateTime?
-  otpCode            String?       // Store OTP here
-  otpExpiresAt       DateTime?     // Optional expiry time
-  isOtpVerified      Boolean?      // Optional flag
 
-  // Relations
+  // ✅ OTP Fields
+  otpCode          String?
+  otpExpiresAt     DateTime?
+  isOtpVerified    Boolean?
+
+  // ✅ Relations
   accounts         Account[]
   listings         Listing[]
   reservations     Reservation[]
   notifications    Notification[]
 }
 
-
-enum UserRole {
-  CUSTOMER
-  PROVIDER
-  ADMIN
-}
 model Account {
   id                 String   @id @default(uuid())
   userId             String
   type               String
   provider           String
   providerAccountId  String
+
   refresh_token      String?
   access_token       String?
   expires_at         Int?
@@ -75,14 +99,13 @@ model Account {
   // ✅ Extracted ID Info
   idName             String?
   idNumber           String?
-  personalIdNumber String?
-  idIssueDate      DateTime?
-  idDOB              DateTime?   // ← updated
-  idExpiryDate       DateTime?   // ← updated
+  personalIdNumber   String?
+  idIssueDate        DateTime?
+  idDOB              DateTime?
+  idExpiryDate       DateTime?
   idIssuer           String?
-  
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
@@ -101,33 +124,33 @@ model Listing {
   address          String?
   status           ListingStatus  @default(PENDING)
 
-  // Apartment-specific fields
+  // Apartment-specific
   bedrooms         Int?
   bathrooms        Int?
   furnished        Boolean?
   floor            Int?
 
-  // Car-specific fields
+  // Car-specific
   make             String?
   model            String?
   year             Int?
   seats            Int?
   fuelType         String?
 
-  // Event Center-specific fields
+  // Event Center-specific
   capacity         Int?
   rooms            Int?
   hasStage         Boolean?
   parkingAvailable Boolean?
 
-  // Restaurant-specific fields
+  // Restaurant-specific
   cuisineType       String?
   seatingCapacity   Int?
   openingHours      String?
   deliveryAvailable Boolean?
   menuHighlights    String?
 
-  // Appointment-specific fields
+  // Appointment-specific
   serviceType       String?
   availableDates    String?
   duration          Int?
@@ -139,53 +162,32 @@ model Listing {
   reservations     Reservation[]
 }
 
-
-enum ListingStatus {
-  PENDING
-  APPROVED
-  REJECTED
-}
-
 model Reservation {
-  id           String      @id @default(uuid())
-  userId       String
-  listingId    String
-  startDate    DateTime
-  endDate      DateTime
-  totalPrice   Int
-  createdAt    DateTime    @default(now())
-  email String?
-  contactPhone String?
-  status       ReservationStatus @default(PENDING)
-  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  listing      Listing     @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  id             String             @id @default(uuid())
+  userId         String
+  listingId      String
+  startDate      DateTime
+  endDate        DateTime
+  totalPrice     Int
+  createdAt      DateTime           @default(now())
+  email          String?
+  contactPhone   String?
+  status         ReservationStatus  @default(PENDING)
+
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing        Listing            @relation(fields: [listingId], references: [id], onDelete: Cascade)
 }
-
-enum ReservationStatus {
-  CONFIRMED
-  CANCELLED
-  COMPLETED
-  PENDING
-}
-
-
 
 model Notification {
   id             String            @id @default(uuid())
-  userId         String?           // Made optional
+  userId         String?
   message        String
   type           NotificationType
   read           Boolean           @default(false)
-  adminOnly      Boolean           @default(false) // New field
+  adminOnly      Boolean           @default(false)
   createdAt      DateTime          @default(now())
   email          String?
   contactPhone   String?
 
   user           User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
-
-enum NotificationType {
-  BOOKING
-  SYSTEM
-}
-
