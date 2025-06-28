@@ -100,43 +100,6 @@ export const authOptions: AuthOptions = {
   },
 
   callbacks: {
-    async signIn({ user, account }) {
-      if (account?.provider === "google") {
-        const existingUser = await prisma.user.findUnique({
-          where: { email: user.email ?? "" },
-        });
-
-        if (!existingUser) {
-          // New Google user: create without role and redirect to role selection
-          await prisma.user.create({
-            data: {
-              email: user.email!,
-              name: user.name ?? "",
-              image: user.image ?? "",
-              isOtpVerified: true,
-              isFaceVerified: false,
-              // Do not assign role yet
-            },
-          });
-
-          return "/role";
-        }
-
-        if (!existingUser.role) {
-          return "/role";
-        }
-
-        if (
-          existingUser.role === UserRole.PROVIDER &&
-          !existingUser.isFaceVerified
-        ) {
-          return "/verify"; // redirect to face/ID verification
-        }
-      }
-
-      return true;
-    },
-
     async jwt({ token, user, trigger, session }) {
       if (Date.now() < (token.exp as number) * 1000 - 5 * 60 * 1000) {
         return token;
