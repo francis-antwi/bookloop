@@ -10,32 +10,25 @@ import RentalModal from "./components/modals/RentalModal";
 import SearchModal from "./components/SearchModal";
 import { getServerSession } from "next-auth";
 import SessionProviderWrapper from "./providers/SessionProviderWrapper";
-import Script from "next/script";
+import Script from "next/script"; 
 import { authOptions } from "./auth/authOptions";
-import { Metadata } from "next";
 
 const font = Nunito({
   subsets: ["latin"],
-  display: 'swap', // Better font loading performance
-  variable: '--font-nunito', // CSS variable for flexible usage
 });
 
-export const metadata: Metadata = {
-  title: {
-    default: "BookLoop Services",
-    template: "%s | BookLoop Services"
-  },
-  description: "Book apartments, cars, event centers, and more with ease.",
-  metadataBase: new URL(process.env.NODE_ENV === 'production' 
+export const metadata = {
+  title: "BookLoop Services",
+  description:
+    "BookLoop Services lets you book apartments, cars, event centers, restaurants, and appointments with ease. Explore flexible options, secure reservations, and real-time availability.",
+     metadataBase: new URL(process.env.NODE_ENV === 'production' 
     ? 'https://bookloop-eight.vercel.app' 
     : 'http://localhost:3000'
   ),
-  alternates: {
-    canonical: '/',
-  },
   openGraph: {
     title: "BookLoop Services",
-    description: "Book various services with real-time availability.",
+    description:
+      "BookLoop Services lets you book apartments, cars, event centers, restaurants, and appointments with ease. Explore flexible options, secure reservations, and real-time availability.",
     url: "https://www.bookloop.site",
     siteName: "BookLoop Services",
     images: [
@@ -43,24 +36,15 @@ export const metadata: Metadata = {
         url: "/images/logo.png",
         width: 800,
         height: 600,
-        alt: "BookLoop Logo",
+        alt: "BookLoop Services Logo",
       },
     ],
     locale: "en_GH",
     type: "website",
   },
-  twitter: {
-    card: "summary_large_image",
-    title: "BookLoop Services",
-    description: "Your one-stop booking platform",
-    images: ["/images/logo.png"],
+    icons: {
+    icon: "/images/app.png"
   },
-  icons: {
-    icon: "/favicon.ico",
-    apple: "/apple-touch-icon.png",
-  },
-  manifest: "/site.webmanifest",
-  themeColor: "#ffffff",
 };
 
 export default async function RootLayout({
@@ -68,22 +52,12 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [session, currentUser] = await Promise.all([
-    getServerSession(authOptions),
-    getCurrentUser(),
-  ]);
+  const session = await getServerSession(authOptions);
+  const currentUser = await getCurrentUser();
 
   return (
-    <html lang="en" className={font.variable} suppressHydrationWarning>
-      <head>
-        {/* Preconnect to important third-party origins */}
-        <link rel="preconnect" href="https://code.tidio.co" crossOrigin="anonymous" />
-        <link rel="dns-prefetch" href="https://code.tidio.co" />
-        
-        {/* Preload critical resources */}
-        <link rel="preload" href={font.src} as="font" type="font/woff2" crossOrigin="anonymous" />
-      </head>
-      <body className="min-h-screen bg-gray-50">
+    <html lang="en">
+      <body className={font.className} suppressHydrationWarning={true}>
         <SessionProviderWrapper session={session}>
           <Client>
             <ToasterProvider />
@@ -92,16 +66,12 @@ export default async function RootLayout({
             <LoginModal />
             <RegisterModal />
             <Navbar currentUser={currentUser} />
-            <main className="pb-20 pt-28">
-              {children}
-            </main>
+            <div className="pb-20 pt-28">{children}</div>
           </Client>
-          
-          {/* Async third-party scripts with fallback handling */}
+          {/* ✅ Tidio Chat Script */}
           <Script
             src="//code.tidio.co/dph8r5uefv6snwp4etkml9rwp98eeed5.js"
-            strategy="lazyOnload"
-            onError={(e) => console.error('Tidio script failed to load', e)}
+            strategy="afterInteractive"
           />
         </SessionProviderWrapper>
       </body>
