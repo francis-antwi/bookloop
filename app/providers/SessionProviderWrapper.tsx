@@ -4,7 +4,7 @@ import { SessionProvider } from 'next-auth/react';
 import { Session } from 'next-auth';
 import { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { refreshToken } from '@/lib/auth';
+import { refreshToken } from '../lib/auth';
 
 interface SessionProviderWrapperProps {
   children: React.ReactNode;
