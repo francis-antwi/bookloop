@@ -7,7 +7,7 @@ import bcrypt from "bcrypt";
 import { UserRole } from "@prisma/client";
 
 export const authOptions: AuthOptions = {
-  adapter: PrismaAdapter(prisma), // ✅ use as-is, do NOT override createUser here
+  adapter: PrismaAdapter(prisma),
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -42,11 +42,11 @@ export const authOptions: AuthOptions = {
         }
 
         if (!user.isOtpVerified) {
-          throw new Error("Phone verification is required before signing in.");
+          throw new Error("Phone verification is required.");
         }
 
         if (user.role === UserRole.PROVIDER && !user.isFaceVerified) {
-          throw new Error("Face verification is required for service providers.");
+          throw new Error("Face verification required for providers.");
         }
 
         if (!user.role) {
@@ -57,19 +57,24 @@ export const authOptions: AuthOptions = {
       },
     }),
   ],
+
   pages: {
     signIn: "/",
-    newUser: "/role", // optional
+    newUser: null, // ❌ prevent PrismaAdapter from auto-creating Google users
     error: "/auth",
   },
+
   session: {
     strategy: "jwt",
   },
+
   jwt: {
-    maxAge: 30 * 24 * 60 * 60,
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   },
+
   secret: process.env.NEXTAUTH_SECRET,
   trustHost: true,
+
   callbacks: {
     async signIn({ user, account }) {
       if (account?.provider === "google") {
@@ -77,20 +82,22 @@ export const authOptions: AuthOptions = {
           where: { email: user.email ?? "" },
         });
 
+        // 🟡 User signed in for the first time, no user exists in DB
         if (!existingUser) {
-          // user hasn't selected a role yet — you must create user manually after role selection
-          return "/role?email=" + encodeURIComponent(user.email ?? "");
+          return `/role?email=${encodeURIComponent(user.email ?? "")}`;
         }
 
+        // 🔴 User exists but has no role set yet
         if (!existingUser.role) {
-          return "/role?email=" + encodeURIComponent(user.email ?? "");
+          return `/role?email=${encodeURIComponent(user.email ?? "")}`;
         }
 
+        // 🔒 Providers must be verified before login
         if (
           existingUser.role === UserRole.PROVIDER &&
           !existingUser.isFaceVerified
         ) {
-          return "/verify?email=" + encodeURIComponent(user.email ?? "");
+          return `/verify?email=${encodeURIComponent(user.email ?? "")}`;
         }
       }
 
@@ -106,8 +113,10 @@ export const authOptions: AuthOptions = {
         token.role = user.role ?? null;
       }
 
+      // If session update manually sets role
       if (trigger === "update" && session?.role) {
         token.role = session.role;
+
         await prisma.user.update({
           where: { email: token.email ?? "" },
           data: { role: session.role },
@@ -117,15 +126,12 @@ export const authOptions: AuthOptions = {
       return token;
     },
 
+    // New: Added session callback to expose id and role from JWT token to session
     async session({ session, token }) {
-      session.user = {
-        ...session.user,
-        id: token.id,
-        email: token.email,
-        name: token.name,
-        image: token.image,
-        role: token.role ?? null,
-      };
+      if (token) {
+        session.user.id = token.id;
+        session.user.role = token.role;
+      }
       return session;
     },
   },

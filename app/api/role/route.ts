@@ -1,20 +1,18 @@
 import { NextResponse, NextRequest } from "next/server";
-import { getToken } from "next-auth/jwt";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/auth/authOptions";
 import prisma from "@/app/libs/prismadb";
 import { UserRole } from "@prisma/client";
 
 export async function POST(req: NextRequest) {
-  const token = await getToken({
-    req,
-    secret: process.env.NEXTAUTH_SECRET,
-  });
+  const session = await getServerSession(authOptions);
 
-  if (!token || !token.email) {
-    console.error("❌ No session or token found");
+  if (!session?.user?.email) {
+    console.error("❌ No session or user email found");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const email = token.email;
+  const email = session.user.email;
   let role: string;
 
   try {
@@ -36,11 +34,12 @@ export async function POST(req: NextRequest) {
     let user = await prisma.user.findUnique({ where: { email } });
 
     if (!user) {
+      // First-time Google login — create user now
       user = await prisma.user.create({
         data: {
           email,
-          name: token.name ?? "",
-          image: token.picture ?? "",
+          name: session.user.name ?? "",
+          image: session.user.image ?? "",
           isOtpVerified: true,
           isFaceVerified: false,
           role: role as UserRole,
@@ -54,13 +53,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, message: "Role already set" }, { status: 200 });
     }
 
+    // For PROVIDER, ensure verification
     if (role === "PROVIDER" && (!user.isFaceVerified || !user.selfieImage || !user.idImage)) {
       return NextResponse.json(
-        { error: "Verification required", message: "Complete identity verification to become a provider" },
+        {
+          error: "Verification required",
+          message: "Complete identity verification to become a provider",
+        },
         { status: 403 }
       );
     }
 
+    // Update role
     await prisma.user.update({
       where: { email },
       data: { role: role as UserRole },
