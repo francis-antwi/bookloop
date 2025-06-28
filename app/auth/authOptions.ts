@@ -126,12 +126,15 @@ export const authOptions: AuthOptions = {
       return token;
     },
 
-    // New: Added session callback to expose id and role from JWT token to session
     async session({ session, token }) {
-      if (token) {
-        session.user.id = token.id;
-        session.user.role = token.role;
-      }
+      session.user = {
+        ...session.user,
+        id: token.id,
+        email: token.email,
+        name: token.name,
+        image: token.image,
+        role: token.role ?? null,
+      };
       return session;
     },
   },
