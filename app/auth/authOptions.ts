@@ -1,7 +1,7 @@
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
+import NextAuth, { AuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { AuthOptions } from "next-auth";
 import prisma from "@/app/libs/prismadb";
 import bcrypt from "bcrypt";
 import { UserRole } from "@prisma/client";
@@ -53,14 +53,20 @@ export const authOptions: AuthOptions = {
           throw new Error("Account is missing a role.");
         }
 
-        return user;
+        return {
+          ...user,
+          isOtpVerified: user.isOtpVerified ?? true,
+          isFaceVerified: user.isFaceVerified ?? false,
+        };
       },
     }),
   ],
   pages: {
     signIn: "/",
-    newUser: "/role",
-    error: "/auth",
+    signOut: "/auth/signout",
+    error: "/auth/",
+    verifyRequest: "/auth/verify-request",
+    newUser: "/role", // optional override
   },
   session: {
     strategy: "jwt",
@@ -76,31 +82,31 @@ export const authOptions: AuthOptions = {
         });
 
         if (!existingUser) {
-          try {
-            await prisma.user.create({
-              data: {
-                email: user.email!,
-                name: user.name ?? "",
-                image: user.image ?? "",
-                isOtpVerified: true,
-                isFaceVerified: false,
-                role: null, // Nullable in Prisma schema
-              },
-            });
-            return "/role";
-          } catch (err) {
-            console.error("❌ Error creating user:", err);
-            return "/auth?error=ACCOUNT_CREATION_FAILED";
-          }
+          // Fix: Provide required role ("CUSTOMER") to satisfy schema
+          await prisma.user.create({
+            data: {
+              email: user.email!,
+              name: user.name ?? "",
+              image: user.image ?? "",
+              isOtpVerified: true,
+              isFaceVerified: false,
+              role: "CUSTOMER", // Required by schema
+            },
+          });
+
+          // Still ask them to confirm or switch role
+          return "/auth/?error=ROLE_SELECTION_REQUIRED";
         }
 
-        if (!existingUser.role) return "/role";
+        if (!existingUser.role) {
+          return "/auth/?error=ROLE_SELECTION_REQUIRED";
+        }
 
         if (
           existingUser.role === UserRole.PROVIDER &&
           !existingUser.isFaceVerified
         ) {
-          return "/verify";
+          return "/auth/?error=PROVIDER_VERIFICATION_REQUIRED";
         }
       }
 
@@ -108,12 +114,7 @@ export const authOptions: AuthOptions = {
     },
 
     async jwt({ token, user, trigger, session }) {
-      // Update role in DB only if changed
-      if (
-        trigger === "update" &&
-        session?.role &&
-        session.role !== token.role
-      ) {
+      if (trigger === "update" && session?.role) {
         token.role = session.role;
 
         await prisma.user.update({
@@ -179,8 +180,9 @@ export const authOptions: AuthOptions = {
           session.user.idIssueDate = token.idIssueDate;
         }
       }
-
       return session;
     },
   },
 };
+
+export default NextAuth(authOptions);
