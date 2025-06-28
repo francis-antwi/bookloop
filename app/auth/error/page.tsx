@@ -11,9 +11,13 @@ export default function AuthErrorRedirectPage() {
   useEffect(() => {
     if (!error) return;
 
-    if (error === "ROLE_SELECTION_REQUIRED") {
+    // ✅ Support multiple role redirect cases
+    const roleErrors = ["ROLE_SELECTION_REQUIRED", "redirect-role"];
+    const verifyErrors = ["PROVIDER_VERIFICATION_REQUIRED", "redirect-verify"];
+
+    if (roleErrors.includes(error)) {
       router.replace("/role");
-    } else if (error === "PROVIDER_VERIFICATION_REQUIRED") {
+    } else if (verifyErrors.includes(error)) {
       router.replace("/verify");
     } else {
       router.replace("/"); // fallback
