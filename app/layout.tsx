@@ -10,8 +10,8 @@ import RentalModal from "./components/modals/RentalModal";
 import SearchModal from "./components/SearchModal";
 import { getServerSession } from "next-auth";
 import SessionProviderWrapper from "./providers/SessionProviderWrapper";
-import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import Script from "next/script"; 
+import { authOptions } from "./auth/authOptions";
 
 const font = Nunito({
   subsets: ["latin"],
