@@ -37,7 +37,7 @@ interface VerificationResult {
   } & IDInfo;
 }
 
-// Text processing utilities
+// Utilities
 const cleanText = (text: string): string => {
   return text
     .replace(/[^\x00-\x7F\r\n]/g, " ")
@@ -47,31 +47,63 @@ const cleanText = (text: string): string => {
 };
 
 const getLines = (text: string): string[] => {
-  return text.split(/\r?\n/).map(line => cleanText(line)).filter(line => line.length > 0);
+  return text
+    .split(/\r?\n/)
+    .map(line => cleanText(line))
+    .filter(line => line.length > 0);
 };
 
-// Information extraction functions
+// These should be implemented as you had them before
 const extractName = (lines: string[]): string | null => {
-  // ... (keep your existing extractName implementation)
+  // Placeholder: implement your logic
+  return null;
 };
 
 const extractDates = (lines: string[]): { date: string, line: string, index: number }[] => {
-  // ... (keep your existing extractDates implementation)
+  // Placeholder: implement your logic
+  return [];
 };
 
 const normalizeDate = (dateStr: string): Date => {
-  // ... (keep your existing normalizeDate implementation)
+  const cleaned = dateStr.replace(/[^\d\/\-\.]/g, '');
+  const parts = cleaned.split(/[\/\-\.]/).map(Number);
+  if (parts.length === 3) {
+    const [a, b, c] = parts;
+    if (a > 31) return new Date(a, b - 1, c);
+    if (c > 31) return new Date(c, b - 1, a);
+    return new Date(a, b - 1, c);
+  }
+  throw new Error(`Invalid date format: ${dateStr}`);
 };
 
 const extractIDNumber = (lines: string[]): string | null => {
-  // ... (keep your existing extractIDNumber implementation)
+  // Placeholder: implement your logic
+  return null;
 };
 
 const extractIDInfo = (parsedText: string): IDInfo => {
-  // ... (keep your existing extractIDInfo implementation)
+  const lines = getLines(parsedText);
+  const idName = extractName(lines);
+  const idNumber = extractIDNumber(lines);
+  const dates = extractDates(lines);
+  const idDOB = dates.length > 0 ? dates[0].date : null;
+  const idIssueDate = dates.length > 1 ? dates[1].date : null;
+  const idExpiryDate = dates.length > 2 ? dates[2].date : null;
+
+  return {
+    idName,
+    idNumber,
+    personalIdNumber: null,
+    idDOB,
+    idIssueDate,
+    idExpiryDate,
+    idIssuer: null,
+    placeOfIssue: null,
+    rawText: parsedText,
+  };
 };
 
-// File processing
+// Image processing
 const processImageFile = async (file: File): Promise<Buffer> => {
   const buffer = Buffer.from(await file.arrayBuffer());
   return sharp(buffer)
@@ -90,10 +122,8 @@ const uploadToCloudinary = async (buffer: Buffer, fileType: string): Promise<{ s
   });
 };
 
-// API endpoints
 const performOCR = async (imageBuffer: Buffer): Promise<string> => {
   const base64Image = `data:image/jpeg;base64,${imageBuffer.toString("base64")}`;
-  
   const response = await axios.post(
     "https://api.ocr.space/parse/image",
     new URLSearchParams({
@@ -102,9 +132,9 @@ const performOCR = async (imageBuffer: Buffer): Promise<string> => {
       language: "eng",
       OCREngine: "2"
     }),
-    { 
+    {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      timeout: 20000 
+      timeout: 20000
     }
   );
 
@@ -138,81 +168,97 @@ const compareFaces = async (selfieUrl: string, idUrl: string): Promise<{ confide
   };
 };
 
-// Main API handler
+// Main handler
 export async function POST(req: Request): Promise<NextResponse<VerificationResult | { error: string }>> {
   try {
     const formData = await req.formData();
     const selfie = formData.get("selfieImage") as File;
     const id = formData.get("idImage") as File;
 
-    // Input validation
     if (!selfie || !id) {
-      return NextResponse.json(
-        { error: "Both selfie and ID image are required." }, 
-        { status: 400 }
-      );
+      console.error("❌ Missing selfie or ID image.");
+      return NextResponse.json({ error: "Both selfie and ID image are required." }, { status: 400 });
     }
 
     if (!selfie.type?.startsWith("image/") || !id.type?.startsWith("image/")) {
-      return NextResponse.json(
-        { error: "Invalid file type. Only images are allowed." },
-        { status: 400 }
-      );
+      console.error("❌ Invalid file type.");
+      return NextResponse.json({ error: "Invalid file type. Only images are allowed." }, { status: 400 });
     }
 
     if (selfie.size > 5 * 1024 * 1024 || id.size > 5 * 1024 * 1024) {
-      return NextResponse.json(
-        { error: "Image files must be smaller than 5MB." },
-        { status: 400 }
-      );
+      console.error("❌ Image file too large.");
+      return NextResponse.json({ error: "Image files must be smaller than 5MB." }, { status: 400 });
     }
 
-    // Process images in parallel
-    const [selfieBuffer, idBuffer] = await Promise.all([
-      processImageFile(selfie),
-      processImageFile(id)
-    ]);
+    let selfieBuffer, idBuffer;
+    try {
+      [selfieBuffer, idBuffer] = await Promise.all([
+        processImageFile(selfie),
+        processImageFile(id)
+      ]);
+    } catch (err) {
+      console.error("❌ Image processing failed:", err);
+      throw new Error("Failed to process images.");
+    }
 
-    const [selfieUpload, idUpload] = await Promise.all([
-      uploadToCloudinary(selfieBuffer, selfie.type),
-      uploadToCloudinary(idBuffer, id.type)
-    ]);
+    let selfieUpload, idUpload;
+    try {
+      [selfieUpload, idUpload] = await Promise.all([
+        uploadToCloudinary(selfieBuffer, selfie.type),
+        uploadToCloudinary(idBuffer, id.type)
+      ]);
+    } catch (err) {
+      console.error("❌ Cloudinary upload failed:", err);
+      throw new Error("Failed to upload images.");
+    }
 
-    // Perform OCR and face comparison in parallel
-    const [parsedText, faceComparison] = await Promise.all([
-      performOCR(idBuffer),
-      compareFaces(selfieUpload.secure_url, idUpload.secure_url)
-    ]);
+    let parsedText;
+    try {
+      parsedText = await performOCR(idBuffer);
+    } catch (err) {
+      console.error("❌ OCR failed:", err);
+      throw new Error("Failed to extract text from ID.");
+    }
 
-    // Validate ID document
     const idKeywords = ["passport", "driver", "license", "identity", "id card", "ghana card", "ecowas"];
-    if (!idKeywords.some(keyword => parsedText.toLowerCase().includes(keyword))) {
-      return NextResponse.json(
-        { error: "The uploaded image doesn't appear to be a valid ID document." },
-        { status: 400 }
-      );
+    if (!idKeywords.some(k => parsedText.toLowerCase().includes(k))) {
+      console.warn("⚠️ ID keyword check failed.");
+      return NextResponse.json({ error: "The uploaded image doesn't appear to be a valid ID document." }, { status: 400 });
     }
 
-    // Extract ID information
-    const extractedInfo = extractIDInfo(parsedText);
+    let extractedInfo: IDInfo;
+    try {
+      extractedInfo = extractIDInfo(parsedText);
+    } catch (err) {
+      console.error("❌ ID info extraction failed:", err);
+      throw new Error("Failed to extract ID details.");
+    }
+
     if (!extractedInfo.idName || !extractedInfo.idNumber || !extractedInfo.idDOB) {
-      return NextResponse.json(
-        { error: "Could not extract required ID information (name, number, or date of birth)." },
-        { status: 400 }
-      );
+      console.warn("⚠️ Incomplete extracted data:", extractedInfo);
+      return NextResponse.json({ error: "Could not extract required ID information." }, { status: 400 });
     }
 
-    // Validate date of birth
-    const dob = normalizeDate(extractedInfo.idDOB);
-    const age = new Date().getFullYear() - dob.getFullYear();
-    if (age < 15 || age > 100) {
-      return NextResponse.json(
-        { error: "The date of birth on the ID appears to be invalid." },
-        { status: 400 }
-      );
+    try {
+      const dob = normalizeDate(extractedInfo.idDOB);
+      const age = new Date().getFullYear() - dob.getFullYear();
+      if (age < 15 || age > 100) {
+        console.warn("⚠️ Invalid DOB detected:", dob);
+        return NextResponse.json({ error: "The date of birth on the ID appears to be invalid." }, { status: 400 });
+      }
+    } catch (err) {
+      console.error("❌ Date normalization failed:", err);
+      return NextResponse.json({ error: "Invalid date format on ID." }, { status: 400 });
     }
 
-    // Prepare response
+    let faceComparison;
+    try {
+      faceComparison = await compareFaces(selfieUpload.secure_url, idUpload.secure_url);
+    } catch (err) {
+      console.error("❌ Face comparison failed:", err);
+      throw new Error("Face match failed.");
+    }
+
     const matchThreshold = 80;
     const confidence = parseFloat(faceComparison.confidence.toFixed(2));
 
@@ -232,18 +278,14 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
     });
 
   } catch (error: unknown) {
-    console.error("Verification error:", error);
-    
-    let errorMessage = "Verification failed";
-    if (error instanceof Error) {
-      errorMessage = error.message;
-    } else if (axios.isAxiosError(error)) {
+    let errorMessage = "Verification failed.";
+    if (axios.isAxiosError(error)) {
       errorMessage = error.response?.data?.message || error.message;
+    } else if (error instanceof Error) {
+      errorMessage = error.message;
     }
 
-    return NextResponse.json(
-      { error: errorMessage },
-      { status: 500 }
-    );
+    console.error("❌ Unhandled error:", error);
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
