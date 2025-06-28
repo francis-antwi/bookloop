@@ -1,74 +1,40 @@
 import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
-import { UserRole } from "@prisma/client";
-
-const PROTECTED_ROUTES = {
-  admin: ["/admin"],
-  provider: ["/my-listings", "/approvals"],
-  user: ["/bookings", "/favourites", "/notifications"],
-};
 
 export default withAuth(
   function middleware(req) {
     const { pathname } = req.nextUrl;
     const token = req.nextauth.token;
 
-    // Redirect unverified users to verification page
-    if (token && !token.isOtpVerified && !pathname.startsWith("/auth/verify")) {
-      return NextResponse.redirect(new URL("/auth/verify", req.url));
+    // ⛔ Block non-ADMIN from /admin
+    if (pathname.startsWith("/admin") && token?.role !== "ADMIN") {
+      return NextResponse.redirect(new URL("/403", req.url));
     }
 
-    // Role-based access control
-    if (pathname.startsWith(PROTECTED_ROUTES.admin[0])) {
-      if (token?.role !== UserRole.ADMIN) {
-        return NextResponse.redirect(new URL("/403", req.url));
-      }
+    // ⛔ Block non-PROVIDER from /my-listings or /approvals
+    if (
+      (pathname.startsWith("/my-listings") || pathname.startsWith("/approvals")) &&
+      token?.role !== "PROVIDER"
+    ) {
+      return NextResponse.redirect(new URL("/403", req.url));
     }
 
-    if (PROTECTED_ROUTES.provider.some(route => pathname.startsWith(route))) {
-      if (token?.role !== UserRole.PROVIDER) {
-        return NextResponse.redirect(new URL("/provider-signup", req.url));
-      }
-
-      // Additional provider verification check
-      if (!token.isFaceVerified) {
-        return NextResponse.redirect(new URL("/provider/verification", req.url));
-      }
-    }
-
-    // Set security headers
-    const response = NextResponse.next();
-
-    response.headers.set("X-Frame-Options", "DENY");
-    response.headers.set("X-Content-Type-Options", "nosniff");
-    response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-    response.headers.set(
-      "Content-Security-Policy",
-      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self';"
-    );
-
-    return response;
+    return NextResponse.next();
   },
   {
     callbacks: {
-      authorized: ({ token }) => {
-        if (!token) return false;
-        if (!token.email || !token.role) return false;
-        return true;
-      },
-    },
-    pages: {
-      signIn: "/auth/signin",
-      error: "/auth/error",
-      verifyRequest: "/auth/verify",
+      authorized: ({ token }) => !!token, // Require login
     },
   }
 );
 
 export const config = {
   matcher: [
-    ...Object.values(PROTECTED_ROUTES).flat(),
-    "/settings/:path*",
-    "/messages/:path*",
+    "/bookings/:path*",
+    "/favourites/:path*",
+    "/approvals/:path*",
+    "/my-listings/:path*",
+    "/notifications/:path*",
+    "/admin/:path*",
   ],
 };
