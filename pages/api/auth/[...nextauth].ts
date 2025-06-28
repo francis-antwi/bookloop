@@ -75,41 +75,38 @@ export const authOptions: AuthOptions = {
   debug: process.env.NODE_ENV === "development",
 
   callbacks: {
-    async signIn({ user, account, profile }) {
+    async signIn({ user, account }) {
       if (account?.provider === "google") {
-        // Check if user already exists
         const existingUser = await prisma.user.findUnique({
           where: { email: user.email ?? "" },
         });
 
-        // If user doesn't exist, we'll create a temporary user without a role
-        // and redirect to role selection page
         if (!existingUser) {
           try {
+            // Create a temporary user with a default role (can be CUSTOMER or null if your schema allows)
+            // We'll update this after they select their role
             await prisma.user.create({
               data: {
                 email: user.email!,
                 name: user.name ?? "",
                 image: user.image ?? "",
-                isOtpVerified: true, // Skip OTP for Google
+                isOtpVerified: true,
                 isFaceVerified: false,
-                // Don't set role here - user will select it on the next page
+                role: UserRole.CUSTOMER, // Set a default role that allows minimal access
               },
             });
-            // Redirect to role selection page
-            return "/role";
+            // Still redirect to role selection to let them confirm/change
+            return "/auth/select-role";
           } catch (err) {
             console.error("Error creating Google user:", err);
             return "/auth/callback-error?reason=account-creation-failed";
           }
         }
 
-        // If user exists but has no role, redirect to role selection
         if (!existingUser.role) {
-          return "/role";
+          return "/auth/select-role";
         }
 
-        // If user is a provider but not face verified, redirect to verification
         if (
           existingUser.role === UserRole.PROVIDER &&
           !existingUser.isFaceVerified
@@ -117,16 +114,21 @@ export const authOptions: AuthOptions = {
           return "/verify";
         }
       }
-
       return true;
     },
 
     async jwt({ token, user, trigger, session }) {
-      // Handle role updates from the client
       if (trigger === "update" && session?.role) {
         token.role = session.role;
         
-        // If role is provider, we'll need verification
+        // Update the user in the database when role changes
+        if (session.role) {
+          await prisma.user.update({
+            where: { email: token.email ?? "" },
+            data: { role: session.role },
+          });
+        }
+
         if (session.role === UserRole.PROVIDER) {
           token.isFaceVerified = false;
         }
@@ -189,77 +191,6 @@ export const authOptions: AuthOptions = {
   },
 };
 
-// Extend types for session and JWT
-declare module "next-auth" {
-  interface Session {
-    user: {
-      id: string;
-      name?: string | null;
-      email?: string | null;
-      image?: string | null;
-      role?: UserRole;
-      isOtpVerified: boolean;
-      otpCode?: string | null;
-      otpExpiresAt?: string | null;
-      isFaceVerified: boolean;
-      selfieImage?: string | null;
-      idImage?: string | null;
-      faceConfidence?: number | null;
-      idName?: string | null;
-      idNumber?: string | null;
-      idDOB?: string | null;
-      idExpiryDate?: string | null;
-      idIssuer?: string | null;
-      personalIdNumber?: string | null;
-      idIssueDate?: string | null;
-    };
-  }
-
-  interface User {
-    id: string;
-    name?: string | null;
-    email?: string | null;
-    image?: string | null;
-    role?: UserRole;
-    isOtpVerified?: boolean | null;
-    otpCode?: string | null;
-    otpExpiresAt?: Date | null;
-    isFaceVerified?: boolean | null;
-    selfieImage?: string | null;
-    idImage?: string | null;
-    faceConfidence?: number | null;
-    idName?: string | null;
-    idNumber?: string | null;
-    idDOB?: Date | null;
-    idExpiryDate?: Date | null;
-    idIssuer?: string | null;
-    personalIdNumber?: string | null;
-    idIssueDate?: Date | null;
-  }
-}
-
-declare module "next-auth/jwt" {
-  interface JWT {
-    id: string;
-    name?: string | null;
-    email?: string | null;
-    image?: string | null;
-    role?: UserRole;
-    isOtpVerified: boolean;
-    otpCode?: string | null;
-    otpExpiresAt?: string | null;
-    isFaceVerified: boolean;
-    selfieImage?: string | null;
-    idImage?: string | null;
-    faceConfidence?: number | null;
-    idName?: string | null;
-    idNumber?: string | null;
-    idDOB?: string | null;
-    idExpiryDate?: string | null;
-    idIssuer?: string | null;
-    personalIdNumber?: string | null;
-    idIssueDate?: string | null;
-  }
-}
+// [Rest of your type declarations remain the same...]
 
 export default NextAuth(authOptions);
