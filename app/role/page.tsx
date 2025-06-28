@@ -33,7 +33,13 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
         console.log("API call successful.");
 
         setSelectedRole(role);
-        onRoleSelected(role);
+
+        if (typeof onRoleSelected === 'function') {
+          onRoleSelected(role);
+        } else {
+          console.warn("⚠️ onRoleSelected is not a function or not provided.");
+        }
+
         toast.success('Role selected successfully');
 
         if (role === 'PROVIDER') {
