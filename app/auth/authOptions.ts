@@ -84,17 +84,19 @@ export const authOptions: AuthOptions = {
 
   // Secure Cookies Configuration
   cookies: {
-    sessionToken: {
-      name: `__Secure-next-auth.session-token`,
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: process.env.NODE_ENV === "production",
-        domain: process.env.NODE_ENV === "production" ? ".yourdomain.com" : undefined,
-      },
+  sessionToken: {
+    name: `__Secure-next-auth.session-token`,
+    options: {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      secure: true, // Always secure in production
+      // REMOVE or correct the domain:
+      domain: "bookloop-eight.vercel.app", // ✅ correct for Vercel deployment
     },
   },
+},
+
 
   callbacks: {
     async signIn({ user, account }) {

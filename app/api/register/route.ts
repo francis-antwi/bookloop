@@ -2,8 +2,6 @@ import bcrypt from "bcrypt";
 import prisma from "@/app/libs/prismadb";
 import { NextResponse } from "next/server";
 import { UserRole } from "@prisma/client";
-import { cookies } from "next/headers";
-import jwt from "jsonwebtoken";
 
 function parseDate(dateStr: string): Date | null {
   const parts = dateStr.split(/[\/\-\.]/).map(p => p.trim());
@@ -39,35 +37,29 @@ export async function POST(request: Request) {
       personalIdNumber,
     } = body;
 
-    // ✅ Basic required fields for all users
     if (!email || !name || !password || !role || !contactPhone) {
       return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
     }
 
-    // ✅ Validate role
     const validRoles: UserRole[] = ["CUSTOMER", "PROVIDER"];
     if (!validRoles.includes(role)) {
       return NextResponse.json({ error: "Invalid role selected." }, { status: 400 });
     }
 
-    // ✅ Email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return NextResponse.json({ error: "Invalid email format." }, { status: 400 });
     }
 
-    // ✅ Password length
     if (password.length < 8) {
       return NextResponse.json({ error: "Password must be at least 8 characters long." }, { status: 400 });
     }
 
-    // ✅ Check if email already exists
     const emailExists = await prisma.user.findUnique({ where: { email } });
     if (emailExists) {
       return NextResponse.json({ error: "Email already in use." }, { status: 409 });
     }
 
-    // ✅ Ensure phone number has been verified via OTP
     const phoneUser = await prisma.user.findFirst({
       where: { contactPhone, isOtpVerified: true },
     });
@@ -80,7 +72,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "OTP expired. Please verify again." }, { status: 403 });
     }
 
-    // ✅ If PROVIDER, require ID and face verification
     let parsedDOB = null;
     let parsedExpiry = null;
     let parsedIssueDate = null;
@@ -94,7 +85,6 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Incomplete ID information extracted." }, { status: 400 });
       }
 
-      // ✅ Parse and validate dates
       parsedDOB = idDOB ? parseDate(idDOB) : null;
       parsedExpiry = idExpiryDate ? parseDate(idExpiryDate) : null;
       parsedIssueDate = idIssueDate ? parseDate(idIssueDate) : null;
@@ -112,16 +102,14 @@ export async function POST(request: Request) {
       }
     }
 
-    // ✅ Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // ✅ Update existing OTP-verified user
     const updatedUser = await prisma.user.update({
       where: { id: phoneUser.id },
       data: {
         email,
         name,
-        hashedPassword,
+        password: hashedPassword, // ✅ CORRECT FIELD
         role,
         isFaceVerified: role === "PROVIDER" ? true : false,
         selfieImage: role === "PROVIDER" ? selfieImage : undefined,
@@ -155,32 +143,10 @@ export async function POST(request: Request) {
       },
     });
 
-    // ✅ Generate and set JWT token
-    const token = jwt.sign({ id: updatedUser.id }, process.env.JWT_SECRET!, { expiresIn: "1d" });
-
-    cookies().set("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      path: "/",
-      maxAge: 60 * 60 * 24, // 1 day
-    });
-
-    return NextResponse.json({ user: updatedUser, token }, { status: 201 });
+    return NextResponse.json({ success: true, user: updatedUser }, { status: 201 });
 
   } catch (error: any) {
-    console.error("🔴 Registration error:", {
-      message: error?.message,
-      name: error?.name,
-      code: error?.code,
-      meta: error?.meta,
-      stack: error?.stack,
-    });
-
-    if (error.code === "P2002" && error.meta?.target?.includes("email")) {
-      return NextResponse.json({ error: "Email already exists." }, { status: 409 });
-    }
-
+    console.error("🔴 Registration error:", error);
     return NextResponse.json({ error: "Internal server error." }, { status: 500 });
   }
 }
