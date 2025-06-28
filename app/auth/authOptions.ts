@@ -7,14 +7,18 @@ import bcrypt from "bcrypt";
 import { UserRole } from "@prisma/client";
 
 export const authOptions: AuthOptions = {
-  adapter: PrismaAdapter(prisma),
-
+  adapter: {
+    ...PrismaAdapter(prisma),
+    async createUser(profile) {
+      // Override default user creation to delay user creation
+      return Promise.resolve(null as any); // prevent default user creation
+    },
+  },
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
-
     CredentialsProvider({
       name: "credentials",
       credentials: {
@@ -57,52 +61,60 @@ export const authOptions: AuthOptions = {
 
         return {
           ...user,
-          isOtpVerified: user.isOtpVerified ?? true,
-          isFaceVerified: user.isFaceVerified ?? false,
         };
       },
     }),
   ],
-
   pages: {
     signIn: "/",
-    signOut: "/auth/signout",
-    error: "/auth", // Display errors on this page
-    verifyRequest: "/auth/verify-request",
-    newUser: "/role", // New users must select role
+    newUser: "/role", // unused due to adapter override
+    error: "/auth",
   },
-
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60,
-    updateAge: 24 * 60 * 60,
   },
-
   jwt: {
     maxAge: 30 * 24 * 60 * 60,
   },
-
   secret: process.env.NEXTAUTH_SECRET,
-  debug: process.env.NODE_ENV === "development",
   trustHost: true,
-
-  cookies: {
-    sessionToken: {
-      name: `__Secure-next-auth.session-token`,
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: true,
-        domain: "bookloop-eight.vercel.app", // adjust if necessary
-      },
-    },
-  },
-
   callbacks: {
+    async signIn({ user, account }) {
+      if (account?.provider === "google") {
+        const existingUser = await prisma.user.findUnique({
+          where: { email: user.email ?? "" },
+        });
+
+        if (!existingUser) {
+          // defer user creation until after role selection
+          return "/auth?error=ROLE_SELECTION_REQUIRED";
+        }
+
+        if (!existingUser.role) {
+          return "/auth?error=ROLE_SELECTION_REQUIRED";
+        }
+
+        if (
+          existingUser.role === UserRole.PROVIDER &&
+          !existingUser.isFaceVerified
+        ) {
+          return "/auth?error=PROVIDER_VERIFICATION_REQUIRED";
+        }
+      }
+
+      return true;
+    },
+
     async jwt({ token, user, trigger, session }) {
-      if (Date.now() < (token.exp as number) * 1000 - 5 * 60 * 1000) {
-        return token;
+      if (user) {
+        token = {
+          ...token,
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          image: user.image,
+          role: user.role,
+        };
       }
 
       if (trigger === "update" && session?.role) {
@@ -111,73 +123,23 @@ export const authOptions: AuthOptions = {
           where: { email: token.email ?? "" },
           data: { role: session.role },
         });
-
-        if (session.role === UserRole.PROVIDER) {
-          token.isFaceVerified = false;
-        }
-      }
-
-      if (user) {
-        token = {
-          ...token,
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          image: user.image,
-          role: user.role,
-          isOtpVerified: user.isOtpVerified ?? true,
-          otpCode: user.otpCode ?? null,
-          otpExpiresAt: user.otpExpiresAt?.toISOString() ?? null,
-          isFaceVerified: user.isFaceVerified ?? false,
-          ...(user.role === UserRole.PROVIDER && {
-            selfieImage: user.selfieImage ?? null,
-            idImage: user.idImage ?? null,
-            faceConfidence: user.faceConfidence ?? null,
-            idName: user.idName ?? null,
-            idNumber: user.idNumber ?? null,
-            idDOB: user.idDOB?.toISOString() ?? null,
-            idExpiryDate: user.idExpiryDate?.toISOString() ?? null,
-            idIssuer: user.idIssuer ?? null,
-            personalIdNumber: user.personalIdNumber ?? null,
-            idIssueDate: user.idIssueDate?.toISOString() ?? null,
-          }),
-        };
       }
 
       return token;
     },
 
     async session({ session, token }) {
-      if (session.user) {
-        session.user = {
-          ...session.user,
-          id: token.id as string,
-          name: token.name ?? null,
-          email: token.email ?? null,
-          image: token.image ?? null,
-          role: token.role as UserRole,
-          isOtpVerified: token.isOtpVerified,
-          otpCode: token.otpCode,
-          otpExpiresAt: token.otpExpiresAt,
-          isFaceVerified: token.isFaceVerified,
-          ...(token.role === UserRole.PROVIDER && {
-            selfieImage: token.selfieImage,
-            idImage: token.idImage,
-            faceConfidence: token.faceConfidence,
-            idName: token.idName,
-            idNumber: token.idNumber,
-            idDOB: token.idDOB,
-            idExpiryDate: token.idExpiryDate,
-            idIssuer: token.idIssuer,
-            personalIdNumber: token.personalIdNumber,
-            idIssueDate: token.idIssueDate,
-          }),
-        };
-      }
+      session.user = {
+        ...session.user,
+        id: token.id,
+        email: token.email,
+        name: token.name,
+        image: token.image,
+        role: token.role,
+      };
 
       return session;
     },
   },
 };
-
 export default NextAuth(authOptions);

@@ -5,11 +5,9 @@ import prisma from "@/app/libs/prismadb";
 import { UserRole } from "@prisma/client";
 
 export async function POST(req: Request) {
-  // 🐛 Debug: Log cookies
   const cookieStore = cookies();
   console.log("🍪 Incoming Cookies:", cookieStore.getAll());
 
-  // 🐛 Debug: Get token
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
   console.log("🔐 JWT Token:", token);
 
@@ -43,21 +41,31 @@ export async function POST(req: Request) {
   }
 
   try {
-    const currentUser = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: { email },
-      select: {
-        role: true,
-        isFaceVerified: true,
-        selfieImage: true,
-        idImage: true,
-      },
     });
 
-    if (!currentUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    if (!user) {
+      // 🆕 User doesn't exist yet (first-time Google login)
+      user = await prisma.user.create({
+        data: {
+          email,
+          name: token.name ?? "",
+          image: token.picture ?? "",
+          isOtpVerified: true,
+          isFaceVerified: false,
+          role: role as UserRole,
+        },
+      });
+
+      return NextResponse.json(
+        { success: true, message: "User created and role assigned" },
+        { status: 201 }
+      );
     }
 
-    if (currentUser.role === role) {
+    // ✅ User exists — check role
+    if (user.role === role) {
       return NextResponse.json(
         { success: true, message: "Role already set" },
         { status: 200 }
@@ -66,9 +74,9 @@ export async function POST(req: Request) {
 
     if (role === "PROVIDER") {
       if (
-        !currentUser.isFaceVerified ||
-        !currentUser.selfieImage ||
-        !currentUser.idImage
+        !user.isFaceVerified ||
+        !user.selfieImage ||
+        !user.idImage
       ) {
         return NextResponse.json(
           {
@@ -81,6 +89,7 @@ export async function POST(req: Request) {
       }
     }
 
+    // ✅ Update user role
     await prisma.user.update({
       where: { email },
       data: { role: role as UserRole },
