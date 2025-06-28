@@ -1,4 +1,3 @@
-import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import NextAuth, { AuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
@@ -7,8 +6,7 @@ import bcrypt from "bcrypt";
 import { UserRole } from "@prisma/client";
 
 export const authOptions: AuthOptions = {
-  adapter: PrismaAdapter(prisma),
-
+  // ❌ DO NOT use PrismaAdapter to avoid auto user creation
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -39,21 +37,12 @@ export const authOptions: AuthOptions = {
           user.hashedPassword
         );
 
-        if (!isCorrectPassword) {
-          throw new Error("Invalid credentials");
-        }
-
-        if (!user.isOtpVerified) {
-          throw new Error("Phone verification is required before signing in.");
-        }
-
+        if (!isCorrectPassword) throw new Error("Invalid credentials");
+        if (!user.isOtpVerified) throw new Error("Phone verification required");
         if (user.role === UserRole.PROVIDER && !user.isFaceVerified) {
-          throw new Error("Face verification is required for service providers.");
+          throw new Error("Face verification required for providers");
         }
-
-        if (!user.role) {
-          throw new Error("Account is missing a role.");
-        }
+        if (!user.role) throw new Error("Missing account role");
 
         return {
           ...user,
@@ -67,9 +56,9 @@ export const authOptions: AuthOptions = {
   pages: {
     signIn: "/",
     signOut: "/auth/signout",
-    error: "/auth", // Display errors on this page
+    error: "/auth",
     verifyRequest: "/auth/verify-request",
-    newUser: "/role", // New users must select role
+    newUser: "/role", // handled manually via callback
   },
 
   session: {
@@ -94,17 +83,41 @@ export const authOptions: AuthOptions = {
         sameSite: "lax",
         path: "/",
         secure: true,
-        domain: "bookloop-eight.vercel.app", // adjust if necessary
+        domain: "bookloop-eight.vercel.app", // ✅ Update for prod
       },
     },
   },
 
   callbacks: {
-    async jwt({ token, user, trigger, session }) {
-      if (Date.now() < (token.exp as number) * 1000 - 5 * 60 * 1000) {
-        return token;
+    async signIn({ user, account }) {
+      if (account?.provider === "google") {
+        const existingUser = await prisma.user.findUnique({
+          where: { email: user.email ?? "" },
+        });
+
+        if (!existingUser) {
+          // 🚨 Block login and redirect to /role
+          throw new Error("redirect-role");
+        }
+
+        if (!existingUser.isOtpVerified) {
+          throw new Error("Phone verification required.");
+        }
+
+        if (
+          existingUser.role === UserRole.PROVIDER &&
+          !existingUser.isFaceVerified
+        ) {
+          throw new Error("Face verification required.");
+        }
+
+        return true; // ✅ Login allowed
       }
 
+      return true;
+    },
+
+    async jwt({ token, user, trigger, session }) {
       if (trigger === "update" && session?.role) {
         token.role = session.role;
         await prisma.user.update({
