@@ -1,22 +1,21 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/auth/authOptions";
+import { getToken } from "next-auth/jwt";
 import prisma from "@/app/libs/prismadb";
 import { UserRole } from "@prisma/client";
 
 export async function POST(req: Request) {
-  const session = await getServerSession({ req, ...authOptions });
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
 
-
-  if (!session?.user?.email) {
+  if (!token?.email) {
     console.error("❌ No session found");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const email = token.email;
   const body = await req.json();
   const { role } = body;
 
-  console.log("🔹 Session email:", session.user.email);
+  console.log("🔹 Session email:", email);
   console.log("🔹 Requested role:", role);
 
   if (!role) {
@@ -35,7 +34,7 @@ export async function POST(req: Request) {
 
   try {
     const currentUser = await prisma.user.findUnique({
-      where: { email: session.user.email },
+      where: { email },
       select: {
         role: true,
         isFaceVerified: true,
@@ -73,7 +72,7 @@ export async function POST(req: Request) {
     }
 
     await prisma.user.update({
-      where: { email: session.user.email },
+      where: { email },
       data: { role: role as UserRole },
     });
 
