@@ -6,17 +6,20 @@ export default withAuth(
     const { pathname } = req.nextUrl;
     const token = req.nextauth.token;
 
-    // ⛔ Redirect if user has no role
-    if (!token?.role && pathname !== "/select-role") {
-      return NextResponse.redirect(new URL("/select-role", req.url));
+    // ✅ Allow unauthenticated access to /role, /verify, /auth/error
+    if (
+      !token?.role &&
+      !["/role", "/verify", "/auth"].includes(pathname)
+    ) {
+      return NextResponse.redirect(new URL("/role", req.url));
     }
 
-    // ⛔ Block non-ADMIN from /admin
+    // ⛔ Block non-ADMIN users from /admin
     if (pathname.startsWith("/admin") && token?.role !== "ADMIN") {
       return NextResponse.redirect(new URL("/403", req.url));
     }
 
-    // ⛔ Block non-PROVIDER from /my-listings or /approvals
+    // ⛔ Block non-PROVIDER users from provider-only pages
     if (
       (pathname.startsWith("/my-listings") || pathname.startsWith("/approvals")) &&
       token?.role !== "PROVIDER"
@@ -28,7 +31,7 @@ export default withAuth(
   },
   {
     callbacks: {
-      authorized: ({ token }) => !!token, // Require login
+      authorized: ({ token }) => !!token, // ✅ Ensure user is logged in
     },
   }
 );
@@ -41,6 +44,6 @@ export const config = {
     "/my-listings/:path*",
     "/notifications/:path*",
     "/admin/:path*",
-    "/role", // ensure it's accessible without role
+  
   ],
 };
