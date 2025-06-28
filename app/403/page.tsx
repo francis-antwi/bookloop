@@ -1,4 +1,3 @@
-// app/403/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';

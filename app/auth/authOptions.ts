@@ -1,7 +1,8 @@
+
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
-import NextAuth, { AuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
+import { AuthOptions } from "next-auth";
 import prisma from "@/app/libs/prismadb";
 import bcrypt from "bcrypt";
 import { UserRole } from "@prisma/client";
@@ -53,20 +54,14 @@ export const authOptions: AuthOptions = {
           throw new Error("Account is missing a role.");
         }
 
-        return {
-          ...user,
-          isOtpVerified: user.isOtpVerified ?? true,
-          isFaceVerified: user.isFaceVerified ?? false,
-        };
+        return user;
       },
     }),
   ],
   pages: {
     signIn: "/",
-    signOut: "/auth/signout",
-    error: "/auth/",
-    verifyRequest: "/auth/verify-request",
-    newUser: "/role", // optional override
+    newUser: "/role",
+    error: "/auth",
   },
   session: {
     strategy: "jwt",
@@ -82,7 +77,6 @@ export const authOptions: AuthOptions = {
         });
 
         if (!existingUser) {
-          // Fix: Provide required role ("CUSTOMER") to satisfy schema
           await prisma.user.create({
             data: {
               email: user.email!,
@@ -90,23 +84,18 @@ export const authOptions: AuthOptions = {
               image: user.image ?? "",
               isOtpVerified: true,
               isFaceVerified: false,
-              role: "CUSTOMER", // Required by schema
+              role: null, // Force role selection after login
             },
           });
-
-          // Still ask them to confirm or switch role
-          return "/auth/?error=ROLE_SELECTION_REQUIRED";
+          return "/role"; // Redirect new users to role selection
         }
 
-        if (!existingUser.role) {
-          return "/auth/?error=ROLE_SELECTION_REQUIRED";
-        }
-
+        if (!existingUser.role) return "/role";
         if (
           existingUser.role === UserRole.PROVIDER &&
           !existingUser.isFaceVerified
         ) {
-          return "/auth/?error=PROVIDER_VERIFICATION_REQUIRED";
+          return "/verify";
         }
       }
 
@@ -180,9 +169,8 @@ export const authOptions: AuthOptions = {
           session.user.idIssueDate = token.idIssueDate;
         }
       }
+
       return session;
     },
   },
 };
-
-export default NextAuth(authOptions);

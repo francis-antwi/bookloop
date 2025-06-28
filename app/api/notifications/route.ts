@@ -1,7 +1,8 @@
-import { authOptions } from "@/pages/api/auth/[...nextauth]";
+
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import prisma from "@/app/libs/prismadb";
+import { authOptions } from "@/app/auth/authOptions";
 
 
 // GET /api/notifications
