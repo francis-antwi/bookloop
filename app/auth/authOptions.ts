@@ -1,4 +1,3 @@
-
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
@@ -77,20 +76,26 @@ export const authOptions: AuthOptions = {
         });
 
         if (!existingUser) {
-          await prisma.user.create({
-            data: {
-              email: user.email!,
-              name: user.name ?? "",
-              image: user.image ?? "",
-              isOtpVerified: true,
-              isFaceVerified: false,
-              role: null, // Force role selection after login
-            },
-          });
-          return "/role"; // Redirect new users to role selection
+          try {
+            await prisma.user.create({
+              data: {
+                email: user.email!,
+                name: user.name ?? "",
+                image: user.image ?? "",
+                isOtpVerified: true,
+                isFaceVerified: false,
+                role: null, // Nullable in Prisma schema
+              },
+            });
+            return "/role";
+          } catch (err) {
+            console.error("❌ Error creating user:", err);
+            return "/auth?error=ACCOUNT_CREATION_FAILED";
+          }
         }
 
         if (!existingUser.role) return "/role";
+
         if (
           existingUser.role === UserRole.PROVIDER &&
           !existingUser.isFaceVerified
@@ -103,7 +108,12 @@ export const authOptions: AuthOptions = {
     },
 
     async jwt({ token, user, trigger, session }) {
-      if (trigger === "update" && session?.role) {
+      // Update role in DB only if changed
+      if (
+        trigger === "update" &&
+        session?.role &&
+        session.role !== token.role
+      ) {
         token.role = session.role;
 
         await prisma.user.update({
