@@ -8,11 +8,13 @@ import { UserRole } from "@prisma/client";
 
 export const authOptions: AuthOptions = {
   adapter: PrismaAdapter(prisma),
+
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
+
     CredentialsProvider({
       name: "credentials",
       credentials: {
@@ -61,42 +63,41 @@ export const authOptions: AuthOptions = {
       },
     }),
   ],
+
   pages: {
     signIn: "/",
     signOut: "/auth/signout",
-    error: "/auth/",
+    error: "/auth", // Display errors on this page
     verifyRequest: "/auth/verify-request",
-    newUser: "/role",
+    newUser: "/role", // New users must select role
   },
-  
-  // Enhanced Session Configuration
+
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 days
-    updateAge: 24 * 60 * 60, // Update session daily
+    maxAge: 30 * 24 * 60 * 60,
+    updateAge: 24 * 60 * 60,
   },
+
   jwt: {
-    maxAge: 30 * 24 * 60 * 60, // 30 days (matches session)
+    maxAge: 30 * 24 * 60 * 60,
   },
+
   secret: process.env.NEXTAUTH_SECRET,
   debug: process.env.NODE_ENV === "development",
-  trustHost: true, // Required for some deployment environments
+  trustHost: true,
 
-  // Secure Cookies Configuration
   cookies: {
-  sessionToken: {
-    name: `__Secure-next-auth.session-token`,
-    options: {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      secure: true, // Always secure in production
-      // REMOVE or correct the domain:
-      domain: "bookloop-eight.vercel.app", // ✅ correct for Vercel deployment
+    sessionToken: {
+      name: `__Secure-next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: true,
+        domain: "bookloop-eight.vercel.app", // adjust if necessary
+      },
     },
   },
-},
-
 
   callbacks: {
     async signIn({ user, account }) {
@@ -106,6 +107,7 @@ export const authOptions: AuthOptions = {
         });
 
         if (!existingUser) {
+          // New Google user: create without role and redirect to role selection
           await prisma.user.create({
             data: {
               email: user.email!,
@@ -113,21 +115,22 @@ export const authOptions: AuthOptions = {
               image: user.image ?? "",
               isOtpVerified: true,
               isFaceVerified: false,
-              role: "CUSTOMER",
+              // Do not assign role yet
             },
           });
-          return "/auth/?error=ROLE_SELECTION_REQUIRED";
+
+          return "/role";
         }
 
         if (!existingUser.role) {
-          return "/auth/?error=ROLE_SELECTION_REQUIRED";
+          return "/role";
         }
 
         if (
           existingUser.role === UserRole.PROVIDER &&
           !existingUser.isFaceVerified
         ) {
-          return "/auth/?error=PROVIDER_VERIFICATION_REQUIRED";
+          return "/verify"; // redirect to face/ID verification
         }
       }
 
@@ -135,7 +138,6 @@ export const authOptions: AuthOptions = {
     },
 
     async jwt({ token, user, trigger, session }) {
-      // Automatic session refresh logic
       if (Date.now() < (token.exp as number) * 1000 - 5 * 60 * 1000) {
         return token;
       }
@@ -209,6 +211,7 @@ export const authOptions: AuthOptions = {
           }),
         };
       }
+
       return session;
     },
   },
