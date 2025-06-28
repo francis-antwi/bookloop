@@ -6,8 +6,8 @@ export default withAuth(
     const { pathname } = req.nextUrl;
     const token = req.nextauth.token;
 
-    // ⛔ Redirect users who have no role, except for unprotected pages
-    if (!token?.role) {
+    // ⛔ Redirect users who have no role (except when on /role or /verify to allow them to finish setup)
+    if (!token?.role && !["/role", "/verify", "/auth/error"].includes(pathname)) {
       return NextResponse.redirect(new URL("/role", req.url));
     }
 
@@ -16,7 +16,7 @@ export default withAuth(
       return NextResponse.redirect(new URL("/403", req.url));
     }
 
-    // ⛔ Block non-PROVIDER users from /my-listings or /approvals
+    // ⛔ Block non-PROVIDER users from provider-only areas
     if (
       (pathname.startsWith("/my-listings") || pathname.startsWith("/approvals")) &&
       token?.role !== "PROVIDER"
@@ -28,11 +28,12 @@ export default withAuth(
   },
   {
     callbacks: {
-      authorized: ({ token }) => !!token, // require login
+      authorized: ({ token }) => !!token, // ✅ require login
     },
   }
 );
 
+// ✅ Pages that require authentication and token
 export const config = {
   matcher: [
     "/bookings/:path*",
@@ -41,6 +42,8 @@ export const config = {
     "/my-listings/:path*",
     "/notifications/:path*",
     "/admin/:path*",
-    // ❌ do NOT include /role, /verify, or /auth — these stay fully public
+    "/role",
+    "/verify",
+    "/auth/:path*", // includes /auth/error etc.
   ],
 };
