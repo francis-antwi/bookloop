@@ -4,18 +4,25 @@ import prisma from "@/app/libs/prismadb";
 import { UserRole } from "@prisma/client";
 
 export async function POST(req: Request) {
+  // 🔐 Extract token (works in App Router)
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
 
-  if (!token?.email) {
-    console.error("❌ No session found");
+  if (!token || !token.email) {
+    console.error("❌ No session or token found");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const email = token.email;
-  const body = await req.json();
-  const { role } = body;
+  let role: string;
 
-  console.log("🔹 Session email:", email);
+  try {
+    const body = await req.json();
+    role = body.role;
+  } catch (error) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  console.log("🔹 Token email:", email);
   console.log("🔹 Requested role:", role);
 
   if (!role) {
@@ -24,10 +31,7 @@ export async function POST(req: Request) {
 
   if (!["CUSTOMER", "PROVIDER"].includes(role)) {
     return NextResponse.json(
-      {
-        error: "Invalid role",
-        message: "Allowed roles: CUSTOMER, PROVIDER",
-      },
+      { error: "Invalid role", message: "Allowed roles: CUSTOMER, PROVIDER" },
       { status: 400 }
     );
   }
@@ -83,10 +87,7 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("❌ Role update error:", error);
     return NextResponse.json(
-      {
-        error: "Internal server error",
-        message: "Failed to update role",
-      },
+      { error: "Internal server error", message: "Failed to update role" },
       { status: 500 }
     );
   }
