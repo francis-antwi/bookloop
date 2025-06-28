@@ -96,7 +96,7 @@ export const authOptions: AuthOptions = {
               },
             });
             // Still redirect to role selection to let them confirm/change
-            return "/auth/select-role";
+            return "/role";
           } catch (err) {
             console.error("Error creating Google user:", err);
             return "/auth/callback-error?reason=account-creation-failed";
