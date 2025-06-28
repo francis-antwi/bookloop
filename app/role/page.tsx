@@ -19,18 +19,18 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
     if (selectedRole === role) return;
     
     setIsLoading(true);
-    try {
-      await axios.post('/api/role', { role });
-      await update({ role });
-      setSelectedRole(role);
-      onRoleSelected(role);
-      toast.success('Role selected successfully');
-    } catch {
-      toast.error('Failed to select role');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+   try {
+  await axios.post('/api/role', { role }, { withCredentials: true });
+  await update({ role });
+  setSelectedRole(role);
+  onRoleSelected(role);
+  toast.success('Role selected successfully');
+} catch {
+  toast.error('Failed to select role');
+} finally {
+  setIsLoading(false);
+}
+
 
   const roles = [
     { 
