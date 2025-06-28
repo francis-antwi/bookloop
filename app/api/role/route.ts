@@ -1,11 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import prisma from "@/app/libs/prismadb";
 import { UserRole } from "@prisma/client";
 
-export async function POST(req: Request) {
-  // ✅ Use req directly with getToken
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+export async function POST(req: NextRequest) {
+  const token = await getToken({
+    req,
+    secret: process.env.NEXTAUTH_SECRET,
+  });
 
   if (!token || !token.email) {
     console.error("❌ No session or token found");
@@ -18,22 +20,22 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     role = body.role;
-  } catch {
+  } catch (error) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  if (!role || !["CUSTOMER", "PROVIDER"].includes(role)) {
-    return NextResponse.json(
-      { error: "Invalid or missing role", message: "Allowed roles: CUSTOMER, PROVIDER" },
-      { status: 400 }
-    );
+  if (!role) {
+    return NextResponse.json({ error: "Role is required" }, { status: 400 });
+  }
+
+  if (!["CUSTOMER", "PROVIDER"].includes(role)) {
+    return NextResponse.json({ error: "Invalid role" }, { status: 400 });
   }
 
   try {
     let user = await prisma.user.findUnique({ where: { email } });
 
     if (!user) {
-      // 🆕 First-time OAuth user
       user = await prisma.user.create({
         data: {
           email,
@@ -45,29 +47,16 @@ export async function POST(req: Request) {
         },
       });
 
-      return NextResponse.json(
-        { success: true, message: "User created and role assigned" },
-        { status: 201 }
-      );
+      return NextResponse.json({ success: true, message: "User created" }, { status: 201 });
     }
 
     if (user.role === role) {
-      return NextResponse.json(
-        { success: true, message: "Role already set" },
-        { status: 200 }
-      );
+      return NextResponse.json({ success: true, message: "Role already set" }, { status: 200 });
     }
 
-    if (
-      role === "PROVIDER" &&
-      (!user.isFaceVerified || !user.selfieImage || !user.idImage)
-    ) {
+    if (role === "PROVIDER" && (!user.isFaceVerified || !user.selfieImage || !user.idImage)) {
       return NextResponse.json(
-        {
-          error: "Verification required",
-          message:
-            "You must complete identity verification to become a provider",
-        },
+        { error: "Verification required", message: "Complete identity verification to become a provider" },
         { status: 403 }
       );
     }
@@ -77,15 +66,9 @@ export async function POST(req: Request) {
       data: { role: role as UserRole },
     });
 
-    return NextResponse.json(
-      { success: true, message: "Role updated successfully" },
-      { status: 200 }
-    );
+    return NextResponse.json({ success: true, message: "Role updated" }, { status: 200 });
   } catch (error) {
     console.error("❌ Role update error:", error);
-    return NextResponse.json(
-      { error: "Internal server error", message: "Failed to update role" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
