@@ -6,6 +6,11 @@ export default withAuth(
     const { pathname } = req.nextUrl;
     const token = req.nextauth.token;
 
+    // ⛔ Redirect if user has no role
+    if (!token?.role && pathname !== "/select-role") {
+      return NextResponse.redirect(new URL("/select-role", req.url));
+    }
+
     // ⛔ Block non-ADMIN from /admin
     if (pathname.startsWith("/admin") && token?.role !== "ADMIN") {
       return NextResponse.redirect(new URL("/403", req.url));
@@ -36,5 +41,6 @@ export const config = {
     "/my-listings/:path*",
     "/notifications/:path*",
     "/admin/:path*",
+    "/role", // ensure it's accessible without role
   ],
 };
