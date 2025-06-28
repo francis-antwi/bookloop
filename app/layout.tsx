@@ -8,7 +8,8 @@ import Script from "next/script";
 import { ErrorBoundary } from "react-error-boundary";
 import { getServerSession } from "next-auth";
 import { authOptions } from "./auth/authOptions";
-import { getCurrentUser } from "./actions/getCurrentUser";
+import getCurrentUser from "./actions/getCurrentUser";
+
 
 const font = Nunito({ subsets: ["latin"] });
 

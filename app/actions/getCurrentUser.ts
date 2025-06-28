@@ -1,8 +1,9 @@
+
 import { getServerSession } from "next-auth/next";
 import { getToken } from "next-auth/jwt";
 import { cookies } from "next/headers";
 import prisma from "@/app/libs/prismadb";
-import { authOptions } from "../auth/authOptions";
+import { authOptions } from "../auth/authOptions"; 
 
 interface SessionUser {
   email?: string | null;
@@ -20,7 +21,10 @@ interface SanitizedUser {
   image: string | null;
   createdAt: string;
   updatedAt: string;
-  // Add other user fields as needed
+  // Add other user fields like 'role', 'isOtpVerified', 'isFaceVerified' as needed
+  role?: string; // Assuming UserRole is a string
+  isOtpVerified?: boolean;
+  isFaceVerified?: boolean;
 }
 
 export async function getSession() {
@@ -38,9 +42,10 @@ export default async function getCurrentUser(): Promise<SanitizedUser | null> {
     const session = await getSession();
     const sessionEmail = session?.user?.email;
 
-    // Fallback to token if no session email
-    const tokenEmail = !sessionEmail 
-      ? (await getFallbackToken())?.email 
+    // Fallback to token if no session email is available
+    // Note: getToken can only be used in server-side contexts like API routes or getServerSideProps/Server Components
+    const tokenEmail = !sessionEmail
+      ? (await getFallbackToken())?.email
       : null;
 
     const email = sessionEmail || tokenEmail;
@@ -49,11 +54,25 @@ export default async function getCurrentUser(): Promise<SanitizedUser | null> {
     // Fetch user from database
     const currentUser = await prisma.user.findUnique({
       where: { email },
+      // Include any other fields you expect to return to the client
+      // For example, if 'role' is part of SanitizedUser, ensure it's selected here
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        emailVerified: true,
+        image: true,
+        createdAt: true,
+        updatedAt: true,
+        role: true, // Assuming you need the role in the client
+        isOtpVerified: true,
+        isFaceVerified: true,
+      },
     });
 
     if (!currentUser) return null;
 
-    // Sanitize and format dates
+    // Sanitize and format dates, and include other relevant user data
     return sanitizeUser(currentUser);
   } catch (error) {
     console.error("Error getting current user:", error);
@@ -75,10 +94,17 @@ async function getFallbackToken(): Promise<TokenUser | null> {
 }
 
 function sanitizeUser(user: any): SanitizedUser {
+  // Ensure all properties in SanitizedUser are handled
   return {
-    ...user,
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    emailVerified: user.emailVerified?.toISOString() || null,
+    image: user.image,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
-    emailVerified: user.emailVerified?.toISOString() || null,
+    role: user.role, // Include role
+    isOtpVerified: user.isOtpVerified,
+    isFaceVerified: user.isFaceVerified,
   };
 }
