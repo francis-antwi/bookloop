@@ -95,18 +95,18 @@ export const authOptions: AuthOptions = {
           });
 
           // Still ask them to confirm or switch role
-          return "/auth/error?error=ROLE_SELECTION_REQUIRED";
+          return "/auth/?error=ROLE_SELECTION_REQUIRED";
         }
 
         if (!existingUser.role) {
-          return "/auth/error?error=ROLE_SELECTION_REQUIRED";
+          return "/auth/?error=ROLE_SELECTION_REQUIRED";
         }
 
         if (
           existingUser.role === UserRole.PROVIDER &&
           !existingUser.isFaceVerified
         ) {
-          return "/auth/error?error=PROVIDER_VERIFICATION_REQUIRED";
+          return "/auth/?error=PROVIDER_VERIFICATION_REQUIRED";
         }
       }
 
