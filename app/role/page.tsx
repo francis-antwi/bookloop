@@ -20,21 +20,31 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
 
     setIsLoading(true);
     try {
-      await axios.post('/api/role', { role }, { withCredentials: true });
-      await update({ role });
+      const response = await axios.post('/api/role', { role }, { withCredentials: true });
+      await update({ role }); // update session
 
       setSelectedRole(role);
       onRoleSelected(role);
       toast.success('Role selected successfully');
 
-      // ✅ Redirect logic based on role
+      // ✅ Redirect based on role
       if (role === 'PROVIDER') {
         window.location.href = '/verify';
       } else {
         window.location.href = '/';
       }
-    } catch {
-      toast.error('Failed to select role');
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const message = err?.response?.data?.message || 'Failed to select role';
+
+      toast.error(message);
+
+      // Redirect to /verify if verification is required
+      if (status === 403 && err?.response?.data?.error === 'Verification required') {
+        setTimeout(() => {
+          window.location.href = '/verify';
+        }, 1000);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -85,16 +95,14 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
               relative w-full p-5 rounded-xl text-left transition-all duration-300 
               transform hover:scale-[1.02] active:scale-[0.98]
               border-2 shadow-sm hover:shadow-md
-              ${
-                selectedRole === role.value
-                  ? `${role.selectedBorder} ${role.selectedBg} shadow-lg`
-                  : `${role.border} bg-white hover:${role.gradient}`
+              ${selectedRole === role.value
+                ? `${role.selectedBorder} ${role.selectedBg} shadow-lg`
+                : `${role.border} bg-white hover:${role.gradient}`
               }
               ${isLoading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}
               group
             `}
           >
-            {/* Content */}
             <div className="flex items-start justify-between">
               <div className="flex items-start space-x-3">
                 <div className="text-2xl mt-1">{role.icon}</div>
@@ -118,7 +126,6 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
               </div>
             </div>
 
-            {/* Selected Indicator Bar */}
             {selectedRole === role.value && (
               <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-b-xl" />
             )}
