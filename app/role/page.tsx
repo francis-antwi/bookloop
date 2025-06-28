@@ -128,9 +128,6 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
       {/* Footer */}
       {selectedRole && (
         <div className="text-center pt-4 border-t border-gray-100">
-          <p className="text-sm text-gray-500">
-            You can change your role anytime in settings
-          </p>
         </div>
       )}
     </div>
