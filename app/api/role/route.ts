@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
+import { cookies } from "next/headers";
 import prisma from "@/app/libs/prismadb";
 import { UserRole } from "@prisma/client";
 
 export async function POST(req: Request) {
-  // 🔐 Extract token (works in App Router)
+  // 🐛 Debug: Log cookies
+  const cookieStore = cookies();
+  console.log("🍪 Incoming Cookies:", cookieStore.getAll());
+
+  // 🐛 Debug: Get token
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  console.log("🔐 JWT Token:", token);
 
   if (!token || !token.email) {
     console.error("❌ No session or token found");
