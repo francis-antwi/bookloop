@@ -1,9 +1,9 @@
-
+// src/app/actions/getCurrentUser.ts
 import { getServerSession } from "next-auth/next";
 import { getToken } from "next-auth/jwt";
 import { cookies } from "next/headers";
 import prisma from "@/app/libs/prismadb";
-import { authOptions } from "../auth/authOptions"; 
+import { authOptions } from "../auth/authOptions"; // Ensure this path is correct relative to this file
 
 interface SessionUser {
   email?: string | null;
@@ -73,7 +73,8 @@ export default async function getCurrentUser(): Promise<SanitizedUser | null> {
     if (!currentUser) return null;
 
     // Sanitize and format dates, and include other relevant user data
-    return sanitizeUser(currentUser);
+    // New: Aggressively serialize the user object to ensure no non-JSON-serializable data is passed
+    return JSON.parse(JSON.stringify(sanitizeUser(currentUser)));
   } catch (error) {
     console.error("Error getting current user:", error);
     return null;
