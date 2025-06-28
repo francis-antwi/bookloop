@@ -11,7 +11,7 @@ interface RoleSelectorProps {
 }
 
 const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
-  const { data: session } = useSession(); // removed 'update'
+  const { data: session } = useSession();
   const [isLoading, setIsLoading] = useState(false);
   const [selectedRole, setSelectedRole] = useState(session?.user?.role || null);
 
@@ -32,13 +32,10 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
       if (response.status >= 200 && response.status < 300) {
         console.log("API call successful.");
 
-        // Removed: await update({ role });
-
         setSelectedRole(role);
         onRoleSelected(role);
         toast.success('Role selected successfully');
 
-        // Redirect after success
         if (role === 'PROVIDER') {
           console.log("Redirecting to /verify...");
           window.location.href = '/verify';
@@ -52,12 +49,22 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
         toast.error(message);
       }
     } catch (err: any) {
-      console.error("❌ An error occurred during role selection:", err);
-      console.error("Error response status:", err?.response?.status);
-      console.error("Error response data:", err?.response?.data);
+      console.error("❌ An error occurred during role selection or session update:");
+
+      if (err instanceof Error) {
+        console.error("Error message:", err.message);
+        console.error("Stack trace:", err.stack);
+      }
+
+      if (err?.response) {
+        console.error("Error response status:", err.response.status);
+        console.error("Error response data:", err.response.data);
+      } else {
+        console.error("Full error object:", err);
+      }
 
       const status = err?.response?.status;
-      const message = err?.response?.data?.message || 'Failed to select role';
+      const message = err?.response?.data?.message || err?.message || 'Failed to select role';
 
       toast.error(message);
 
