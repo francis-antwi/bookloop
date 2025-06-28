@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import cloudinary from "cloudinary";
 import axios from "axios";
 import sharp from "sharp";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/auth/authOptions";
+import prisma from "@/app/libs/prismadb";
 
 // ========== Cloudinary Config ==========
 cloudinary.v2.config({
@@ -51,11 +54,10 @@ const ID_KEYWORDS = ["passport", "driver", "license", "identity", "id card", "gh
 
 // ========== Utilities ==========
 const cleanText = (text: string): string =>
-  text
-    .replace(/[^\x00-\x7F\r\n]/g, " ")
-    .replace(/REPI[\\]?BLIC|REPIBLIC/gi, "REPUBLIC")
-    .replace(/[^a-zA-Z0-9\/\-\s]/g, " ")
-    .trim();
+  text.replace(/[^\x00-\x7F\r\n]/g, " ")
+      .replace(/REPI[\\]?BLIC|REPIBLIC/gi, "REPUBLIC")
+      .replace(/[^a-zA-Z0-9\/\-\s]/g, " ")
+      .trim();
 
 const getLines = (text: string): string[] =>
   text.split(/\r?\n/).map(cleanText).filter(line => line.length > 0);
@@ -109,12 +111,11 @@ const processImageForOCR = async (file: File): Promise<Buffer> => {
 const uploadToCloudinary = async (buffer: Buffer, fileType: string) => {
   const dataURI = `data:${fileType};base64,${buffer.toString("base64")}`;
   try {
-    const result = await cloudinary.v2.uploader.upload(dataURI, {
+    return await cloudinary.v2.uploader.upload(dataURI, {
       folder: "face_compare",
       timeout: 30000,
       quality_analysis: true,
     });
-    return result;
   } catch (error) {
     console.error("❌ Cloudinary upload error:", error);
     throw new Error("Cloudinary upload failed");
@@ -177,7 +178,6 @@ const extractIDInfo = (text: string): IDInfo => {
   const idDOB = normalizeDate(dates[0]?.date || "");
   const idIssueDate = normalizeDate(dates[1]?.date || "");
   const idExpiryDate = normalizeDate(dates.at(-1)?.date || "");
-
   const idIssuer = lines.map(l => l.match(/issued by (.+)/i)?.[1]?.trim()).find(Boolean) || null;
   const placeOfIssue = lines.map(l => l.match(/issued at (.+)/i)?.[1]?.trim()).find(Boolean) || null;
 
@@ -222,7 +222,7 @@ const compareFaces = async (selfieUrl: string, idUrl: string): Promise<{ confide
   return { confidence };
 };
 
-// ========== Main API ==========
+// ========== Main Handler ==========
 export async function POST(req: Request): Promise<NextResponse<VerificationResult | { error: string }>> {
   const startTime = Date.now();
   const requestId = Math.random().toString(36).slice(2, 8);
@@ -247,13 +247,11 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
     ]);
 
     const ocrText = await performOCRWithRetry(idBuffer);
-
     if (!ID_KEYWORDS.some(k => ocrText.toLowerCase().includes(k))) {
       console.warn(`⚠️ [${requestId}] OCR output may not be an ID.`);
     }
 
     const extractedInfo = extractIDInfo(ocrText);
-
     const minFields = [extractedInfo.idName, extractedInfo.idNumber, extractedInfo.idDOB].filter(Boolean).length;
     if (minFields < MIN_REQUIRED_FIELDS) {
       return NextResponse.json({ error: "Insufficient ID info extracted." }, { status: 400 });
@@ -261,6 +259,40 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
 
     const { confidence } = await compareFaces(selfieUpload.secure_url, idUpload.secure_url);
     const faceMatch = confidence >= FACE_MATCH_THRESHOLD;
+
+    const session = await getServerSession(authOptions);
+    const userEmail = session?.user?.email;
+
+    if (userEmail && faceMatch) {
+      const existingUser = await prisma.user.findUnique({ where: { email: userEmail } });
+
+      if (!existingUser) {
+        await prisma.user.create({
+          data: {
+            email: userEmail,
+            name: session.user?.name ?? null,
+            image: session.user?.image ?? null,
+            role: "PROVIDER",
+            isOtpVerified: true,
+            isFaceVerified: true,
+            selfieImage: selfieUpload.secure_url,
+            idImage: idUpload.secure_url,
+            faceConfidence: confidence,
+            idName: extractedInfo.idName,
+            idNumber: extractedInfo.idNumber,
+            idDOB: extractedInfo.idDOB ? new Date(extractedInfo.idDOB) : null,
+            idIssueDate: extractedInfo.idIssueDate ? new Date(extractedInfo.idIssueDate) : null,
+            idExpiryDate: extractedInfo.idExpiryDate ? new Date(extractedInfo.idExpiryDate) : null,
+            idIssuer: extractedInfo.idIssuer,
+            personalIdNumber: extractedInfo.personalIdNumber,
+          },
+        });
+
+        console.log(`✅ [${requestId}] PROVIDER user created in DB`);
+      } else {
+        console.log(`ℹ️ [${requestId}] User already exists — skipping save`);
+      }
+    }
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
     console.log(`✅ [${requestId}] Verification done in ${duration}s`);
@@ -282,4 +314,3 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
     return NextResponse.json({ error: error.message || "Unknown error" }, { status: 500 });
   }
 }
-
