@@ -64,9 +64,9 @@ export const authOptions: AuthOptions = {
   pages: {
     signIn: "/",
     signOut: "/auth/signout",
-    error: "/auth/error", // Custom error page
-    verifyRequest: "/verify",
-    newUser: "/role",
+    error: "/auth/error",
+    verifyRequest: "/auth/verify-request",
+    newUser: "/role", // fallback if new user logs in via email/password
   },
   session: {
     strategy: "jwt",
@@ -75,22 +75,43 @@ export const authOptions: AuthOptions = {
   debug: process.env.NODE_ENV === "development",
 
   callbacks: {
-    async signIn({ user, account, profile, email }) {
-      // Allow OAuth accounts to sign in without email verification
-      if (account?.provider !== "credentials") {
-        return true;
+    async signIn({ user, account }) {
+      if (account?.provider === "google") {
+        const existingUser = await prisma.user.findUnique({
+          where: { email: user.email ?? "" },
+        });
+
+        if (!existingUser) {
+          // Create a placeholder user (no role set)
+          await prisma.user.create({
+            data: {
+              email: user.email!,
+              name: user.name ?? "",
+              image: user.image ?? "",
+              isOtpVerified: true,
+              isFaceVerified: false,
+              role: null, // force role selection
+            },
+          });
+          return "/role"; // redirect to select role
+        }
+
+        if (!existingUser.role) {
+          return "/role"; // must select role
+        }
+
+        if (existingUser.role === UserRole.PROVIDER && !existingUser.isFaceVerified) {
+          return "/verify"; // must complete verification
+        }
       }
 
-      // Existing credential sign-in logic
-      return true;
+      return true; // allow sign-in
     },
 
     async jwt({ token, user, trigger, session }) {
-      // Handle role updates from the client
       if (trigger === "update" && session?.role) {
         token.role = session.role;
-        
-        // Update the user in the database
+
         await prisma.user.update({
           where: { email: token.email ?? "" },
           data: { role: session.role },
@@ -108,8 +129,24 @@ export const authOptions: AuthOptions = {
         token.image = user.image;
         token.role = user.role;
         token.isOtpVerified = user.isOtpVerified ?? true;
+        token.otpCode = user.otpCode ?? null;
+        token.otpExpiresAt = user.otpExpiresAt?.toISOString() ?? null;
         token.isFaceVerified = user.isFaceVerified ?? false;
+
+        if (user.role === UserRole.PROVIDER) {
+          token.selfieImage = user.selfieImage ?? null;
+          token.idImage = user.idImage ?? null;
+          token.faceConfidence = user.faceConfidence ?? null;
+          token.idName = user.idName ?? null;
+          token.idNumber = user.idNumber ?? null;
+          token.idDOB = user.idDOB?.toISOString() ?? null;
+          token.idExpiryDate = user.idExpiryDate?.toISOString() ?? null;
+          token.idIssuer = user.idIssuer ?? null;
+          token.personalIdNumber = user.personalIdNumber ?? null;
+          token.idIssueDate = user.idIssueDate?.toISOString() ?? null;
+        }
       }
+
       return token;
     },
 
@@ -121,21 +158,26 @@ export const authOptions: AuthOptions = {
         session.user.image = token.image ?? null;
         session.user.role = token.role as UserRole;
         session.user.isOtpVerified = token.isOtpVerified;
+        session.user.otpCode = token.otpCode;
+        session.user.otpExpiresAt = token.otpExpiresAt;
         session.user.isFaceVerified = token.isFaceVerified;
+
+        if (token.role === UserRole.PROVIDER) {
+          session.user.selfieImage = token.selfieImage;
+          session.user.idImage = token.idImage;
+          session.user.faceConfidence = token.faceConfidence;
+          session.user.idName = token.idName;
+          session.user.idNumber = token.idNumber;
+          session.user.idDOB = token.idDOB;
+          session.user.idExpiryDate = token.idExpiryDate;
+          session.user.idIssuer = token.idIssuer;
+          session.user.personalIdNumber = token.personalIdNumber;
+          session.user.idIssueDate = token.idIssueDate;
+        }
       }
       return session;
     },
   },
-  events: {
-    async linkAccount({ user, account, profile }) {
-      // This event is called when an OAuth account is successfully linked
-      console.log(`Account linked: ${user.email} with ${account.provider}`);
-    },
-  },
-  // Allow users to sign in with multiple OAuth providers for the same email
-  allowDangerousEmailAccountLinking: true,
 };
-
-// [Rest of your type declarations...]
 
 export default NextAuth(authOptions);
