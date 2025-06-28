@@ -1,24 +1,11 @@
 import { NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
-import { cookies } from "next/headers";
 import prisma from "@/app/libs/prismadb";
 import { UserRole } from "@prisma/client";
 
 export async function POST(req: Request) {
-  const cookieStore = cookies();
-  console.log("🍪 Incoming Cookies:", cookieStore.getAll());
-
-  // ✅ Fix: Adapt to getToken expecting Node-like req
-  const token = await getToken({
-    req: {
-      headers: {
-        cookie: cookies().toString(),
-      },
-    } as any,
-    secret: process.env.NEXTAUTH_SECRET,
-  });
-
-  console.log("🔐 JWT Token:", token);
+  // ✅ Use req directly with getToken
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
 
   if (!token || !token.email) {
     console.error("❌ No session or token found");
@@ -31,31 +18,22 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     role = body.role;
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  console.log("🔹 Token email:", email);
-  console.log("🔹 Requested role:", role);
-
-  if (!role) {
-    return NextResponse.json({ error: "Role is required" }, { status: 400 });
-  }
-
-  if (!["CUSTOMER", "PROVIDER"].includes(role)) {
+  if (!role || !["CUSTOMER", "PROVIDER"].includes(role)) {
     return NextResponse.json(
-      { error: "Invalid role", message: "Allowed roles: CUSTOMER, PROVIDER" },
+      { error: "Invalid or missing role", message: "Allowed roles: CUSTOMER, PROVIDER" },
       { status: 400 }
     );
   }
 
   try {
-    let user = await prisma.user.findUnique({
-      where: { email },
-    });
+    let user = await prisma.user.findUnique({ where: { email } });
 
     if (!user) {
-      // 🆕 First-time Google OAuth user
+      // 🆕 First-time OAuth user
       user = await prisma.user.create({
         data: {
           email,
@@ -80,21 +58,18 @@ export async function POST(req: Request) {
       );
     }
 
-    if (role === "PROVIDER") {
-      if (
-        !user.isFaceVerified ||
-        !user.selfieImage ||
-        !user.idImage
-      ) {
-        return NextResponse.json(
-          {
-            error: "Verification required",
-            message:
-              "You must complete identity verification to become a provider",
-          },
-          { status: 403 }
-        );
-      }
+    if (
+      role === "PROVIDER" &&
+      (!user.isFaceVerified || !user.selfieImage || !user.idImage)
+    ) {
+      return NextResponse.json(
+        {
+          error: "Verification required",
+          message:
+            "You must complete identity verification to become a provider",
+        },
+        { status: 403 }
+      );
     }
 
     await prisma.user.update({
