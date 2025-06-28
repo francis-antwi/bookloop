@@ -14,41 +14,69 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
   const { data: session, update } = useSession();
   const [isLoading, setIsLoading] = useState(false);
   const [selectedRole, setSelectedRole] = useState(session?.user?.role || null);
+const handleRoleSelect = async (role: string) => {
+  if (selectedRole === role) {
+    console.log("Role already selected, returning.");
+    return;
+  }
 
-  const handleRoleSelect = async (role: string) => {
-    if (selectedRole === role) return;
+  setIsLoading(true);
+  console.log("Attempting to select role:", role);
 
-    setIsLoading(true);
-    try {
-      const response = await axios.post('/api/role', { role }, { withCredentials: true });
-      await update({ role }); // update session
+  try {
+    console.log("Sending Axios POST request to /api/role...");
+    const response = await axios.post('/api/role', { role }, { withCredentials: true });
+    console.log("Axios POST response received:", response.status, response.data);
+
+    // --- Crucial Check: Ensure the API returned a success status ---
+    if (response.status >= 200 && response.status < 300) {
+      console.log("API call successful. Attempting to update session...");
+      await update({ role }); // This line is the prime suspect
+      console.log("Session updated successfully.");
 
       setSelectedRole(role);
       onRoleSelected(role);
-      toast.success('Role selected successfully');
+      toast.success('Role selected successfully'); // This should appear!
+      console.log("Success toast shown.");
 
       // ✅ Redirect based on role
       if (role === 'PROVIDER') {
+        console.log("Redirecting to /verify...");
         window.location.href = '/verify';
       } else {
+        console.log("Redirecting to /...");
         window.location.href = '/';
       }
-    } catch (err: any) {
-      const status = err?.response?.status;
-      const message = err?.response?.data?.message || 'Failed to select role';
-
+      console.log("Redirect logic executed.");
+    } else {
+      // This block should ideally not be hit if axios throws for non-2xx
+      // but good for explicit checking
+      console.error("API call returned non-success status:", response.status, response.data);
+      const message = response?.data?.message || 'Unexpected successful response led to issue';
       toast.error(message);
-
-      // Redirect to /verify if verification is required
-      if (status === 403 && err?.response?.data?.error === 'Verification required') {
-        setTimeout(() => {
-          window.location.href = '/verify';
-        }, 1000);
-      }
-    } finally {
-      setIsLoading(false);
     }
-  };
+  } catch (err: any) {
+    console.error("❌ An error occurred during role selection or session update:", err); // VERY IMPORTANT LOG
+    console.error("Error response status:", err?.response?.status);
+    console.error("Error response data:", err?.response?.data);
+
+    const status = err?.response?.status;
+    const message = err?.response?.data?.message || 'Failed to select role (catch block)'; // Changed message to differentiate
+
+    toast.error(message); // This is the toast you are seeing
+
+    // Redirect to /verify if verification is required
+    if (status === 403 && err?.response?.data?.error === 'Verification required') {
+      console.log("Verification required (403), redirecting to /verify after delay...");
+      setTimeout(() => {
+        window.location.href = '/verify';
+      }, 1000);
+    }
+  } finally {
+    setIsLoading(false);
+    console.log("Loading state set to false.");
+  }
+};
 
   const roles = [
     {
