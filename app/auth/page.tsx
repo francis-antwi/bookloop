@@ -1,37 +1,24 @@
 "use client";
-import { NextPage } from 'next';
-import { useRouter } from 'next/router';
-import { useEffect } from 'react';
 
-const AuthErrorPage: NextPage = () => {
+import { useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+
+export default function AuthErrorRedirectPage() {
   const router = useRouter();
-  const { error } = router.query;
+  const params = useSearchParams();
+  const error = params.get("error");
 
   useEffect(() => {
-    if (error === 'OAuthAccountNotLinked') {
-      // You might want to redirect to a page explaining how to link accounts
-      // or show a message to sign in with the original provider
+    if (!error) return;
+
+    if (error === "ROLE_SELECTION_REQUIRED") {
+      router.replace("/role");
+    } else if (error === "PROVIDER_VERIFICATION_REQUIRED") {
+      router.replace("/verify");
+    } else {
+      router.replace("/"); // fallback
     }
-  }, [error]);
+  }, [error, router]);
 
-  return (
-    <div className="error-container">
-      {error === 'OAuthAccountNotLinked' ? (
-        <div>
-          <h1>Account Not Linked</h1>
-          <p>
-            This email is already associated with another account. 
-            Please sign in with the original provider or contact support.
-          </p>
-        </div>
-      ) : (
-        <div>
-          <h1>Authentication Error</h1>
-          <p>An unexpected error occurred during sign-in.</p>
-        </div>
-      )}
-    </div>
-  );
-};
-
-export default AuthErrorPage;
+  return <p>Redirecting...</p>;
+}
