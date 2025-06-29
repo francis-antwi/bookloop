@@ -86,7 +86,7 @@ export const config = {
     "/my-listings/:path*",
     "/notifications/:path*",
     "/admin/:path*",
-    "/verify",
+    "/role",
     "/auth/:path*",
   ],
 };
