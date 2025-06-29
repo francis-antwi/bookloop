@@ -69,7 +69,7 @@ const DATE_FORMATS = [
   /^(\d{2})[\/\-\.](\d{2})[\/\-\.](\d{2})$/, // DD/MM/YY
   /^(\d{1,2})\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{4})$/i, // Day Month YYYY (e.g., 25 Dec 2023)
   /^(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2}),?\s*(\d{4})$/i, // Month Day, YYYY (e.g., Dec 25, 2023)
-  /^(\d{1,2})-(?:Jan|Feb|Mar|Apr|May|Jun|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*-(\d{4})$/i, // DD-MON-YYYY (e.g., 25-DEC-2023)
+  /^(\d{1,2})-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*-(\d{4})$/i, // DD-MON-YYYY (e.g., 25-DEC-2023)
   /^(\d{4})-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*-(\d{1,2})$/i, // YYYY-MON-DD
 ];
 
@@ -404,7 +404,7 @@ const extractIDInfo = (text: string): IDInfo => {
     } catch (e) {
       warnings.push("Error parsing Issue Date or Expiry Date.");
     }
-  }
+    }
 
   return {
     idName, idNumber, personalIdNumber,
@@ -473,7 +473,6 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
     }
 
     // Process images and perform OCR
-    // Use Promise.allSettled to allow independent processing and better error handling
     const [selfieProcessResult, idProcessResult] = await Promise.allSettled([
       processImageForOCR(selfie),
       processImageForOCR(id),
@@ -527,30 +526,38 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
     ].filter(Boolean).length;
 
     // A more nuanced check for "enough key fields"
-    // For 90% accuracy, we need a high degree of confidence in *critical* fields.
     const criticalFieldsPresent = (extracted.idName && (extracted.idNumber || extracted.personalIdNumber) && extracted.idDOB);
     const overallCompleteness = (foundFieldsCount / Object.keys(extracted).length) * 100; // Rough percentage of fields found
 
-    if (!criticalFieldsPresent || extracted.extractionWarnings.length > 2 || overallCompleteness < 70) {
-      return NextResponse.json({
-        error: `Insufficient or inaccurate data extracted from ID. Found ${foundFieldsCount} fields. Warnings: ${extracted.extractionWarnings.join('; ')}. Please ensure the image is clear and well-lit.`
-      }, { status: 400 });
-    }
+    // Removed the "early exit" error response for insufficient data.
+    // Instead, we will set success to false and include warnings in the response.
 
     // Face comparison
     const faceComparisonResult = await Promise.allSettled([
       compareFaces(selfieUpload.secure_url, idUpload.secure_url)
     ]);
 
+    let faceMatch = false;
+    let confidence = 0;
+    let faceComparisonError: string | undefined;
+
     if (faceComparisonResult[0].status === "rejected") {
-      throw new Error(`Face comparison failed: ${faceComparisonResult[0].reason.message}`);
+      faceComparisonError = `Face comparison failed: ${faceComparisonResult[0].reason.message}`;
+      console.error(`❌ [${requestId}] ${faceComparisonError}`);
+      // Don't throw, continue to build the response with this error detail
+    } else {
+      confidence = faceComparisonResult[0].value.confidence;
+      faceMatch = confidence >= FACE_MATCH_THRESHOLD;
     }
-    const { confidence } = faceComparisonResult[0].value;
-    const faceMatch = confidence >= FACE_MATCH_THRESHOLD;
+
+    // Determine overall success based on face match and critical OCR fields.
+    // Even if OCR has warnings, if face match is good, we might still consider it 'successful' for verification purposes,
+    // but the 'extractionComplete' flag will reflect the warnings.
+    const success = faceMatch && criticalFieldsPresent && extracted.extractionWarnings.length <= 2; // Adjusted logic for 'success'
 
     // Prepare base response
     const verificationResponse: VerificationResult = {
-      success: true,
+      success: success, // Reflect overall success based on new logic
       verification: {
         faceMatch,
         confidence: Math.round(confidence),
@@ -561,18 +568,28 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
         type: extracted.idType || "Unknown ID Type",
         imageUrl: idUpload.secure_url,
         selfieUrl: selfieUpload.secure_url,
-        extractionComplete: extracted.extractionWarnings.length === 0,
+        // extractionComplete is true only if no or minimal warnings
+        extractionComplete: extracted.extractionWarnings.length === 0, // This should reflect actual extraction success
       }
     };
 
+    // If face comparison failed, add it as an extraction warning or a separate flag for the frontend.
+    if (faceComparisonError) {
+        verificationResponse.document.extractionWarnings.push(faceComparisonError);
+        verificationResponse.success = false; // Mark overall success as false if face comparison failed
+    }
+
     // --- LOG VERIFICATION DETAILS HERE ---
     console.log(`✅ [${requestId}] Verification Details:`);
-    console.log(`  - Success: ${verificationResponse.success}`);
+    console.log(`  - Overall Success: ${verificationResponse.success}`);
     console.log(`  - Face Match: ${verificationResponse.verification.faceMatch}`);
     console.log(`  - Confidence: ${verificationResponse.verification.confidence}% (Threshold: ${verificationResponse.verification.threshold}%)`);
-    console.log(`  - Document Extraction Status: ${verificationResponse.document.extractionComplete ? 'Complete' : 'Warnings Present'}`);
+    console.log(`  - Document Extraction Complete: ${verificationResponse.document.extractionComplete}`);
+    console.log(`  - Critical Fields Present: ${criticalFieldsPresent}`);
+    console.log(`  - Overall Completeness: ${overallCompleteness.toFixed(2)}%`);
+
     if (verificationResponse.document.extractionWarnings.length > 0) {
-      console.log(`    - Extraction Warnings: ${verificationResponse.document.extractionWarnings.join(', ')}`);
+      console.log(`    - Extraction Warnings: ${verificationResponse.document.extractionWarnings.join('; ')}`);
     }
     console.log(`  - Extracted Name: ${verificationResponse.document.idName}`);
     console.log(`  - Extracted ID Number: ${verificationResponse.document.idNumber || verificationResponse.document.personalIdNumber}`);
@@ -583,60 +600,71 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
     console.log(`  - ID Image URL: ${verificationResponse.document.imageUrl}`);
     console.log(`  - Selfie Image URL: ${verificationResponse.document.selfieUrl}`);
 
+
     // Optional registration flow
     if (shouldRegister && email) {
-      try {
-        const registerRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/register`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email,
-            name: extracted.idName,
-            idNumber: extracted.idNumber || extracted.personalIdNumber,
-            dob: extracted.idDOB,
-            idType: extracted.idType,
-            idIssuer: extracted.idIssuer,
-            idIssueDate: extracted.idIssueDate,
-            idExpiryDate: extracted.idExpiryDate,
-            placeOfIssue: extracted.placeOfIssue,
-            gender: extracted.idGender,
-            nationality: extracted.idNationality,
-            imageUrl: idUpload.secure_url,
-            selfieUrl: selfieUpload.secure_url,
-            role: "PROVIDER",
-            verified: true,
-            rawText: extracted.rawText
-          })
-        });
+      // Only attempt registration if overall verification is successful
+      if (verificationResponse.success) {
+        try {
+          const registerRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/register`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email,
+              name: extracted.idName,
+              idNumber: extracted.idNumber || extracted.personalIdNumber,
+              dob: extracted.idDOB,
+              idType: extracted.idType,
+              idIssuer: extracted.idIssuer,
+              idIssueDate: extracted.idIssueDate,
+              idExpiryDate: extracted.idExpiryDate,
+              placeOfIssue: extracted.placeOfIssue,
+              gender: extracted.idGender,
+              nationality: extracted.idNationality,
+              imageUrl: idUpload.secure_url,
+              selfieUrl: selfieUpload.secure_url,
+              role: "PROVIDER",
+              verified: true, // This should only be true if `success` is true
+              rawText: extracted.rawText
+            })
+          });
 
-        const registerResult = await registerRes.json();
+          const registerResult = await registerRes.json();
 
-        verificationResponse.registration = {
-          success: registerRes.ok,
-          userId: registerRes.ok ? registerResult.userId : undefined,
-          error: registerRes.ok ? undefined : registerResult.error
-        };
+          verificationResponse.registration = {
+            success: registerRes.ok,
+            userId: registerRes.ok ? registerResult.userId : undefined,
+            error: registerRes.ok ? undefined : registerResult.error
+          };
 
-        if (!registerRes.ok) {
-          console.error(`Registration failed:`, registerResult.error);
+          if (!registerRes.ok) {
+            console.error(`Registration failed:`, registerResult.error);
+          }
+
+          // Log registration details
+          console.log(`Registration attempt for ${email}:`);
+          console.log(`  - Success: ${verificationResponse.registration.success}`);
+          if (verificationResponse.registration.userId) {
+            console.log(`  - User ID: ${verificationResponse.registration.userId}`);
+          }
+          if (verificationResponse.registration.error) {
+            console.log(`  - Error: ${verificationResponse.registration.error}`);
+          }
+
+        } catch (regError: any) {
+          verificationResponse.registration = {
+            success: false,
+            error: `Registration API failed: ${regError.message}`
+          };
+          console.error(`Error during registration API call:`, regError.message);
         }
-
-        // Log registration details
-        console.log(`Registration attempt for ${email}:`);
-        console.log(`  - Success: ${verificationResponse.registration.success}`);
-        if (verificationResponse.registration.userId) {
-          console.log(`  - User ID: ${verificationResponse.registration.userId}`);
-        }
-        if (verificationResponse.registration.error) {
-          console.log(`  - Error: ${verificationResponse.registration.error}`);
-        }
-
-      } catch (regError: any) {
+      } else {
+        // If overall verification is not successful, do not attempt registration
         verificationResponse.registration = {
           success: false,
-          error: `Registration API failed: ${regError.message}`
+          error: "Registration skipped due to failed verification criteria (e.g., face mismatch or insufficient ID data)."
         };
-        console.error(`Error during registration API call:`, regError.message);
+        console.log(`Registration skipped for ${email} due to verification not being successful.`);
       }
     }
 
@@ -653,8 +681,8 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
       errorMessage = `Document recognition failed: ${error.message}. Please ensure the ID is clearly visible and well-lit.`;
     } else if (error.message.includes("Face")) {
       errorMessage = `Face comparison failed: ${error.message}. Ensure your selfie is clear and facing forward.`;
-    } else if (error.message.includes("Insufficient or inaccurate data extracted")) {
-      errorMessage = error.message; // Use the specific error message
+    } else if (error.message.includes("Processed image for OCR still exceeds")) {
+      errorMessage = `Image processing error: ${error.message} Please try a different image or reduce its quality before upload.`;
     }
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
