@@ -192,7 +192,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
                 </div>
               )}
 
-              {/* Upload Area */}
+              {/* Upload Area - FIXED: Removed capture="environment" */}
               <div className="relative">
                 <input
                   type="file"
@@ -201,7 +201,6 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
                   onChange={(e) => e.target.files?.[0] && handleIdUpload(e.target.files[0])}
                   disabled={isLoading}
                   className="hidden"
-                  capture="environment"
                 />
                 <label 
                   htmlFor="id-upload" 
@@ -214,7 +213,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
                     <div>
                       <p className="text-blue-600 font-semibold text-lg">Upload ID Document</p>
                       <p className="text-gray-500 text-sm mt-1">Ghana Card, Passport, or Driver's License</p>
-                      <p className="text-xs text-gray-400 mt-2">Tap to select from camera or gallery</p>
+                      <p className="text-xs text-gray-400 mt-2">Choose from camera or gallery</p>
                     </div>
                   </div>
                 </label>
