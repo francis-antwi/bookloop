@@ -1,6 +1,7 @@
 // app/api/verify/route.ts
 import { NextResponse } from "next/server";
 const cloudinary = require("cloudinary").v2;
+import Tesseract from "tesseract.js";
 import axios from "axios";
 
 // === Cloudinary Config ===
@@ -47,9 +48,7 @@ interface VerificationResult {
   };
 }
 
-const OCR_MAX_RETRIES = 3;
-const OCR_TIMEOUT_MS = 60000;
-const ABSOLUTE_MIN_SIZE = 10000; // Lowered for original image tolerance
+const ABSOLUTE_MIN_SIZE = 10000;
 const MAX_IMAGE_SIZE = 5_000_000;
 const FACE_MATCH_THRESHOLD = 80;
 
@@ -96,30 +95,11 @@ const uploadToCloudinary = async (file: File) => {
   });
 };
 
-const performOCRWithRetry = async (file: File): Promise<string> => {
+const performOCRWithTesseract = async (file: File): Promise<string> => {
   const buffer = Buffer.from(await file.arrayBuffer());
-  const base64Image = `data:${file.type};base64,${buffer.toString("base64")}`;
-  const params = new URLSearchParams({
-    apikey: process.env.OCR_SPACE_API_KEY!,
-    base64Image,
-    language: "eng",
-    OCREngine: "5"
-  });
-  for (let i = 0; i < OCR_MAX_RETRIES; i++) {
-    try {
-      const res = await axios.post("https://api.ocr.space/parse/image", params, {
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        timeout: OCR_TIMEOUT_MS
-      });
-      const text = res.data?.ParsedResults?.[0]?.ParsedText;
-      if (text && text.length > 20) return text;
-      throw new Error("OCR text too short");
-    } catch (err) {
-      if (i === OCR_MAX_RETRIES - 1) throw err;
-      await new Promise(res => setTimeout(res, 1000 * (i + 1)));
-    }
-  }
-  throw new Error("OCR failed after retries");
+  const { data: { text } } = await Tesseract.recognize(buffer, 'eng');
+  if (!text || text.length < 10) throw new Error("OCR failed or returned too little text.");
+  return text;
 };
 
 const extractIDInfo = (text: string): IDInfo => {
@@ -190,7 +170,7 @@ export async function POST(req: Request) {
       uploadToCloudinary(idImage)
     ]);
 
-    const rawText = await performOCRWithRetry(idImage);
+    const rawText = await performOCRWithTesseract(idImage);
     const info = extractIDInfo(rawText);
 
     const requiredFields = [info.idName, info.idDOB, info.idNumber || info.personalIdNumber];
