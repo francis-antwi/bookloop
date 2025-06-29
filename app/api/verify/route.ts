@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
-import cloudinary from "cloudinary";
+import { v2 as cloudinary } from "cloudinary"; // ✅ FIXED
 import axios from "axios";
 import sharp from "sharp";
 
-
 // ========== Cloudinary Config ==========
-cloudinary.v2.config({
+cloudinary.config({
   cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!,
   api_key: process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY!,
   api_secret: process.env.CLOUDINARY_API_SECRET!,
@@ -110,7 +109,7 @@ const processImageForOCR = async (file: File): Promise<Buffer> => {
 const uploadToCloudinary = async (buffer: Buffer, fileType: string) => {
   const dataURI = `data:${fileType};base64,${buffer.toString("base64")}`;
   try {
-    const result = await cloudinary.v2.uploader.upload(dataURI, {
+    const result = await cloudinary.uploader.upload(dataURI, {
       folder: "face_compare",
       timeout: 30000,
       quality_analysis: true,
@@ -283,4 +282,3 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
     return NextResponse.json({ error: error.message || "Unknown error" }, { status: 500 });
   }
 }
-
