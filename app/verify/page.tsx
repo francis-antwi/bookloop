@@ -71,7 +71,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
 
       const response = await axios.post('/api/verify', verificationFormData, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 30000
+        timeout: 60000
       });
 
       if (!response.data.success) {
