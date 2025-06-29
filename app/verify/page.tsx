@@ -23,7 +23,7 @@ interface VerificationStepsProps {
 }
 
 const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
-  const { update } = useSession();
+  const { data: session, update } = useSession();
   const [currentStep, setCurrentStep] = useState<'selfie' | 'id'>('selfie');
   const [selfieImage, setSelfieImage] = useState<Blob | null>(null);
   const [idFile, setIdFile] = useState<File | null>(null);
@@ -32,10 +32,26 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
     success: boolean;
     confidence?: number;
     error?: string;
+    registrationError?: boolean;
   } | null>(null);
 
   const handleSelfieCapture = (blob: Blob) => setSelfieImage(blob);
-  const handleIdUpload = (file: File) => setIdFile(file);
+  
+  const handleIdUpload = (file: File) => {
+    if (!file.type.match(/image\/(jpeg|png|jpg)/)) {
+      toast.error('Only JPEG/PNG images are allowed');
+      return;
+    }
+    if (file.size < 20000) {
+      toast.error('Image too small. Try a higher-quality photo.');
+      return;
+    }
+    if (file.size > 5000000) {
+      toast.error('Image too large. Max 5MB.');
+      return;
+    }
+    setIdFile(file);
+  };
 
   const submitVerification = async () => {
     if (!selfieImage || !idFile) {
@@ -50,29 +66,43 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
       const formData = new FormData();
       formData.append('selfieImage', new File([selfieImage], 'selfie.jpg', { type: 'image/jpeg' }));
       formData.append('idImage', idFile);
+      formData.append('email', session?.user?.email || '');
+      formData.append('register', 'true');
 
-      const response = await axios.post('/api/verify', formData);
+      const response = await axios.post('/api/verify', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
 
       if (response.data.success) {
         await update({
-          isFaceVerified: true,
-          selfieImage: response.data.document.selfieUrl,
-          idImage: response.data.document.imageUrl,
-          faceConfidence: response.data.verification.confidence,
-          idName: response.data.document.idName,
-          idNumber: response.data.document.idNumber,
-          idDOB: response.data.document.idDOB,
-          idExpiryDate: response.data.document.idExpiryDate,
-          idIssuer: response.data.document.idIssuer,
+          ...session?.user,
+          isVerified: true,
+          verificationData: {
+            selfieUrl: response.data.document.selfieUrl,
+            idImageUrl: response.data.document.imageUrl,
+            confidence: response.data.verification.confidence,
+            idName: response.data.document.idName,
+            idNumber: response.data.document.idNumber,
+            idDOB: response.data.document.idDOB,
+            idExpiryDate: response.data.document.idExpiryDate,
+            idIssuer: response.data.document.idIssuer,
+          }
         });
 
-        setVerificationStatus({
-          success: true,
-          confidence: response.data.verification.confidence,
-        });
-
-        toast.success('Verification completed successfully!');
-        onComplete();
+        if (response.data.registration?.success) {
+          toast.success('Verification and registration completed successfully!');
+          onComplete();
+        } else {
+          setVerificationStatus({
+            success: true,
+            confidence: response.data.verification.confidence,
+            error: response.data.registration?.error || 'Registration incomplete',
+            registrationError: true
+          });
+          toast.success('Verified! ' + (response.data.registration?.error || 'Registration needs attention'));
+        }
       } else {
         throw new Error(response.data.error || 'Verification failed');
       }
@@ -115,7 +145,6 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
         <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
           {currentStep === 'selfie' && (
             <div className="space-y-6">
-              {/* Step Header */}
               <div className="text-center">
                 <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-3">
                   <FiUser className="text-xl text-blue-600" />
@@ -124,7 +153,6 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
                 <p className="text-gray-600 text-sm">Take a clear selfie for identity confirmation</p>
               </div>
 
-              {/* Camera Component */}
               <div className="relative">
                 <Camera onCapture={handleSelfieCapture} />
                 {selfieImage && (
@@ -134,7 +162,6 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
                 )}
               </div>
 
-              {/* Success Indicator */}
               {selfieImage && (
                 <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
                   <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
@@ -147,7 +174,6 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
                 </div>
               )}
 
-              {/* Action Buttons */}
               <div className="flex gap-3">
                 <button
                   onClick={() => setCurrentStep('id')}
@@ -163,7 +189,6 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
 
           {currentStep === 'id' && (
             <div className="space-y-6">
-              {/* Step Header */}
               <div className="text-center">
                 <div className="inline-flex items-center justify-center w-12 h-12 bg-indigo-100 rounded-full mb-3">
                   <FiFileText className="text-xl text-indigo-600" />
@@ -172,7 +197,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
                 <p className="text-gray-600 text-sm">Upload a government-issued ID document</p>
               </div>
 
-              {/* Error State */}
+              {/* Verification Status Messages */}
               {verificationStatus?.success === false && (
                 <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
                   <div className="flex items-start gap-3">
@@ -182,17 +207,33 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
                     <div>
                       <p className="font-medium text-red-800">Verification Failed</p>
                       <p className="text-sm text-red-600 mt-1">{verificationStatus.error}</p>
-                      {verificationStatus.confidence && (
-                        <p className="text-xs text-red-500 mt-2">
-                          Confidence score: {verificationStatus.confidence.toFixed(1)}%
-                        </p>
-                      )}
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Upload Area - FIXED: Removed capture="environment" */}
+              {verificationStatus?.registrationError && (
+                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 bg-yellow-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <span className="text-white text-xs">!</span>
+                    </div>
+                    <div>
+                      <p className="font-medium text-yellow-800">Verification Successful</p>
+                      <p className="text-sm text-yellow-600 mt-1">
+                        {verificationStatus.error}
+                      </p>
+                      <button
+                        onClick={submitVerification}
+                        className="mt-2 text-sm text-yellow-700 underline hover:text-yellow-900"
+                      >
+                        Try registration again
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="relative">
                 <input
                   type="file"
@@ -213,7 +254,6 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
                     <div>
                       <p className="text-blue-600 font-semibold text-lg">Upload ID Document</p>
                       <p className="text-gray-500 text-sm mt-1">Ghana Card, Passport, or Driver's License</p>
-                      <p className="text-xs text-gray-400 mt-2">Choose from camera or gallery</p>
                     </div>
                   </div>
                 </label>
@@ -224,7 +264,6 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
                 )}
               </div>
 
-              {/* File Selected Indicator */}
               {idFile && (
                 <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
                   <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
@@ -237,7 +276,6 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
                 </div>
               )}
 
-              {/* Action Buttons */}
               <div className="flex gap-3">
                 <button
                   onClick={() => setCurrentStep('selfie')}
@@ -269,7 +307,6 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
           )}
         </div>
 
-        {/* Security Notice */}
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
           <div className="flex items-start gap-3">
             <FiShield className="text-blue-500 mt-0.5 flex-shrink-0" />
