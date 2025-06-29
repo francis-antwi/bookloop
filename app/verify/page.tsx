@@ -54,45 +54,6 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
     setIdFile(file);
   };
 
-  const handleRegistration = async (verificationData: any) => {
-    try {
-      const registerResponse = await axios.post('/api/register', {
-        email: session?.user?.email,
-        name: verificationData.idName,
-        idNumber: verificationData.idNumber,
-        dob: verificationData.idDOB,
-        idType: verificationData.idType,
-        idIssuer: verificationData.idIssuer,
-        idIssueDate: verificationData.idIssueDate,
-        idExpiryDate: verificationData.idExpiryDate,
-        placeOfIssue: verificationData.placeOfIssue,
-        gender: verificationData.idGender,
-        nationality: verificationData.idNationality,
-        imageUrl: verificationData.imageUrl,
-        selfieUrl: verificationData.selfieUrl,
-        role: role,
-        verified: true,
-        rawText: verificationData.rawText
-      });
-
-      if (!registerResponse.data.success) {
-        throw new Error(registerResponse.data.error || 'Registration failed');
-      }
-
-      return true;
-    } catch (error: any) {
-      console.error('Registration error:', {
-        error: error.response?.data || error.message,
-        payload: {
-          email: session?.user?.email,
-          name: verificationData.idName,
-          idNumber: verificationData.idNumber
-        }
-      });
-      throw error;
-    }
-  };
-
 const handleRegistration = async (verificationData: any) => {
   try {
     const payload = {
@@ -150,7 +111,6 @@ const handleRegistration = async (verificationData: any) => {
     throw error;
   }
 };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-4">
       <div className="max-w-md mx-auto">
