@@ -53,7 +53,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
     setIdFile(file);
   };
 
- const submitVerification = async () => {
+const submitVerification = async () => {
   if (!selfieImage || !idFile) {
     toast.error('Please complete all verification steps');
     return;
@@ -63,49 +63,83 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
   setVerificationStatus(null);
 
   try {
-    const formData = new FormData();
-    formData.append('selfieImage', new File([selfieImage], 'selfie.jpg', { type: 'image/jpeg' }));
-    formData.append('idImage', idFile);
-    formData.append('email', session?.user?.email || '');
-    formData.append('register', 'true');
-    formData.append('role', role); // ✅ Append role
+    // 1. First perform verification
+    const verificationFormData = new FormData();
+    verificationFormData.append('selfieImage', new File([selfieImage], 'selfie.jpg', { type: 'image/jpeg' }));
+    verificationFormData.append('idImage', idFile);
+    verificationFormData.append('email', session?.user?.email || '');
+    verificationFormData.append('register', 'true');
 
-    const response = await axios.post('/api/verify', formData, {
+    const response = await axios.post('/api/verify', verificationFormData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
     });
 
-    if (response.data.success) {
-      await update({
-        ...session?.user,
-        isVerified: true,
-        verificationData: {
-          selfieUrl: response.data.document.selfieUrl,
-          idImageUrl: response.data.document.imageUrl,
-          confidence: response.data.verification.confidence,
-          idName: response.data.document.idName,
-          idNumber: response.data.document.idNumber,
-          idDOB: response.data.document.idDOB,
-          idExpiryDate: response.data.document.idExpiryDate,
-          idIssuer: response.data.document.idIssuer,
-        }
-      });
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Verification failed');
+    }
 
-      if (response.data.registration?.success) {
-        toast.success('Verification and registration completed successfully!');
-        onComplete();
-      } else {
+    // 2. Update session with verification data
+    await update({
+      ...session?.user,
+      isVerified: true,
+      verificationData: {
+        selfieUrl: response.data.document.selfieUrl,
+        idImageUrl: response.data.document.imageUrl,
+        confidence: response.data.verification.confidence,
+        idName: response.data.document.idName,
+        idNumber: response.data.document.idNumber,
+        idDOB: response.data.document.idDOB,
+        idExpiryDate: response.data.document.idExpiryDate,
+        idIssuer: response.data.document.idIssuer,
+      }
+    });
+
+    // 3. Handle registration response
+    if (response.data.registration?.success) {
+      toast.success('Verification and registration completed successfully!');
+      onComplete();
+    } else {
+      // If registration failed but verification succeeded
+      const registrationError = response.data.registration?.error || 'Registration failed';
+      
+      // Attempt direct registration as fallback
+      try {
+        const registerResponse = await axios.post('/api/register', {
+          email: session?.user?.email,
+          name: response.data.document.idName,
+          idNumber: response.data.document.idNumber,
+          dob: response.data.document.idDOB,
+          idType: response.data.document.idType,
+          idIssuer: response.data.document.idIssuer,
+          idIssueDate: response.data.document.idIssueDate,
+          idExpiryDate: response.data.document.idExpiryDate,
+          placeOfIssue: response.data.document.placeOfIssue,
+          gender: response.data.document.idGender,
+          nationality: response.data.document.idNationality,
+          imageUrl: response.data.document.imageUrl,
+          selfieUrl: response.data.document.selfieUrl,
+          role: "PROVIDER",
+          verified: true,
+          rawText: response.data.document.rawText
+        });
+
+        if (registerResponse.data.success) {
+          toast.success('Registration completed successfully!');
+          onComplete();
+          return;
+        }
+        throw new Error(registerResponse.data.error || 'Registration failed');
+      } catch (fallbackError: any) {
         setVerificationStatus({
           success: true,
           confidence: response.data.verification.confidence,
-          error: response.data.registration?.error || 'Registration incomplete',
+          error: registrationError,
           registrationError: true
         });
-        toast.success('Verified! ' + (response.data.registration?.error || 'Registration needs attention'));
+        toast.error(`Verification succeeded but registration failed: ${registrationError}`);
       }
-    } else {
-      throw new Error(response.data.error || 'Verification failed');
     }
   } catch (error: any) {
     const message = error.response?.data?.error || error.message || 'Verification failed';
