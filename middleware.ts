@@ -6,35 +6,38 @@ export default withAuth(
     const { pathname } = req.nextUrl;
     const token = req.nextauth.token;
 
-    const publicPaths = ["/", "/role", "/verify", "/auth", "/auth/error"];
-    const isPublic = publicPaths.some((path) =>
-      pathname === path || pathname.startsWith(`${path}/`)
+    // Public routes anyone can visit
+    const publicPaths = ["/", "/auth", "/auth/error", "/role", "/verify"];
+    const isPublic = publicPaths.some(
+      (path) => pathname === path || pathname.startsWith(`${path}/`)
     );
+
+    const isProviderOnlyPath = [
+      "/my-listings",
+      "/approvals",
+      "/bookings",
+      "/favourites",
+      "/notifications",
+    ].some((path) => pathname.startsWith(path));
 
     // ✅ Allow unauthenticated access to public routes
     if (!token && isPublic) {
       return NextResponse.next();
     }
 
-    // ⛔ Redirect users without role to role selection (but not if already on /role)
+    // ⛔ Require role selection
     if (!token?.role && pathname !== "/role") {
       return NextResponse.redirect(new URL("/role", req.url));
     }
 
-    // ⛔ Block unverified PROVIDERs from provider-only areas
-    const isRestrictedProviderRoute =
-      pathname.startsWith("/my-listings") ||
-      pathname.startsWith("/approvals");
-
+    // ⛔ Restrict PROVIDER pages if not verified
     if (
       token?.role === "PROVIDER" &&
       !token?.isFaceVerified &&
-      isRestrictedProviderRoute
+      isProviderOnlyPath &&
+      pathname !== "/verify"
     ) {
-      // ✅ Don’t redirect again if already on /verify
-      if (pathname !== "/verify") {
-        return NextResponse.redirect(new URL("/verify", req.url));
-      }
+      return NextResponse.redirect(new URL("/verify", req.url));
     }
 
     // ⛔ Block non-ADMIN users from /admin
@@ -46,14 +49,15 @@ export default withAuth(
   },
   {
     callbacks: {
-      authorized: ({ token }) => !!token,
+      authorized: ({ token }) => !!token, // Allow middleware to run for logged-in users
     },
   }
 );
 
+// ✅ Middleware applies to these pages
 export const config = {
   matcher: [
-    "/", // ✅ Home page
+    "/",
     "/bookings/:path*",
     "/favourites/:path*",
     "/approvals/:path*",
