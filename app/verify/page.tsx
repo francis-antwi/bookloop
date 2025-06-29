@@ -10,7 +10,8 @@ import {
   FiArrowRight,
   FiShield,
   FiUser,
-  FiFileText
+  FiFileText,
+  FiAlertCircle
 } from 'react-icons/fi';
 import { useSession } from 'next-auth/react';
 import axios from 'axios';
@@ -53,102 +54,135 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
     setIdFile(file);
   };
 
-const submitVerification = async () => {
-  if (!selfieImage || !idFile) {
-    toast.error('Please complete all verification steps');
-    return;
-  }
+  const handleRegistration = async (verificationData: any) => {
+    try {
+      const registerResponse = await axios.post('/api/register', {
+        email: session?.user?.email,
+        name: verificationData.idName,
+        idNumber: verificationData.idNumber,
+        dob: verificationData.idDOB,
+        idType: verificationData.idType,
+        idIssuer: verificationData.idIssuer,
+        idIssueDate: verificationData.idIssueDate,
+        idExpiryDate: verificationData.idExpiryDate,
+        placeOfIssue: verificationData.placeOfIssue,
+        gender: verificationData.idGender,
+        nationality: verificationData.idNationality,
+        imageUrl: verificationData.imageUrl,
+        selfieUrl: verificationData.selfieUrl,
+        role: role,
+        verified: true,
+        rawText: verificationData.rawText
+      });
 
-  setIsLoading(true);
-  setVerificationStatus(null);
+      if (!registerResponse.data.success) {
+        throw new Error(registerResponse.data.error || 'Registration failed');
+      }
 
-  try {
-    // 1. First perform verification
-    const verificationFormData = new FormData();
-    verificationFormData.append('selfieImage', new File([selfieImage], 'selfie.jpg', { type: 'image/jpeg' }));
-    verificationFormData.append('idImage', idFile);
-    verificationFormData.append('email', session?.user?.email || '');
-    verificationFormData.append('register', 'true');
+      return true;
+    } catch (error: any) {
+      console.error('Registration error:', {
+        error: error.response?.data || error.message,
+        payload: {
+          email: session?.user?.email,
+          name: verificationData.idName,
+          idNumber: verificationData.idNumber
+        }
+      });
+      throw error;
+    }
+  };
 
-    const response = await axios.post('/api/verify', verificationFormData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-
-    if (!response.data.success) {
-      throw new Error(response.data.error || 'Verification failed');
+  const submitVerification = async () => {
+    if (!selfieImage || !idFile) {
+      toast.error('Please complete all verification steps');
+      return;
     }
 
-    // 2. Update session with verification data
-    await update({
-      ...session?.user,
-      isVerified: true,
-      verificationData: {
-        selfieUrl: response.data.document.selfieUrl,
-        idImageUrl: response.data.document.imageUrl,
-        confidence: response.data.verification.confidence,
-        idName: response.data.document.idName,
-        idNumber: response.data.document.idNumber,
-        idDOB: response.data.document.idDOB,
-        idExpiryDate: response.data.document.idExpiryDate,
-        idIssuer: response.data.document.idIssuer,
+    setIsLoading(true);
+    setVerificationStatus(null);
+
+    try {
+      // 1. First perform verification
+      const verificationFormData = new FormData();
+      verificationFormData.append('selfieImage', new File([selfieImage], 'selfie.jpg', { type: 'image/jpeg' }));
+      verificationFormData.append('idImage', idFile);
+      verificationFormData.append('email', session?.user?.email || '');
+      verificationFormData.append('register', 'true');
+
+      const response = await axios.post('/api/verify', verificationFormData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 30000, // 30 second timeout
+      });
+
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Verification failed');
       }
-    });
 
-    // 3. Handle registration response
-    if (response.data.registration?.success) {
-      toast.success('Verification and registration completed successfully!');
-      onComplete();
-    } else {
-      // If registration failed but verification succeeded
-      const registrationError = response.data.registration?.error || 'Registration failed';
-      
-      // Attempt direct registration as fallback
-      try {
-        const registerResponse = await axios.post('/api/register', {
-          email: session?.user?.email,
-          name: response.data.document.idName,
-          idNumber: response.data.document.idNumber,
-          dob: response.data.document.idDOB,
-          idType: response.data.document.idType,
-          idIssuer: response.data.document.idIssuer,
-          idIssueDate: response.data.document.idIssueDate,
-          idExpiryDate: response.data.document.idExpiryDate,
-          placeOfIssue: response.data.document.placeOfIssue,
-          gender: response.data.document.idGender,
-          nationality: response.data.document.idNationality,
-          imageUrl: response.data.document.imageUrl,
+      // 2. Update session with verification data
+      await update({
+        ...session?.user,
+        isVerified: true,
+        verificationData: {
           selfieUrl: response.data.document.selfieUrl,
-          role: "PROVIDER",
-          verified: true,
-          rawText: response.data.document.rawText
-        });
-
-        if (registerResponse.data.success) {
-          toast.success('Registration completed successfully!');
-          onComplete();
-          return;
+          idImageUrl: response.data.document.imageUrl,
+          confidence: response.data.verification.confidence,
+          idName: response.data.document.idName,
+          idNumber: response.data.document.idNumber,
+          idDOB: response.data.document.idDOB,
+          idExpiryDate: response.data.document.idExpiryDate,
+          idIssuer: response.data.document.idIssuer,
         }
-        throw new Error(registerResponse.data.error || 'Registration failed');
-      } catch (fallbackError: any) {
+      });
+
+      // 3. Handle registration
+      let registrationSuccess = false;
+      if (response.data.registration?.success) {
+        registrationSuccess = true;
+      } else {
+        // Attempt direct registration if combined API failed
+        try {
+          registrationSuccess = await handleRegistration(response.data.document);
+        } catch (regError) {
+          console.error('Fallback registration failed:', regError);
+        }
+      }
+
+      if (registrationSuccess) {
+        toast.success('Verification and registration completed successfully!');
+        onComplete();
+      } else {
+        const errorMsg = response.data.registration?.error || 'Registration failed - please try again';
         setVerificationStatus({
           success: true,
           confidence: response.data.verification.confidence,
-          error: registrationError,
+          error: errorMsg,
           registrationError: true
         });
-        toast.error(`Verification succeeded but registration failed: ${registrationError}`);
+        toast.error(errorMsg);
       }
+
+    } catch (error: any) {
+      const errorData = error.response?.data || {};
+      const errorMsg = errorData.error || error.message || 'Verification failed';
+      
+      console.error('Verification error:', {
+        error: errorMsg,
+        details: errorData.details,
+        stack: error.stack
+      });
+
+      setVerificationStatus({ 
+        success: false, 
+        error: errorMsg 
+      });
+      toast.error(errorMsg);
+    } finally {
+      setIsLoading(false);
     }
-  } catch (error: any) {
-    const message = error.response?.data?.error || error.message || 'Verification failed';
-    setVerificationStatus({ success: false, error: message });
-    toast.error(message);
-  } finally {
-    setIsLoading(false);
-  }
-};
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-4">
@@ -176,9 +210,54 @@ const submitVerification = async () => {
           </div>
         </div>
 
+        {/* Status Messages */}
+        {verificationStatus?.success === false && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-xl mb-6">
+            <div className="flex items-start gap-3">
+              <FiAlertCircle className="text-red-500 text-xl mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-medium text-red-800">Verification Failed</p>
+                <p className="text-sm text-red-600 mt-1">{verificationStatus.error}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {verificationStatus?.registrationError && (
+          <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-xl mb-6">
+            <div className="flex items-start gap-3">
+              <FiAlertCircle className="text-yellow-500 text-xl mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-medium text-yellow-800">Verification Successful</p>
+                <p className="text-sm text-yellow-600 mt-1">{verificationStatus.error}</p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    onClick={submitVerification}
+                    disabled={isLoading}
+                    className="px-4 py-2 bg-yellow-500 text-white rounded-lg text-sm hover:bg-yellow-600 transition flex items-center gap-2"
+                  >
+                    {isLoading ? (
+                      <FiLoader className="animate-spin" />
+                    ) : (
+                      <FiCheck className="text-sm" />
+                    )}
+                    <span>Retry Registration</span>
+                  </button>
+                  <button
+                    onClick={onComplete}
+                    className="px-4 py-2 border border-yellow-500 text-yellow-600 rounded-lg text-sm hover:bg-yellow-50 transition"
+                  >
+                    Continue Anyway
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Step Content */}
         <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
-          {currentStep === 'selfie' && (
+          {currentStep === 'selfie' ? (
             <div className="space-y-6">
               <div className="text-center">
                 <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-3">
@@ -220,9 +299,7 @@ const submitVerification = async () => {
                 </button>
               </div>
             </div>
-          )}
-
-          {currentStep === 'id' && (
+          ) : (
             <div className="space-y-6">
               <div className="text-center">
                 <div className="inline-flex items-center justify-center w-12 h-12 bg-indigo-100 rounded-full mb-3">
@@ -231,43 +308,6 @@ const submitVerification = async () => {
                 <h2 className="text-xl font-semibold text-gray-900 mb-2">ID Verification</h2>
                 <p className="text-gray-600 text-sm">Upload a government-issued ID document</p>
               </div>
-
-              {/* Verification Status Messages */}
-              {verificationStatus?.success === false && (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
-                  <div className="flex items-start gap-3">
-                    <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <span className="text-white text-xs">!</span>
-                    </div>
-                    <div>
-                      <p className="font-medium text-red-800">Verification Failed</p>
-                      <p className="text-sm text-red-600 mt-1">{verificationStatus.error}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {verificationStatus?.registrationError && (
-                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
-                  <div className="flex items-start gap-3">
-                    <div className="w-6 h-6 bg-yellow-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <span className="text-white text-xs">!</span>
-                    </div>
-                    <div>
-                      <p className="font-medium text-yellow-800">Verification Successful</p>
-                      <p className="text-sm text-yellow-600 mt-1">
-                        {verificationStatus.error}
-                      </p>
-                      <button
-                        onClick={submitVerification}
-                        className="mt-2 text-sm text-yellow-700 underline hover:text-yellow-900"
-                      >
-                        Try registration again
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               <div className="relative">
                 <input
