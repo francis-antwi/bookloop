@@ -13,7 +13,7 @@ export default withAuth(
     const token = req.nextauth?.token;
 
     const publicPaths = [
-      "/",
+      // Removed "/" from here as it's now excluded from the matcher
       "/auth",
       "/auth/error",
     ];
@@ -79,7 +79,7 @@ export default withAuth(
 
 export const config = {
   matcher: [
-    "/",
+    // Removed "/" from here to exclude it from middleware protection
     "/bookings/:path*",
     "/favourites/:path*",
     "/approvals/:path*",
