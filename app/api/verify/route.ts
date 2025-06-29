@@ -49,7 +49,7 @@ interface VerificationResult {
 
 const OCR_MAX_RETRIES = 3;
 const OCR_TIMEOUT_MS = 60000;
-const ABSOLUTE_MIN_SIZE = 20000;
+const ABSOLUTE_MIN_SIZE = 10000; // Lowered for original image tolerance
 const MAX_IMAGE_SIZE = 5_000_000;
 const FACE_MATCH_THRESHOLD = 80;
 
@@ -87,10 +87,10 @@ const validateFile = async (file: File) => {
 };
 
 const uploadToCloudinary = async (file: File) => {
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const base64 = buffer.toString("base64");
-  const uri = `data:${file.type};base64,${base64}`;
-  return await cloudinary.uploader.upload(uri, {
+  const arrayBuffer = await file.arrayBuffer();
+  const base64 = Buffer.from(arrayBuffer).toString("base64");
+  const dataUri = `data:${file.type};base64,${base64}`;
+  return await cloudinary.uploader.upload(dataUri, {
     folder: "id_verification",
     upload_preset: process.env.CLOUDINARY_UPLOAD_PRESET
   });
