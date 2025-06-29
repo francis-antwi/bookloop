@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     const googleUserEmail = session?.user?.email || null;
 
     const body = await request.json();
-    console.log("📦 Incoming registration payload:", JSON.stringify(body, null, 2));
+    console.log("\ud83d\udce6 Incoming registration payload:", JSON.stringify(body, null, 2));
     errorContext.requestBody = body;
 
     const {
@@ -58,7 +58,8 @@ export async function POST(request: Request) {
       placeOfIssue,
       idType,
       rawText,
-      verified
+      verified,
+      extractionComplete
     } = body;
 
     const isGoogleAuth = isLoggedIn && !password && !otpCode;
@@ -81,16 +82,12 @@ export async function POST(request: Request) {
     }
 
     const [existingEmail, existingPhone] = await Promise.all([
-      email || googleUserEmail ? prisma.user.findUnique({ where: { email: email || googleUserEmail } }) : Promise.resolve(null),
+      email ? prisma.user.findUnique({ where: { email } }) : Promise.resolve(null),
       contactPhone ? prisma.user.findUnique({ where: { contactPhone } }) : Promise.resolve(null)
     ]);
 
     if (!isGoogleAuth && existingEmail) {
       return NextResponse.json({ error: "Email already registered" }, { status: 409 });
-    }
-
-    if (isGoogleAuth && googleUserEmail && existingEmail) {
-      return NextResponse.json({ error: "Google user already exists" }, { status: 409 });
     }
 
     if (existingPhone) {
@@ -119,6 +116,14 @@ export async function POST(request: Request) {
     let parsedIssue = idIssueDate ? parseDate(idIssueDate) : null;
 
     if (role === "PROVIDER") {
+      if (isGoogleAuth && !extractionComplete) {
+        return NextResponse.json({
+          success: false,
+          skip: true,
+          message: "Google PROVIDER user is not fully verified. User not saved."
+        }, { status: 200 });
+      }
+
       const missing = [];
       if (!selfieImage && !selfieUrl) missing.push("selfieImage");
       if (!idImage && !imageUrl) missing.push("idImage");
@@ -140,6 +145,13 @@ export async function POST(request: Request) {
     }
 
     const hashedPassword = password ? await bcrypt.hash(password, 12) : null;
+
+    if (isGoogleAuth && googleUserEmail) {
+      const existingGoogleUser = await prisma.user.findUnique({ where: { email: googleUserEmail } });
+      if (existingGoogleUser) {
+        return NextResponse.json({ error: "Google user already exists" }, { status: 409 });
+      }
+    }
 
     const user = await prisma.user.create({
       data: {

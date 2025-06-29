@@ -44,27 +44,41 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    let user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({ where: { email } });
 
     if (!user) {
-      // New user — safe to create
-      user = await prisma.user.create({
-        data: {
-          email,
-          name: session.user.name ?? "",
-          image: session.user.image ?? "",
-          isOtpVerified: true,
-          isFaceVerified: false,
-          role: normalizedRole as UserRole,
-        },
-      });
+      // New Google user
+      if (normalizedRole === "CUSTOMER") {
+        const newUser = await prisma.user.create({
+          data: {
+            email,
+            name: session.user.name ?? "",
+            image: session.user.image ?? "",
+            isOtpVerified: true,
+            isFaceVerified: false,
+            role: "CUSTOMER",
+          },
+        });
 
+        return NextResponse.json(
+          { success: true, message: "Customer account created", user: newUser },
+          { status: 201 }
+        );
+      }
+
+      // PROVIDER — do not create yet
       return NextResponse.json(
-        { success: true, message: "User created with role", user },
-        { status: 201 }
+        {
+          success: false,
+          message:
+            "Provider role selected. User will be saved after verification.",
+          skipCreate: true,
+        },
+        { status: 200 }
       );
     }
 
+    // User already exists
     if (user.role === normalizedRole) {
       return NextResponse.json(
         { success: true, message: "Role already set", user },
@@ -72,6 +86,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Trying to change to PROVIDER
     if (
       normalizedRole === "PROVIDER" &&
       (!user.isFaceVerified || !user.selfieImage || !user.idImage)
@@ -80,7 +95,7 @@ export async function POST(req: NextRequest) {
         {
           error: "Verification required",
           message:
-            "You must complete ID and face verification to be a provider",
+            "You must complete ID and face verification before becoming a provider.",
         },
         { status: 403 }
       );
