@@ -3,7 +3,8 @@ import prisma from "@/app/libs/prismadb";
 import { NextResponse } from "next/server";
 import { UserRole } from "@prisma/client";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/authOptions";
+import authOptions from "@/app/auth/authOptions";
+
 
 function parseDate(dateStr: string): Date | null {
   try {
