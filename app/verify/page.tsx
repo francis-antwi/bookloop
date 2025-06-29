@@ -54,65 +54,69 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
   };
 
   const submitVerification = async () => {
-    if (!selfieImage || !idFile) {
-      toast.error('Please complete all verification steps');
-      return;
+  if (!selfieImage || !idFile) {
+    toast.error('Please complete all verification steps');
+    return;
+  }
+
+  setIsLoading(true);
+  setVerificationStatus(null);
+
+  try {
+    // 1. Perform verification
+    const verificationFormData = new FormData();
+    verificationFormData.append('selfieImage', new File([selfieImage], 'selfie.jpg', { type: 'image/jpeg' }));
+    verificationFormData.append('idImage', idFile);
+    verificationFormData.append('email', session?.user?.email || '');
+
+    const response = await axios.post('/api/verify', verificationFormData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000
+    });
+
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Verification failed');
     }
 
-    setIsLoading(true);
-    setVerificationStatus(null);
+    const extractedData = response.data.document || {};
+    const confidence = response.data.confidence || extractedData.faceConfidence || 95;
 
+    // 2. Prepare registration payload
+    const registrationData = {
+      email: session?.user?.email,
+      name: extractedData.idName || 'Verified User',
+      role: role || 'PROVIDER',
+      verified: true,
+      faceConfidence: confidence,
+      ...extractedData
+    };
+
+    // 3. Register PROVIDER (Google users only if needed)
     try {
-      // 1. Perform verification
-      const verificationFormData = new FormData();
-      verificationFormData.append('selfieImage', new File([selfieImage], 'selfie.jpg', { type: 'image/jpeg' }));
-      verificationFormData.append('idImage', idFile);
-      verificationFormData.append('email', session?.user?.email || '');
-
-      const response = await axios.post('/api/verify', verificationFormData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 60000
-      });
-
-      if (!response.data.success) {
-        throw new Error(response.data.error || 'Verification failed');
-      }
-
-      // 2. Prepare minimal registration data
-      const registrationData = {
-        email: session?.user?.email,
-        name: response.data.document.idName || 'Verified User',
-        role: role || 'PROVIDER',
-        verified: true,
-        ...response.data.document // Include all extracted data
-      };
-
-      // 3. Attempt registration (but proceed even if it fails)
-      try {
-        await axios.post('/api/register', registrationData);
-      } catch (regError) {
-        console.log('Registration completed with warnings:', regError.response?.data);
-      }
-
-      // 4. Update session and complete
-      await update({
-        ...session?.user,
-        isVerified: true,
-        verificationData: response.data.document
-      });
-
-      toast.success('Verification complete!');
-      onComplete();
-
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.error || error.message || 'Verification failed';
-      console.error('Verification error:', errorMsg);
-      setVerificationStatus({ success: false, error: errorMsg });
-      toast.error(errorMsg);
-    } finally {
-      setIsLoading(false);
+      await axios.post('/api/register', registrationData);
+    } catch (regError) {
+      console.log('Registration completed with warnings:', regError.response?.data);
     }
-  };
+
+    // 4. Update session
+    await update({
+      role: 'PROVIDER',
+      isFaceVerified: true,
+      verificationData: extractedData
+    });
+
+    toast.success('Verification complete!');
+    onComplete();
+
+  } catch (error: any) {
+    const errorMsg = error.response?.data?.error || error.message || 'Verification failed';
+    console.error('Verification error:', errorMsg);
+    setVerificationStatus({ success: false, error: errorMsg });
+    toast.error(errorMsg);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-4">
