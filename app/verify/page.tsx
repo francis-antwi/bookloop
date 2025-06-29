@@ -94,7 +94,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
             <FiShield className="text-2xl text-white" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Identity Verification</h1>
-          <p className="text-gray-600">Secure your account with biometric verification</p>
+          <p className="text-gray-600">You need to pass verification before you can access provider functions</p>
         </div>
 
         {/* Progress Bar */}
