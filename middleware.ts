@@ -7,8 +7,8 @@ export default withAuth(
     const token = req.nextauth.token;
 
     const publicPaths = ["/", "/role", "/verify", "/auth", "/auth/error"];
-    const isPublic = publicPaths.some(
-      (path) => pathname === path || pathname.startsWith(`${path}/`)
+    const isPublic = publicPaths.some((path) =>
+      pathname === path || pathname.startsWith(`${path}/`)
     );
 
     // ✅ Allow unauthenticated access to public routes
@@ -16,31 +16,25 @@ export default withAuth(
       return NextResponse.next();
     }
 
-    // ⛔ Redirect users without role to role selection
-    if (!token?.role && !isPublic) {
+    // ⛔ Redirect users without role to role selection (but not if already on /role)
+    if (!token?.role && pathname !== "/role") {
       return NextResponse.redirect(new URL("/role", req.url));
     }
 
     // ⛔ Block unverified PROVIDERs from provider-only areas
-    const providerRestrictedPaths = [
-      "/my-listings",
-      "/approvals",
-      "/bookings",
-      "/favourites",
-      "/notifications",
-      "/admin",
-    ];
-    const isTryingProviderPath = providerRestrictedPaths.some((path) =>
-      pathname.startsWith(path)
-    );
+    const isRestrictedProviderRoute =
+      pathname.startsWith("/my-listings") ||
+      pathname.startsWith("/approvals");
 
     if (
       token?.role === "PROVIDER" &&
       !token?.isFaceVerified &&
-      !isPublic &&
-      isTryingProviderPath
+      isRestrictedProviderRoute
     ) {
-      return NextResponse.redirect(new URL("/verify", req.url));
+      // ✅ Don’t redirect again if already on /verify
+      if (pathname !== "/verify") {
+        return NextResponse.redirect(new URL("/verify", req.url));
+      }
     }
 
     // ⛔ Block non-ADMIN users from /admin
@@ -57,18 +51,17 @@ export default withAuth(
   }
 );
 
-// ✅ Ensure sub-paths are matched (e.g., /verify/step)
 export const config = {
   matcher: [
-    "/",
-    "/role",
-    "/verify/:path*",      // ✅ includes /verify and its children
-    "/auth/:path*",        // ✅ includes /auth/error, /auth/callback/*
+    "/", // ✅ Home page
     "/bookings/:path*",
     "/favourites/:path*",
     "/approvals/:path*",
     "/my-listings/:path*",
     "/notifications/:path*",
     "/admin/:path*",
+    "/role",
+    "/verify",
+    "/auth/:path*",
   ],
 };
