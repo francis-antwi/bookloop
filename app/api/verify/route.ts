@@ -161,8 +161,11 @@ const validateFile = (file: File) => {
 };
 
 // === Core Functions ===
-const processImageForOCR = async (file: File): Promise<Buffer> => {
-  validateFile(file); // This validates against MAX_IMAGE_SIZE (your app's limit)
+const processImageForOCR = async (file: File, requestId: string): Promise<Buffer> => {
+  const startTime = Date.now();
+  console.log(`[${requestId}] Starting image processing for OCR for file size: ${(file.size / 1024 / 1024).toFixed(2)}MB at ${new Date().toISOString()}`);
+
+  validateFile(file);
   const buffer = Buffer.from(await file.arrayBuffer());
 
   let processedBuffer = await sharp(buffer)
@@ -180,7 +183,7 @@ const processImageForOCR = async (file: File): Promise<Buffer> => {
   let quality = 85;
   while (processedBuffer.length > OCR_SPACE_MAX_SIZE_BYTES && quality > 10) {
     quality -= 5; // Decrease quality by 5%
-    console.log(`[OCR Processing] Reducing JPEG quality to ${quality}% to fit OCR.space limit. Current size: ${(processedBuffer.length / 1024).toFixed(2)} KB`);
+    console.log(`[${requestId}] Reducing JPEG quality to ${quality}% to fit OCR.space limit. Current size: ${(processedBuffer.length / 1024).toFixed(2)} KB at ${new Date().toISOString()}`);
     processedBuffer = await sharp(processedBuffer)
       .jpeg({ quality: quality, mozjpeg: true, chromaSubsampling: '4:4:4' })
       .toBuffer();
@@ -188,7 +191,7 @@ const processImageForOCR = async (file: File): Promise<Buffer> => {
 
   // If still too large, try reducing dimensions further
   if (processedBuffer.length > OCR_SPACE_MAX_SIZE_BYTES) {
-    console.warn(`[OCR Processing] Still too large after quality reduction. Attempting further dimension reduction.`);
+    console.warn(`[${requestId}] Still too large after quality reduction. Attempting further dimension reduction. Current size: ${(processedBuffer.length / 1024).toFixed(2)} KB at ${new Date().toISOString()}`);
     processedBuffer = await sharp(buffer) // Start from original buffer
       .rotate()
       .resize({ width: 900, withoutEnlargement: true, kernel: sharp.kernel.lanczos3 }) // Even smaller width
@@ -201,9 +204,9 @@ const processImageForOCR = async (file: File): Promise<Buffer> => {
       .toBuffer();
 
     quality = 80;
-    while (processedBuffer.length > OCR_SPACE_MAX_SIZE_BYTES && quality > 10) {
+    while (processedBuffer.length > OCR_SPACE_MAX_BYTES && quality > 10) {
       quality -= 5;
-      console.log(`[OCR Processing] Further dimension reduction, new JPEG quality to ${quality}% to fit OCR.space limit. Current size: ${(processedBuffer.length / 1024).toFixed(2)} KB`);
+      console.log(`[${requestId}] Further dimension reduction, new JPEG quality to ${quality}% to fit OCR.space limit. Current size: ${(processedBuffer.length / 1024).toFixed(2)} KB at ${new Date().toISOString()}`);
       processedBuffer = await sharp(processedBuffer)
         .jpeg({ quality: quality, mozjpeg: true, chromaSubsampling: '4:4:4' })
         .toBuffer();
@@ -211,16 +214,19 @@ const processImageForOCR = async (file: File): Promise<Buffer> => {
   }
 
   // Final check before returning
-  if (processedBuffer.length > OCR_SPACE_MAX_SIZE_BYTES) {
+  if (processedBuffer.length > OCR_SPACE_MAX_BYTES) {
     throw new Error(`Processed image for OCR still exceeds OCR.space 1MB limit (${(processedBuffer.length / 1024).toFixed(2)} KB) even after aggressive compression.`);
   }
 
+  console.log(`[${requestId}] Finished image processing for OCR in ${Date.now() - startTime}ms. Final size: ${(processedBuffer.length / 1024).toFixed(2)} KB at ${new Date().toISOString()}`);
   return processedBuffer;
 };
 
-const uploadToCloudinaryWithRetry = async (buffer: Buffer, fileType: string) => {
+const uploadToCloudinaryWithRetry = async (buffer: Buffer, fileType: string, requestId: string) => {
   const dataURI = `data:${fileType};base64,${buffer.toString("base64")}`;
   for (let i = 0; i < 3; i++) { // Increased retries to 3
+    const startTime = Date.now();
+    console.log(`[${requestId}] Starting Cloudinary upload attempt ${i + 1} at ${new Date().toISOString()}`);
     try {
       const res = await cloudinary.uploader.upload(dataURI, {
         folder: "id_verification",
@@ -228,9 +234,12 @@ const uploadToCloudinaryWithRetry = async (buffer: Buffer, fileType: string) => 
         resource_type: "image",
         upload_preset: process.env.CLOUDINARY_UPLOAD_PRESET,
       });
-      if (res.secure_url) return res;
+      if (res.secure_url) {
+        console.log(`[${requestId}] Finished Cloudinary upload attempt ${i + 1} in ${Date.now() - startTime}ms at ${new Date().toISOString()}`);
+        return res;
+      }
     } catch (err: any) {
-      console.warn(`Cloudinary upload attempt ${i + 1} failed: ${err.message}`);
+      console.warn(`[${requestId}] Cloudinary upload attempt ${i + 1} failed: ${err.message} in ${Date.now() - startTime}ms at ${new Date().toISOString()}`);
       if (i === 2) throw err;
       await new Promise(resolve => setTimeout(resolve, 2000 * Math.pow(2, i))); // Exponential backoff
     }
@@ -238,7 +247,10 @@ const uploadToCloudinaryWithRetry = async (buffer: Buffer, fileType: string) => 
   throw new Error("Cloudinary upload failed after retries.");
 };
 
-const performOCR = async (imageBuffer: Buffer): Promise<string> => {
+const performOCR = async (imageBuffer: Buffer, requestId: string): Promise<string> => {
+  const startTime = Date.now();
+  console.log(`[${requestId}] Starting OCR.space API call at ${new Date().toISOString()}`);
+
   const base64Image = `data:image/jpeg;base64,${imageBuffer.toString("base64")}`;
   const params = new URLSearchParams({
     apikey: process.env.OCR_SPACE_API_KEY!,
@@ -268,18 +280,18 @@ const performOCR = async (imageBuffer: Buffer): Promise<string> => {
   if (!text || text.length < 50) { // Increased minimum text length for validity to filter very poor OCR
     throw new Error("OCR returned insufficient or no text for reliable extraction.");
   }
-
+  console.log(`[${requestId}] Finished OCR.space API call in ${Date.now() - startTime}ms at ${new Date().toISOString()}`);
   return text;
 };
 
-const performOCRWithRetry = async (buffer: Buffer) => {
+const performOCRWithRetry = async (buffer: Buffer, requestId: string) => {
   let lastErr: any;
   for (let i = 0; i < OCR_MAX_RETRIES; i++) {
     try {
-      return await performOCR(buffer);
+      return await performOCR(buffer, requestId);
     } catch (e: any) {
       lastErr = e;
-      console.warn(`OCR attempt ${i + 1} failed: ${e.message}`);
+      console.warn(`[${requestId}] OCR attempt ${i + 1} failed: ${e.message} at ${new Date().toISOString()}`);
       await new Promise(res => setTimeout(res, 2000 * Math.pow(2, i))); // Exponential backoff
     }
   }
@@ -446,15 +458,17 @@ const extractIDInfo = (text: string): IDInfo => {
   const currentYear = new Date().getFullYear();
   if (idDOB) {
       const dobDate = new Date(idDOB);
-      if (dobDate.getFullYear() > currentYear - 5) { // DOB cannot be in the last 5 years (for adult IDs)
-          warnings.push("DOB appears to be too recent or in the future. Check format/value.");
+      // DOB cannot be in the last 5 years for an adult ID (adjust as needed for specific ID types/age requirements)
+      if (dobDate.getFullYear() > currentYear - 5 || dobDate.getFullYear() < currentYear - 120) {
+          warnings.push("DOB appears to be too recent or implausible (e.g., too old). Check format/value.");
           idDOB = null; // Invalidate for 100% accuracy if suspicious
       }
   }
 
   if (idIssueDate) {
       const issueDate = new Date(idIssueDate);
-      if (issueDate.getFullYear() > currentYear + 1) { // Issue date cannot be too far in the future
+      // Issue date cannot be in the future
+      if (issueDate.getTime() > Date.now() + (24 * 60 * 60 * 1000)) { // 1 day tolerance
           warnings.push("Issue date appears to be in the future. Check format/value.");
           idIssueDate = null; // Invalidate
       }
@@ -462,9 +476,10 @@ const extractIDInfo = (text: string): IDInfo => {
 
   if (idExpiryDate) {
       const expiryDate = new Date(idExpiryDate);
-      if (expiryDate.getFullYear() < currentYear - 1) { // Expiry date cannot be in the past (1 year grace for old IDs)
-          warnings.push("Expiry date appears to be in the past. ID might be expired.");
-          // Don't invalidate, but definitely warn. For 100% success, this would fail.
+      // Expiry date cannot be in the past (1 year grace for old IDs is removed for 100% accuracy)
+      if (expiryDate.getTime() < Date.now() - (30 * 24 * 60 * 60 * 1000)) { // 30 day past tolerance
+          warnings.push("Expiry date is in the past. ID might be expired.");
+          // For 100% success, this would contribute to failure unless overridden by business logic.
       }
   }
 
@@ -511,7 +526,10 @@ const extractIDInfo = (text: string): IDInfo => {
   };
 };
 
-const compareFaces = async (selfieUrl: string, idUrl: string) => {
+const compareFaces = async (selfieUrl: string, idUrl: string, requestId: string) => {
+  const startTime = Date.now();
+  console.log(`[${requestId}] Starting Face++ API call at ${new Date().toISOString()}`);
+
   const params = new URLSearchParams({
     api_key: process.env.FACEPP_API_KEY!,
     api_secret: process.env.FACEPP_API_SECRET!,
@@ -544,9 +562,10 @@ const compareFaces = async (selfieUrl: string, idUrl: string) => {
     if (!faces2?.length) {
       throw new Error("No face detected in ID image by Face++ API.");
     }
+    console.log(`[${requestId}] Finished Face++ API call in ${Date.now() - startTime}ms at ${new Date().toISOString()}`);
     return { confidence };
   } catch (err: any) {
-    console.error("Face comparison API error:", err.response?.data || err.message);
+    console.error(`[${requestId}] Face comparison API error:`, err.response?.data || err.message);
     throw new Error(`Face comparison failed: ${err.response?.data?.error_message || err.message}`);
   }
 };
@@ -554,7 +573,8 @@ const compareFaces = async (selfieUrl: string, idUrl: string) => {
 // === Main POST Handler ===
 export async function POST(req: Request): Promise<NextResponse<VerificationResult | { error: string }>> {
   const requestId = Math.random().toString(36).slice(2, 8);
-  console.log(`🔍 [${requestId}] Verification started`);
+  console.log(`🔍 [${requestId}] Verification started at ${new Date().toISOString()}`);
+  const functionStartTime = Date.now();
 
   try {
     const formData = await req.formData();
@@ -565,19 +585,22 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
 
     // --- 1. Initial Validation ---
     if (!selfie || !id) {
+      console.log(`[${requestId}] Error: Both selfie and ID image are required.`);
       return NextResponse.json({ error: "Both selfie and ID image are required." }, { status: 400 });
     }
 
     // --- 2. Image Processing & Uploads (Parallel) ---
     const [selfieProcessResult, idProcessResult] = await Promise.allSettled([
-      processImageForOCR(selfie),
-      processImageForOCR(id),
+      processImageForOCR(selfie, requestId),
+      processImageForOCR(id, requestId),
     ]);
 
     if (selfieProcessResult.status === "rejected") {
+      console.error(`[${requestId}] Error: Selfie image processing failed: ${selfieProcessResult.reason.message}`);
       return NextResponse.json({ error: `Selfie image processing failed: ${selfieProcessResult.reason.message}` }, { status: 400 });
     }
     if (idProcessResult.status === "rejected") {
+      console.error(`[${requestId}] Error: ID image processing failed: ${idProcessResult.reason.message}`);
       return NextResponse.json({ error: `ID image processing failed: ${idProcessResult.reason.message}` }, { status: 400 });
     }
 
@@ -586,14 +609,16 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
 
     // Upload to Cloudinary concurrently
     const [selfieUploadResult, idUploadResult] = await Promise.allSettled([
-      uploadToCloudinaryWithRetry(selfieBuffer, selfie.type),
-      uploadToCloudinaryWithRetry(idBuffer, id.type),
+      uploadToCloudinaryWithRetry(selfieBuffer, selfie.type, requestId),
+      uploadToCloudinaryWithRetry(idBuffer, id.type, requestId),
     ]);
 
     if (selfieUploadResult.status === "rejected") {
+      console.error(`[${requestId}] Error: Selfie image upload failed: ${selfieUploadResult.reason.message}`);
       return NextResponse.json({ error: `Selfie image upload failed: ${selfieUploadResult.reason.message}` }, { status: 500 });
     }
     if (idUploadResult.status === "rejected") {
+      console.error(`[${requestId}] Error: ID image upload failed: ${idUploadResult.reason.message}`);
       return NextResponse.json({ error: `ID image upload failed: ${idUploadResult.reason.message}` }, { status: 500 });
     }
 
@@ -601,10 +626,11 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
     const idUpload = idUploadResult.value;
 
     // --- 3. Perform OCR ---
-    const ocrTextResult = await Promise.allSettled([performOCRWithRetry(idBuffer)]);
+    const ocrTextResult = await Promise.allSettled([performOCRWithRetry(idBuffer, requestId)]);
 
     if (ocrTextResult[0].status === "rejected") {
       // If OCR completely fails, this is a hard error as we can't extract any data.
+      console.error(`[${requestId}] Error: Document recognition failed: ${ocrTextResult[0].reason.message}`);
       return NextResponse.json({ error: `Document recognition failed: ${ocrTextResult[0].reason.message}. Please ensure the ID is clearly visible and well-lit.` }, { status: 422 }); // 422 Unprocessable Entity
     }
     const ocrText = ocrTextResult[0].value;
@@ -614,7 +640,7 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
 
     // --- 4. Face Comparison ---
     const faceComparisonResult = await Promise.allSettled([
-      compareFaces(selfieUpload.secure_url, idUpload.secure_url)
+      compareFaces(selfieUpload.secure_url, idUpload.secure_url, requestId)
     ]);
 
     let faceMatch = false;
@@ -691,6 +717,8 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
     // --- 7. Optional Registration Flow (only if 100% accurate) ---
     if (shouldRegister && email) {
       if (overallVerificationSuccess) { // Only proceed with registration if verification is truly successful
+        const regStartTime = Date.now();
+        console.log(`[${requestId}] Starting registration API call at ${new Date().toISOString()}`);
         try {
           const registerRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/register`, {
             method: "POST",
@@ -724,17 +752,17 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
           };
 
           if (!registerRes.ok) {
-            console.error(`Registration failed:`, registerResult.error);
+            console.error(`[${requestId}] Registration failed:`, registerResult.error);
           }
 
-          console.log(`Registration attempt for ${email}: Success: ${verificationResponse.registration.success}, User ID: ${verificationResponse.registration.userId || 'N/A'}, Error: ${verificationResponse.registration.error || 'N/A'}`);
+          console.log(`[${requestId}] Registration attempt for ${email}: Success: ${verificationResponse.registration.success}, User ID: ${verificationResponse.registration.userId || 'N/A'}, Error: ${verificationResponse.registration.error || 'N/A'} in ${Date.now() - regStartTime}ms at ${new Date().toISOString()}`);
 
         } catch (regError: any) {
           verificationResponse.registration = {
             success: false,
             error: `Registration API failed: ${regError.message}`
           };
-          console.error(`Error during registration API call:`, regError.message);
+          console.error(`[${requestId}] Error during registration API call:`, regError.message);
         }
       } else {
         // Registration skipped because verification was not 100% successful.
@@ -742,10 +770,10 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
           success: false,
           error: "Registration skipped because verification did not meet 100% accuracy criteria (e.g., incomplete ID data or face mismatch)."
         };
-        console.log(`Registration skipped for ${email} because verification was not 100% successful.`);
+        console.log(`[${requestId}] Registration skipped for ${email} because verification was not 100% successful.`);
       }
     }
-
+    console.log(`✅ [${requestId}] Total verification function execution time: ${Date.now() - functionStartTime}ms at ${new Date().toISOString()}`);
     return NextResponse.json(verificationResponse);
 
   } catch (error: any) {
@@ -767,6 +795,7 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
         errorMessage = error.message; // Use the specific message from early validation
     }
     // For any other unexpected errors, return a generic message
+    console.log(`❌ [${requestId}] Returning error response: ${errorMessage}`);
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
