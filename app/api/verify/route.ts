@@ -1,4 +1,3 @@
-// app/api/verify/route.ts
 import { NextResponse } from "next/server";
 import cloudinary from "cloudinary";
 import axios from "axios";
@@ -235,6 +234,11 @@ const uploadToCloudinaryWithRetry = async (buffer: Buffer, fileType: string, req
       });
       if (res.secure_url) return res;
     } catch (err: any) {
+      console.error(`[${requestId}] Cloudinary upload attempt ${i + 1} failed:`, {
+        error: err.message,
+        stack: err.stack,
+        response: err.response?.body
+      });
       if (i === 2) throw err;
       await new Promise(resolve => setTimeout(resolve, 2000 * Math.pow(2, i)));
     }
@@ -255,21 +259,32 @@ const performOCR = async (imageBuffer: Buffer, requestId: string): Promise<strin
     isOverlayRequired: "true",
   });
 
-  const res = await axios.post("https://api.ocr.space/parse/image", params, {
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    timeout: OCR_TIMEOUT_MS,
-  });
+  try {
+    const res = await axios.post("https://api.ocr.space/parse/image", params, {
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      timeout: OCR_TIMEOUT_MS,
+    });
 
-  const result = res.data;
-  if (result.IsErroredOnProcessing) {
-    throw new Error(`OCR Error: ${result.ErrorMessage?.join(', ') || "Unknown error"}`);
-  }
+    const result = res.data;
+    if (result.IsErroredOnProcessing) {
+      console.error(`[${requestId}] OCR Error Response:`, result);
+      throw new Error(`OCR Error: ${result.ErrorMessage?.join(', ') || "Unknown error"}`);
+    }
 
-  const text = result.ParsedResults?.[0]?.ParsedText;
-  if (!text || text.length < 50) {
-    throw new Error("OCR returned insufficient or no text for reliable extraction.");
+    const text = result.ParsedResults?.[0]?.ParsedText;
+    if (!text || text.length < 50) {
+      console.error(`[${requestId}] Insufficient OCR Text:`, { textLength: text?.length });
+      throw new Error("OCR returned insufficient or no text for reliable extraction.");
+    }
+    return text;
+  } catch (err: any) {
+    console.error(`[${requestId}] OCR Request Failed:`, {
+      error: err.message,
+      config: err.config,
+      response: err.response?.data
+    });
+    throw err;
   }
-  return text;
 };
 
 const performOCRWithRetry = async (buffer: Buffer, requestId: string) => {
@@ -279,6 +294,7 @@ const performOCRWithRetry = async (buffer: Buffer, requestId: string) => {
       return await performOCR(buffer, requestId);
     } catch (e: any) {
       lastErr = e;
+      console.error(`[${requestId}] OCR Attempt ${i + 1} failed:`, e.message);
       await new Promise(res => setTimeout(res, 2000 * Math.pow(2, i)));
     }
   }
@@ -293,9 +309,9 @@ const extractIDInfo = (text: string): IDInfo => {
 
   // Name extraction
   let idName = extractField(lines, [
-    /(?:name|full name|surname|given names):\s*([A-Za-z.'`’\-\s]+(?:\s+[A-Za-z.'`’\-\s]+){1,5})/,
-    /^([A-Za-z.'`’\-\s]+(?:\s+[A-Za-z.'`’\-\s]+){1,5})$/,
-    /\b(mr|ms|mrs|dr)\.?\s*([A-Za-z.'`’\-\s]+(?:\s+[A-Za-z.'`’\-\s]+){1,4})\b/i
+    /(?:name|full name|surname|given names):\s*([A-Za-z.'`'-\s]+(?:\s+[A-Za-z.'`'-\s]+){1,5})/,
+    /^([A-Za-z.'`'-\s]+(?:\s+[A-Za-z.'`'-\s]+){1,5})$/,
+    /\b(mr|ms|mrs|dr)\.?\s*([A-Za-z.'`'-\s]+(?:\s+[A-Za-z.'`'-\s]+){1,4})\b/i
   ]);
 
   if (idName) {
@@ -462,19 +478,49 @@ const compareFaces = async (selfieUrl: string, idUrl: string, requestId: string)
     return_result: "1",
   });
 
-  const res = await axios.post("https://api-us.faceplusplus.com/facepp/v3/compare", params, {
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    timeout: 60000,
-  });
+  try {
+    const res = await axios.post("https://api-us.faceplusplus.com/facepp/v3/compare", params, {
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      timeout: 60000,
+    });
 
-  const { confidence, faces1, faces2, error_message } = res.data;
+    const { confidence, faces1, faces2, error_message } = res.data;
 
-  if (error_message) throw new Error(`Face++ API error: ${error_message}`);
-  if (typeof confidence === 'undefined') throw new Error("Face++ confidence not returned");
-  if (!faces1?.length) throw new Error("No face detected in selfie");
-  if (!faces2?.length) throw new Error("No face detected in ID image");
+    if (error_message) {
+      console.error(`[${requestId}] Face++ API Error:`, {
+        error: error_message,
+        response: res.data
+      });
+      throw new Error(`Face++ API error: ${error_message}`);
+    }
+    if (typeof confidence === 'undefined') {
+      console.error(`[${requestId}] Face++ Missing Confidence:`, res.data);
+      throw new Error("Face++ confidence not returned");
+    }
+    if (!faces1?.length) {
+      console.error(`[${requestId}] No Face in Selfie:`, { faces: faces1 });
+      throw new Error("No face detected in selfie");
+    }
+    if (!faces2?.length) {
+      console.error(`[${requestId}] No Face in ID:`, { faces: faces2 });
+      throw new Error("No face detected in ID image");
+    }
 
-  return { confidence };
+    console.log(`[${requestId}] Face Comparison Success:`, {
+      confidence,
+      faceCountSelfie: faces1.length,
+      faceCountID: faces2.length
+    });
+
+    return { confidence };
+  } catch (err: any) {
+    console.error(`[${requestId}] Face++ Request Failed:`, {
+      error: err.message,
+      config: err.config,
+      response: err.response?.data
+    });
+    throw err;
+  }
 };
 
 // === Main POST Handler ===
@@ -483,6 +529,7 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
   const startTime = Date.now();
 
   try {
+    console.log(`[${requestId}] Starting verification request`);
     const formData = await req.formData();
     const selfie = formData.get("selfieImage") as File;
     const id = formData.get("idImage") as File;
@@ -490,13 +537,28 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
     const shouldRegister = formData.get("register") === "true";
 
     if (!selfie || !id) {
+      console.error(`[${requestId}] Missing required files:`, {
+        hasSelfie: !!selfie,
+        hasID: !!id
+      });
       return NextResponse.json({ error: "Both selfie and ID image are required" }, { status: 400 });
     }
 
+    console.log(`[${requestId}] Received files:`, {
+      selfie: { name: selfie.name, size: selfie.size, type: selfie.type },
+      id: { name: id.name, size: id.size, type: id.type }
+    });
+
     // Process images in parallel
     const [selfieProcessResult, idProcessResult] = await Promise.all([
-      processImageForOCR(selfie, requestId),
-      processImageForOCR(id, requestId),
+      processImageForOCR(selfie, requestId).catch(err => {
+        console.error(`[${requestId}] Selfie processing failed:`, err);
+        throw err;
+      }),
+      processImageForOCR(id, requestId).catch(err => {
+        console.error(`[${requestId}] ID processing failed:`, err);
+        throw err;
+      }),
     ]);
 
     // Upload to Cloudinary in parallel
@@ -505,9 +567,22 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
       uploadToCloudinaryWithRetry(idProcessResult.buffer, id.type, requestId),
     ]);
 
+    console.log(`[${requestId}] Cloudinary uploads complete:`, {
+      selfieUrl: selfieUpload.secure_url,
+      idUrl: idUpload.secure_url
+    });
+
     // Perform OCR on ID image
     const ocrText = await performOCRWithRetry(idProcessResult.buffer, requestId);
+    console.log(`[${requestId}] OCR completed, text length:`, ocrText.length);
+    
     const extracted = extractIDInfo(ocrText);
+    console.log(`[${requestId}] Extracted ID Info:`, {
+      idName: extracted.idName,
+      idNumber: extracted.idNumber,
+      idDOB: extracted.idDOB,
+      warnings: extracted.extractionWarnings
+    });
 
     // Face comparison
     let faceMatch = false;
@@ -520,12 +595,14 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
       faceMatch = confidence >= FACE_MATCH_THRESHOLD;
       if (!faceMatch) {
         faceComparisonError = `Face match confidence (${confidence.toFixed(2)}%) below threshold`;
+        console.warn(`[${requestId}] ${faceComparisonError}`);
       }
     } catch (err: any) {
       faceComparisonError = `Face comparison failed: ${err.message}`;
+      console.error(`[${requestId}] ${faceComparisonError}`);
     }
 
-    // Calculate document quality score (average of both image quality scores)
+    // Calculate document quality score
     const documentQualityScore = Math.round(
       (selfieProcessResult.qualityScore + idProcessResult.qualityScore) / 2
     );
@@ -560,6 +637,7 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
     // Optional registration flow
     if (shouldRegister && email && verificationResponse.success) {
       try {
+        console.log(`[${requestId}] Starting registration for:`, email);
         const registerRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/register`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -581,32 +659,71 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
           userId: registerRes.ok ? registerResult.userId : undefined,
           error: registerRes.ok ? undefined : registerResult.error,
         };
+
+        console.log(`[${requestId}] Registration result:`, verificationResponse.registration);
       } catch (err: any) {
         verificationResponse.registration = {
           success: false,
           error: `Registration failed: ${err.message}`,
         };
+        console.error(`[${requestId}] Registration error:`, err);
       }
     } else if (shouldRegister) {
       verificationResponse.registration = {
         success: false,
         error: "Registration skipped - verification not successful",
       };
+      console.warn(`[${requestId}] Registration skipped due to failed verification`);
     }
+
+    console.log(`[${requestId}] Verification completed in ${Date.now() - startTime}ms`, {
+      success: verificationResponse.success,
+      faceMatch: verificationResponse.verification.faceMatch,
+      confidence: verificationResponse.verification.confidence
+    });
 
     return NextResponse.json(verificationResponse);
   } catch (error: any) {
-    console.error(`[${requestId}] Error:`, error.message);
+    console.error(`[${requestId}] Verification Error:`, {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      code: error.code,
+      response: error.response?.data,
+      config: error.config,
+    });
+
     let errorMessage = "An unexpected error occurred during verification";
     
     if (error.message.includes("Image too")) {
       errorMessage = error.message;
     } else if (error.message.includes("Cloudinary")) {
       errorMessage = "Image upload failed";
+      console.error(`[${requestId}] Cloudinary Error Details:`, {
+        error: error.message,
+        config: cloudinary.v2.config(),
+        envVars: {
+          cloudName: !!process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+          apiKey: !!process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY,
+          apiSecret: !!process.env.CLOUDINARY_API_SECRET,
+          uploadPreset: !!process.env.CLOUDINARY_UPLOAD_PRESET,
+        }
+      });
     } else if (error.message.includes("OCR")) {
       errorMessage = "Document recognition failed - please ensure clear image";
+      console.error(`[${requestId}] OCR Error Details:`, {
+        error: error.message,
+        ocrKey: !!process.env.OCR_SPACE_API_KEY,
+        response: error.response?.data
+      });
     } else if (error.message.includes("Face")) {
       errorMessage = "Face comparison failed - ensure clear photos facing forward";
+      console.error(`[${requestId}] Face++ Error Details:`, {
+        error: error.message,
+        faceppKey: !!process.env.FACEPP_API_KEY,
+        faceppSecret: !!process.env.FACEPP_API_SECRET,
+        response: error.response?.data
+      });
     }
 
     return NextResponse.json({ error: errorMessage }, { status: 500 });
