@@ -53,67 +53,68 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
     setIdFile(file);
   };
 
-  const submitVerification = async () => {
-    if (!selfieImage || !idFile) {
-      toast.error('Please complete all verification steps');
-      return;
-    }
+ const submitVerification = async () => {
+  if (!selfieImage || !idFile) {
+    toast.error('Please complete all verification steps');
+    return;
+  }
 
-    setIsLoading(true);
-    setVerificationStatus(null);
+  setIsLoading(true);
+  setVerificationStatus(null);
 
-    try {
-      const formData = new FormData();
-      formData.append('selfieImage', new File([selfieImage], 'selfie.jpg', { type: 'image/jpeg' }));
-      formData.append('idImage', idFile);
-      formData.append('email', session?.user?.email || '');
-      formData.append('register', 'true');
+  try {
+    const formData = new FormData();
+    formData.append('selfieImage', new File([selfieImage], 'selfie.jpg', { type: 'image/jpeg' }));
+    formData.append('idImage', idFile);
+    formData.append('email', session?.user?.email || '');
+    formData.append('register', 'true');
+    formData.append('role', role); // ✅ Append role
 
-      const response = await axios.post('/api/verify', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+    const response = await axios.post('/api/verify', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    if (response.data.success) {
+      await update({
+        ...session?.user,
+        isVerified: true,
+        verificationData: {
+          selfieUrl: response.data.document.selfieUrl,
+          idImageUrl: response.data.document.imageUrl,
+          confidence: response.data.verification.confidence,
+          idName: response.data.document.idName,
+          idNumber: response.data.document.idNumber,
+          idDOB: response.data.document.idDOB,
+          idExpiryDate: response.data.document.idExpiryDate,
+          idIssuer: response.data.document.idIssuer,
+        }
       });
 
-      if (response.data.success) {
-        await update({
-          ...session?.user,
-          isVerified: true,
-          verificationData: {
-            selfieUrl: response.data.document.selfieUrl,
-            idImageUrl: response.data.document.imageUrl,
-            confidence: response.data.verification.confidence,
-            idName: response.data.document.idName,
-            idNumber: response.data.document.idNumber,
-            idDOB: response.data.document.idDOB,
-            idExpiryDate: response.data.document.idExpiryDate,
-            idIssuer: response.data.document.idIssuer,
-          }
-        });
-
-        if (response.data.registration?.success) {
-          toast.success('Verification and registration completed successfully!');
-          onComplete();
-        } else {
-          setVerificationStatus({
-            success: true,
-            confidence: response.data.verification.confidence,
-            error: response.data.registration?.error || 'Registration incomplete',
-            registrationError: true
-          });
-          toast.success('Verified! ' + (response.data.registration?.error || 'Registration needs attention'));
-        }
+      if (response.data.registration?.success) {
+        toast.success('Verification and registration completed successfully!');
+        onComplete();
       } else {
-        throw new Error(response.data.error || 'Verification failed');
+        setVerificationStatus({
+          success: true,
+          confidence: response.data.verification.confidence,
+          error: response.data.registration?.error || 'Registration incomplete',
+          registrationError: true
+        });
+        toast.success('Verified! ' + (response.data.registration?.error || 'Registration needs attention'));
       }
-    } catch (error: any) {
-      const message = error.response?.data?.error || error.message || 'Verification failed';
-      setVerificationStatus({ success: false, error: message });
-      toast.error(message);
-    } finally {
-      setIsLoading(false);
+    } else {
+      throw new Error(response.data.error || 'Verification failed');
     }
-  };
+  } catch (error: any) {
+    const message = error.response?.data?.error || error.message || 'Verification failed';
+    setVerificationStatus({ success: false, error: message });
+    toast.error(message);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-4">
