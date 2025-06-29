@@ -116,15 +116,8 @@ export async function POST(request: Request) {
     let parsedIssue = idIssueDate ? parseDate(idIssueDate) : null;
 
     if (role === "PROVIDER") {
-      if (isGoogleAuth && !extractionComplete) {
-        return NextResponse.json({
-          success: false,
-          skip: true,
-          message: "Google PROVIDER user is not fully verified. User not saved."
-        }, { status: 200 });
-      }
-
       const missing = [];
+
       if (!selfieImage && !selfieUrl) missing.push("selfieImage");
       if (!idImage && !imageUrl) missing.push("idImage");
       if (!faceConfidence) missing.push("faceConfidence");
@@ -132,7 +125,11 @@ export async function POST(request: Request) {
       if (!idNumber && !personalIdNumber) missing.push("idNumber or personalIdNumber");
 
       if (missing.length) {
-        return NextResponse.json({ error: "Missing provider verification data", missing }, { status: 400 });
+        return NextResponse.json({
+          error: "Missing provider verification data",
+          missing,
+          message: "User not saved. Verification incomplete."
+        }, { status: 400 });
       }
 
       if (parsedExpiry && parsedExpiry < new Date()) {
@@ -141,6 +138,14 @@ export async function POST(request: Request) {
 
       if (parsedDOB && parsedDOB > new Date()) {
         return NextResponse.json({ error: "Invalid date of birth" }, { status: 400 });
+      }
+
+      if (isGoogleAuth && !extractionComplete) {
+        return NextResponse.json({
+          success: false,
+          skip: true,
+          message: "Google PROVIDER is not fully verified. User not saved."
+        }, { status: 200 });
       }
     }
 
