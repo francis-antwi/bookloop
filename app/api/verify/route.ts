@@ -52,7 +52,8 @@ interface VerificationResult {
 const OCR_MAX_RETRIES = 3;
 const OCR_TIMEOUT_MS = 60000;
 const ABSOLUTE_MIN_SIZE = 20000; // 20KB
-const MAX_IMAGE_SIZE = 8_000_000; // Increased to 8MB for better quality images
+const MAX_IMAGE_SIZE = 8_000_000; // Increased to 8MB for better quality images (your app's internal limit)
+const OCR_SPACE_MAX_SIZE_BYTES = 1024 * 1024; // 1024 KB = 1 MB (OCR.space limit)
 const MIN_REQUIRED_FIELDS = 3; // Increased for higher accuracy requirement
 const FACE_MATCH_THRESHOLD = 75; // Adjusted based on common benchmarks, can be fine-tuned
 
@@ -68,7 +69,7 @@ const DATE_FORMATS = [
   /^(\d{2})[\/\-\.](\d{2})[\/\-\.](\d{2})$/, // DD/MM/YY
   /^(\d{1,2})\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{4})$/i, // Day Month YYYY (e.g., 25 Dec 2023)
   /^(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2}),?\s*(\d{4})$/i, // Month Day, YYYY (e.g., Dec 25, 2023)
-  /^(\d{1,2})-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*-(\d{4})$/i, // DD-MON-YYYY (e.g., 25-DEC-2023)
+  /^(\d{1,2})-(?:Jan|Feb|Mar|Apr|May|Jun|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*-(\d{4})$/i, // DD-MON-YYYY (e.g., 25-DEC-2023)
   /^(\d{4})-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*-(\d{1,2})$/i, // YYYY-MON-DD
 ];
 
@@ -147,6 +148,8 @@ const validateFile = (file: File) => {
   if (file.size < ABSOLUTE_MIN_SIZE) {
     throw new Error("Image too small. Try a higher-quality photo.");
   }
+  // The MAX_IMAGE_SIZE is your internal app limit, not OCR.space's.
+  // The OCR_SPACE_MAX_SIZE_BYTES is handled within processImageForOCR.
   if (file.size > MAX_IMAGE_SIZE) {
     throw new Error(`Image too large. Max ${MAX_IMAGE_SIZE / 1_000_000}MB.`);
   }
@@ -154,18 +157,60 @@ const validateFile = (file: File) => {
 
 // === Core Functions ===
 const processImageForOCR = async (file: File): Promise<Buffer> => {
-  validateFile(file);
+  validateFile(file); // This validates against MAX_IMAGE_SIZE (your app's limit)
   const buffer = Buffer.from(await file.arrayBuffer());
-  return sharp(buffer)
+
+  let processedBuffer = await sharp(buffer)
     .rotate() // Auto-rotate based on EXIF
-    .resize({ width: 1500, withoutEnlargement: true, kernel: sharp.kernel.lanczos3 }) // Increased width for better OCR
+    .resize({ width: 1200, withoutEnlargement: true, kernel: sharp.kernel.lanczos3 }) // Reduced width from 1500 to 1200
     .greyscale()
     .normalize()
     .linear(1.2, -20) // Increased contrast slightly
     .sharpen({ sigma: 1.5, flat: 1, jagged: 2 }) // Stronger sharpening
     .modulate({ brightness: 1.1, saturation: 1.1 }) // Slightly brighter and more saturated
-    .jpeg({ quality: 95, mozjpeg: true, chromaSubsampling: '4:4:4' }) // Higher JPEG quality
+    .jpeg({ quality: 85, mozjpeg: true, chromaSubsampling: '4:4:4' }) // Reduced quality to 85, ensure mozjpeg
     .toBuffer();
+
+  // Aggressive resizing/compression loop to meet OCR.space limit
+  let quality = 85;
+  while (processedBuffer.length > OCR_SPACE_MAX_SIZE_BYTES && quality > 10) {
+    quality -= 5; // Decrease quality by 5%
+    console.log(`[OCR Processing] Reducing JPEG quality to ${quality}% to fit OCR.space limit. Current size: ${(processedBuffer.length / 1024).toFixed(2)} KB`);
+    processedBuffer = await sharp(processedBuffer)
+      .jpeg({ quality: quality, mozjpeg: true, chromaSubsampling: '4:4:4' })
+      .toBuffer();
+  }
+
+  // If still too large, try reducing dimensions further
+  if (processedBuffer.length > OCR_SPACE_MAX_SIZE_BYTES) {
+    console.warn(`[OCR Processing] Still too large after quality reduction. Attempting further dimension reduction.`);
+    processedBuffer = await sharp(buffer) // Start from original buffer
+      .rotate()
+      .resize({ width: 900, withoutEnlargement: true, kernel: sharp.kernel.lanczos3 }) // Even smaller width
+      .greyscale()
+      .normalize()
+      .linear(1.2, -20)
+      .sharpen({ sigma: 1.5, flat: 1, jagged: 2 })
+      .modulate({ brightness: 1.1, saturation: 1.1 })
+      .jpeg({ quality: 80, mozjpeg: true, chromaSubsampling: '4:4:4' }) // Start with slightly higher quality again
+      .toBuffer();
+
+    quality = 80;
+    while (processedBuffer.length > OCR_SPACE_MAX_SIZE_BYTES && quality > 10) {
+      quality -= 5;
+      console.log(`[OCR Processing] Further dimension reduction, new JPEG quality to ${quality}% to fit OCR.space limit. Current size: ${(processedBuffer.length / 1024).toFixed(2)} KB`);
+      processedBuffer = await sharp(processedBuffer)
+        .jpeg({ quality: quality, mozjpeg: true, chromaSubsampling: '4:4:4' })
+        .toBuffer();
+    }
+  }
+
+  // Final check before returning
+  if (processedBuffer.length > OCR_SPACE_MAX_SIZE_BYTES) {
+    throw new Error(`Processed image for OCR still exceeds OCR.space 1MB limit (${(processedBuffer.length / 1024).toFixed(2)} KB) even after aggressive compression.`);
+  }
+
+  return processedBuffer;
 };
 
 const uploadToCloudinaryWithRetry = async (buffer: Buffer, fileType: string) => {
