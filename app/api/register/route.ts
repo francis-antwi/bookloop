@@ -81,12 +81,16 @@ export async function POST(request: Request) {
     }
 
     const [existingEmail, existingPhone] = await Promise.all([
-      email ? prisma.user.findUnique({ where: { email } }) : Promise.resolve(null),
+      email || googleUserEmail ? prisma.user.findUnique({ where: { email: email || googleUserEmail } }) : Promise.resolve(null),
       contactPhone ? prisma.user.findUnique({ where: { contactPhone } }) : Promise.resolve(null)
     ]);
 
     if (!isGoogleAuth && existingEmail) {
       return NextResponse.json({ error: "Email already registered" }, { status: 409 });
+    }
+
+    if (isGoogleAuth && googleUserEmail && existingEmail) {
+      return NextResponse.json({ error: "Google user already exists" }, { status: 409 });
     }
 
     if (existingPhone) {
@@ -136,13 +140,6 @@ export async function POST(request: Request) {
     }
 
     const hashedPassword = password ? await bcrypt.hash(password, 12) : null;
-
-    if (isGoogleAuth && googleUserEmail) {
-      const existingGoogleUser = await prisma.user.findUnique({ where: { email: googleUserEmail } });
-      if (existingGoogleUser) {
-        return NextResponse.json({ error: "Google user already exists" }, { status: 409 });
-      }
-    }
 
     const user = await prisma.user.create({
       data: {
