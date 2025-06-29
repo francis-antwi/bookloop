@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     } = body;
 
     // Validate required fields
-    const requiredFields = { email, name, password, role, contactPhone, otpCode };
+    const requiredFields = { email, name, password, role, contactPhone};
     const missingFields = Object.entries(requiredFields)
       .filter(([_, value]) => !value)
       .map(([key]) => key);

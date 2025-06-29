@@ -1,289 +1,542 @@
-'use client';
+import { NextResponse } from "next/server";
+import { v2 as cloudinary } from "cloudinary";
+import axios from "axios";
+import sharp from "sharp";
 
-import { useState } from 'react';
-import {
-  FiCamera,
-  FiUpload,
-  FiCheck,
-  FiLoader,
-  FiArrowLeft,
-  FiArrowRight,
-  FiShield,
-  FiUser,
-  FiFileText
-} from 'react-icons/fi';
-import { useSession } from 'next-auth/react';
-import axios from 'axios';
-import toast from 'react-hot-toast';
-import Camera from '../components/inputs/Camera';
+// ========== Constants ==========
+const OCR_MAX_RETRIES = 3;
+const OCR_TIMEOUT_MS = 60000;
+const ABSOLUTE_MIN_SIZE = 20000;
+const RECOMMENDED_MIN_SIZE = 50000;
+const MAX_IMAGE_SIZE = 5_000_000;
+const MIN_REQUIRED_FIELDS = 1;
+const FACE_MATCH_THRESHOLD = 80;
+const CLOUDINARY_UPLOAD_TIMEOUT = 30000;
+const FACEPP_COMPARE_TIMEOUT = 20000;
+const ID_KEYWORDS = ["passport", "driver", "license", "identity", "id card", "ghana card", "ecowas"];
+const USER_SERVICE_TIMEOUT = 15000;
 
-interface VerificationStepsProps {
-  role: string;
-  onComplete: () => void;
+// ========== Types ==========
+interface IDInfo {
+  idName: string | null;
+  idNumber: string | null;
+  personalIdNumber: string | null;
+  idDOB: string | null;
+  idIssueDate: string | null;
+  idExpiryDate: string | null;
+  idIssuer: string | null;
+  placeOfIssue: string | null;
+  rawText: string;
+  extractionWarnings: string[];
 }
 
-const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
-  const { update } = useSession();
-  const [currentStep, setCurrentStep] = useState<'selfie' | 'id'>('selfie');
-  const [selfieImage, setSelfieImage] = useState<Blob | null>(null);
-  const [idFile, setIdFile] = useState<File | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [verificationStatus, setVerificationStatus] = useState<{
-    success: boolean;
-    confidence?: number;
-    error?: string;
-  } | null>(null);
+interface VerificationResult {
+  success: boolean;
+  verification: {
+    faceMatch: boolean;
+    confidence: number;
+    threshold: number;
+  };
+  document: {
+    type: string;
+    imageUrl: string;
+    selfieUrl: string;
+    extractionComplete: boolean;
+  } & IDInfo;
+}
 
-  const handleSelfieCapture = (blob: Blob) => setSelfieImage(blob);
-  const handleIdUpload = (file: File) => setIdFile(file);
+interface UserRegistrationData {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  idNumber: string;
+  dateOfBirth: string;
+  idImageUrl: string;
+  selfieImageUrl: string;
+}
 
-  const submitVerification = async () => {
-    if (!selfieImage || !idFile) {
-      toast.error('Please complete all verification steps');
-      return;
+interface RegistrationResult {
+  success: boolean;
+  userId?: string;
+  error?: string;
+}
+
+interface CombinedResponse {
+  verification: VerificationResult;
+  registration?: RegistrationResult;
+}
+
+// ========== Configuration Validator ==========
+class ConfigValidator {
+  static validate() {
+    const requiredEnvVars = [
+      'NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME',
+      'NEXT_PUBLIC_CLOUDINARY_API_KEY',
+      'CLOUDINARY_API_SECRET',
+      'OCR_SPACE_API_KEY',
+      'FACEPP_API_KEY',
+      'FACEPP_API_SECRET',
+      'USER_SERVICE_URL'
+    ];
+
+    const missingVars = requiredEnvVars.filter(key => !process.env[key]);
+    if (missingVars.length) {
+      throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
+    }
+  }
+}
+
+// ========== Cloudinary Service ==========
+class CloudinaryService {
+  private static initialized = false;
+
+  static initialize() {
+    if (!this.initialized) {
+      cloudinary.config({
+        cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+        api_key: process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY,
+        api_secret: process.env.CLOUDINARY_API_SECRET,
+      });
+      this.initialized = true;
+      console.log("Cloudinary initialized successfully");
+    }
+  }
+
+  static async uploadImage(buffer: Buffer, fileType: string) {
+    this.initialize();
+    
+    const dataURI = `data:${fileType};base64,${buffer.toString("base64")}`;
+    try {
+      const result = await cloudinary.uploader.upload(dataURI, {
+        folder: "face_compare",
+        timeout: CLOUDINARY_UPLOAD_TIMEOUT,
+        quality_analysis: true,
+      });
+      console.log(`Upload successful: ${result.secure_url}`);
+      return result;
+    } catch (error) {
+      console.error("Cloudinary upload error:", error);
+      throw new Error(`Cloudinary upload failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+}
+
+// ========== Image Processor ==========
+class ImageProcessor {
+  static validateImage(file: File) {
+    if (file.size < ABSOLUTE_MIN_SIZE) {
+      throw new Error(`Image too small (${file.size} bytes). Minimum size: ${ABSOLUTE_MIN_SIZE} bytes.`);
+    }
+    if (file.size > MAX_IMAGE_SIZE) {
+      throw new Error(`Image too large (${file.size} bytes). Maximum size: ${MAX_IMAGE_SIZE} bytes.`);
+    }
+  }
+
+  static async processImage(file: File): Promise<Buffer> {
+    this.validateImage(file);
+    const buffer = Buffer.from(await file.arrayBuffer());
+    
+    const optimizationParams = file.size < RECOMMENDED_MIN_SIZE
+      ? { width: 1200, sharpenRadius: 2, quality: 95 }
+      : { width: 800, sharpenRadius: 1, quality: 85 };
+
+    return sharp(buffer)
+      .resize({ width: optimizationParams.width, withoutEnlargement: true })
+      .grayscale()
+      .normalize()
+      .sharpen({ 
+        sigma: 1, 
+        m1: optimizationParams.sharpenRadius, 
+        m2: optimizationParams.sharpenRadius 
+      })
+      .jpeg({ 
+        quality: optimizationParams.quality, 
+        mozjpeg: true 
+      })
+      .toBuffer();
+  }
+}
+
+// ========== OCR Service ==========
+class OCRService {
+  static async performOCR(imageBuffer: Buffer): Promise<string> {
+    const base64Image = `data:image/jpeg;base64,${imageBuffer.toString("base64")}`;
+    const params = new URLSearchParams({
+      apikey: process.env.OCR_SPACE_API_KEY!,
+      base64Image,
+      language: "eng",
+      OCREngine: "2",
+      isTable: "true",
+      detectOrientation: "true",
+      scale: "true",
+    });
+
+    const response = await axios.post(
+      "https://api.ocr.space/parse/image", 
+      params, 
+      {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        timeout: OCR_TIMEOUT_MS,
+      }
+    );
+
+    const result = response.data;
+    if (result.IsErroredOnProcessing) {
+      throw new Error(`OCR Error: ${result.ErrorMessage || result.ErrorDetails || "Unknown error"}`);
     }
 
-    setIsLoading(true);
-    setVerificationStatus(null);
+    const parsedText = result.ParsedResults?.[0]?.ParsedText;
+    if (!parsedText || parsedText.trim().length < 10) {
+      throw new Error("Insufficient OCR result. Please ensure the image is clear and contains readable text.");
+    }
 
+    return parsedText;
+  }
+
+  static async performOCRWithRetry(imageBuffer: Buffer): Promise<string> {
+    let lastError: Error | null = null;
+    
+    for (let attempt = 0; attempt < OCR_MAX_RETRIES; attempt++) {
+      try {
+        return await this.performOCR(imageBuffer);
+      } catch (error) {
+        lastError = error as Error;
+        const delay = Math.pow(2, attempt) * 1000;
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    
+    throw lastError || new Error("OCR failed after maximum retries");
+  }
+}
+
+// ========== Face Comparison Service ==========
+class FaceComparisonService {
+  static async compareFaces(selfieUrl: string, idUrl: string): Promise<{ confidence: number }> {
+    const params = new URLSearchParams({
+      api_key: process.env.FACEPP_API_KEY!,
+      api_secret: process.env.FACEPP_API_SECRET!,
+      image_url1: selfieUrl,
+      image_url2: idUrl,
+    });
+
+    const response = await axios.post(
+      "https://api-us.faceplusplus.com/facepp/v3/compare", 
+      params, 
+      { timeout: FACEPP_COMPARE_TIMEOUT }
+    );
+
+    if (!response.data?.faces1?.length || !response.data?.faces2?.length) {
+      throw new Error("No face detected in one or both images.");
+    }
+
+    const confidence = Number(response.data?.confidence || 0);
+    return { confidence };
+  }
+}
+
+// ========== User Registration Service ==========
+class UserRegistrationService {
+  static async registerUser(userData: UserRegistrationData): Promise<RegistrationResult> {
     try {
-      const formData = new FormData();
-      formData.append('selfieImage', new File([selfieImage], 'selfie.jpg', { type: 'image/jpeg' }));
-      formData.append('idImage', idFile);
-
-      const response = await axios.post('/api/verify', formData);
+      const response = await axios.post(
+        `${process.env.USER_SERVICE_URL}/register`,
+        userData,
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: USER_SERVICE_TIMEOUT,
+        }
+      );
 
       if (response.data.success) {
-        await update({
-          isFaceVerified: true,
-          selfieImage: response.data.document.selfieUrl,
-          idImage: response.data.document.imageUrl,
-          faceConfidence: response.data.verification.confidence,
-          idName: response.data.document.idName,
-          idNumber: response.data.document.idNumber,
-          idDOB: response.data.document.idDOB,
-          idExpiryDate: response.data.document.idExpiryDate,
-          idIssuer: response.data.document.idIssuer,
-        });
-
-        setVerificationStatus({
-          success: true,
-          confidence: response.data.verification.confidence,
-        });
-
-        toast.success('Verification completed successfully!');
-        onComplete();
-      } else {
-        throw new Error(response.data.error || 'Verification failed');
+        return { 
+          success: true, 
+          userId: response.data.userId 
+        };
       }
+      return { 
+        success: false, 
+        error: response.data.error || "Registration failed" 
+      };
     } catch (error: any) {
-      const message = error.response?.data?.error || error.message || 'Verification failed';
-      setVerificationStatus({ success: false, error: message });
-      toast.error(message);
-    } finally {
-      setIsLoading(false);
+      console.error("Registration error:", error);
+      return { 
+        success: false, 
+        error: error.response?.data?.error || error.message || "Registration service unavailable" 
+      };
     }
-  };
+  }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-4">
-      <div className="max-w-md mx-auto">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full mb-4 shadow-lg">
-            <FiShield className="text-2xl text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Identity Verification</h1>
-          <p className="text-gray-600">You need to pass verification before you can access provider functions</p>
-        </div>
+  static extractNames(fullName: string | null): { firstName: string, lastName: string } {
+    if (!fullName) return { firstName: '', lastName: '' };
+    
+    const names = fullName.trim().split(/\s+/);
+    if (names.length === 1) return { firstName: names[0], lastName: '' };
+    
+    const lastName = names.pop() || '';
+    const firstName = names.join(' ');
+    return { firstName, lastName };
+  }
+}
 
-        {/* Progress Bar */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-gray-700">Progress</span>
-            <span className="text-sm text-gray-500">{currentStep === 'selfie' ? '1' : '2'} of 2</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div 
-              className="bg-gradient-to-r from-blue-500 to-indigo-600 h-2 rounded-full transition-all duration-500 ease-out"
-              style={{ width: currentStep === 'selfie' ? '50%' : '100%' }}
-            />
-          </div>
-        </div>
+// ========== ID Info Extractor ==========
+class IDInfoExtractor {
+  static cleanText(text: string): string {
+    return text
+      .replace(/[^\x00-\x7F\r\n]/g, " ")
+      .replace(/REPI[\\]?BLIC|REPIBLIC/gi, "REPUBLIC")
+      .replace(/[^a-zA-Z0-9\/\-\s]/g, " ")
+      .trim();
+  }
 
-        {/* Step Content */}
-        <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
-          {currentStep === 'selfie' && (
-            <div className="space-y-6">
-              {/* Step Header */}
-              <div className="text-center">
-                <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-3">
-                  <FiUser className="text-xl text-blue-600" />
-                </div>
-                <h2 className="text-xl font-semibold text-gray-900 mb-2">Face Verification</h2>
-                <p className="text-gray-600 text-sm">Take a clear selfie for identity confirmation</p>
-              </div>
+  static getLines(text: string): string[] {
+    return text.split(/\r?\n/)
+      .map(this.cleanText)
+      .filter(line => line.length > 0);
+  }
 
-              {/* Camera Component */}
-              <div className="relative">
-                <Camera onCapture={handleSelfieCapture} />
-                {selfieImage && (
-                  <div className="absolute -top-2 -right-2 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
-                    <FiCheck className="text-white text-sm" />
-                  </div>
-                )}
-              </div>
+  static normalizeDate(dateStr: string): string | null {
+    try {
+      const cleaned = dateStr.replace(/[^\d\/\-.]/g, '');
+      const parts = cleaned.split(/[\/\-\.]/).map(Number);
+      if (parts.length !== 3 || parts.some(isNaN)) return null;
+      
+      const [a, b, c] = parts;
+      if (a > 1900) return `${a}-${b.toString().padStart(2, '0')}-${c.toString().padStart(2, '0')}`;
+      if (c > 1900) return `${c}-${b.toString().padStart(2, '0')}-${a.toString().padStart(2, '0')}`;
+      return `20${c}-${b.toString().padStart(2, '0')}-${a.toString().padStart(2, '0')}`;
+    } catch {
+      return null;
+    }
+  }
 
-              {/* Success Indicator */}
-              {selfieImage && (
-                <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
-                  <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-                    <FiCheck className="text-white text-sm" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-green-800">Selfie captured successfully!</p>
-                    <p className="text-sm text-green-600">Ready to proceed to next step</p>
-                  </div>
-                </div>
-              )}
+  static logFieldSummary(idInfo: IDInfo): void {
+    console.log("📋 Final Field Extraction Summary:");
+    const fields = [
+      ["Name", idInfo.idName],
+      ["ID Number", idInfo.idNumber],
+      ["DOB", idInfo.idDOB],
+      ["Issue Date", idInfo.idIssueDate],
+      ["Expiry Date", idInfo.idExpiryDate],
+      ["Issuer", idInfo.idIssuer],
+      ["Place of Issue", idInfo.placeOfIssue],
+    ];
+    
+    fields.forEach(([label, value]) => {
+      console.log(`${label.padEnd(15)}: ${value || "NOT FOUND"}`);
+    });
+  }
 
-              {/* Action Buttons */}
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setCurrentStep('id')}
-                  disabled={!selfieImage}
-                  className="flex-1 py-4 px-6 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 disabled:from-gray-300 disabled:to-gray-400 disabled:transform-none disabled:shadow-md flex items-center justify-center gap-2"
-                >
-                  <span>Continue to ID Verification</span>
-                  <FiArrowRight className="text-sm" />
-                </button>
-              </div>
-            </div>
-          )}
+  static extractIDInfo(text: string): IDInfo {
+    const lines = this.getLines(text);
+    const warnings: string[] = [];
 
-          {currentStep === 'id' && (
-            <div className="space-y-6">
-              {/* Step Header */}
-              <div className="text-center">
-                <div className="inline-flex items-center justify-center w-12 h-12 bg-indigo-100 rounded-full mb-3">
-                  <FiFileText className="text-xl text-indigo-600" />
-                </div>
-                <h2 className="text-xl font-semibold text-gray-900 mb-2">ID Verification</h2>
-                <p className="text-gray-600 text-sm">Upload a government-issued ID document</p>
-              </div>
+    console.log("🧾 OCR Lines:");
+    lines.forEach(line => console.log("•", line));
 
-              {/* Error State */}
-              {verificationStatus?.success === false && (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
-                  <div className="flex items-start gap-3">
-                    <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <span className="text-white text-xs">!</span>
-                    </div>
-                    <div>
-                      <p className="font-medium text-red-800">Verification Failed</p>
-                      <p className="text-sm text-red-600 mt-1">{verificationStatus.error}</p>
-                      {verificationStatus.confidence && (
-                        <p className="text-xs text-red-500 mt-2">
-                          Confidence score: {verificationStatus.confidence.toFixed(1)}%
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
+    // Name extraction
+    const name = lines.find(line => 
+      /name|surname/i.test(line) || /^[A-Z\s]{8,}$/.test(line)
+    ) || null;
 
-              {/* Upload Area - FIXED: Removed capture="environment" */}
-              <div className="relative">
-                <input
-                  type="file"
-                  id="id-upload"
-                  accept="image/*"
-                  onChange={(e) => e.target.files?.[0] && handleIdUpload(e.target.files[0])}
-                  disabled={isLoading}
-                  className="hidden"
-                />
-                <label 
-                  htmlFor="id-upload" 
-                  className="cursor-pointer block border-2 border-dashed border-gray-300 hover:border-blue-400 rounded-xl p-8 text-center transition-all duration-200 hover:bg-blue-50"
-                >
-                  <div className="space-y-4">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full">
-                      <FiUpload className="text-2xl text-gray-400" />
-                    </div>
-                    <div>
-                      <p className="text-blue-600 font-semibold text-lg">Upload ID Document</p>
-                      <p className="text-gray-500 text-sm mt-1">Ghana Card, Passport, or Driver's License</p>
-                      <p className="text-xs text-gray-400 mt-2">Choose from camera or gallery</p>
-                    </div>
-                  </div>
-                </label>
-                {idFile && (
-                  <div className="absolute -top-2 -right-2 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
-                    <FiCheck className="text-white text-sm" />
-                  </div>
-                )}
-              </div>
+    // ID Number extraction
+    const idNumber = lines.map(line => 
+      line.match(/\b([A-Z0-9]{6,})\b/)?.[1]
+    ).find(Boolean) || null;
 
-              {/* File Selected Indicator */}
-              {idFile && (
-                <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
-                  <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-                    <FiCheck className="text-white text-sm" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-green-800">Document uploaded</p>
-                    <p className="text-sm text-green-600 truncate">{idFile.name}</p>
-                  </div>
-                </div>
-              )}
+    // Date extraction
+    const dates = lines
+      .flatMap((line, idx) =>
+        [...line.matchAll(/\b\d{2,4}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}\b/g)]
+          .map(match => ({ date: match[0], line, idx }))
+      )
+      .sort((a, b) => a.idx - b.idx);
 
-              {/* Action Buttons */}
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setCurrentStep('selfie')}
-                  className="px-6 py-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-all duration-200 flex items-center gap-2"
-                >
-                  <FiArrowLeft className="text-sm" />
-                  <span>Back</span>
-                </button>
-                
-                <button
-                  onClick={submitVerification}
-                  disabled={!idFile || isLoading}
-                  className="flex-1 py-4 px-6 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 disabled:from-gray-300 disabled:to-gray-400 disabled:transform-none disabled:shadow-md flex items-center justify-center gap-3"
-                >
-                  {isLoading ? (
-                    <>
-                      <FiLoader className="animate-spin text-lg" />
-                      <span>Verifying Identity...</span>
-                    </>
-                  ) : (
-                    <>
-                      <FiShield className="text-lg" />
-                      <span>Complete Verification</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+    const idDOB = this.normalizeDate(dates[0]?.date || "");
+    const idIssueDate = this.normalizeDate(dates[1]?.date || "");
+    const idExpiryDate = this.normalizeDate(dates.at(-1)?.date || "");
 
-        {/* Security Notice */}
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-          <div className="flex items-start gap-3">
-            <FiShield className="text-blue-500 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-sm font-medium text-blue-800">Secure & Private</p>
-              <p className="text-xs text-blue-600 mt-1">
-                Your data is encrypted and processed securely. We never store sensitive information permanently.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
+    // Issuer information
+    const idIssuer = lines.find(line =>
+      /republic|authority/i.test(line)
+    ) || null;
 
-export default VerificationSteps;
+    // Place of issue
+    const placeOfIssue = lines.find(line =>
+      /issue.*(accra|kumasi|tamale|cape coast|takoradi)/i.test(line)
+    ) || null;
+
+    // Field validation warnings
+    if (!name) warnings.push("Name not found");
+    if (!idNumber) warnings.push("ID number not found");
+    if (!idDOB) warnings.push("DOB not found");
+    if (!idIssuer) warnings.push("Issuer not found");
+    if (!placeOfIssue) warnings.push("Place of issue not found");
+
+    const extractedInfo: IDInfo = {
+      idName: name,
+      idNumber,
+      personalIdNumber: null,
+      idDOB,
+      idIssueDate,
+      idExpiryDate,
+      idIssuer,
+      placeOfIssue,
+      rawText: text,
+      extractionWarnings: warnings,
+    };
+
+    this.logFieldSummary(extractedInfo);
+    return extractedInfo;
+  }
+}
+
+// ========== Main API ==========
+export async function POST(req: Request): Promise<NextResponse<CombinedResponse | { error: string }>> {
+  const startTime = Date.now();
+  const requestId = Math.random().toString(36).slice(2, 8);
+  console.log(`🔍 [${requestId}] Starting verification and registration process`);
+
+  try {
+    // Validate configuration first
+    ConfigValidator.validate();
+
+    // Parse form data
+    const formData = await req.formData();
+    const selfie = formData.get("selfieImage") as File;
+    const idImage = formData.get("idImage") as File;
+    const email = formData.get("email") as string;
+    const password = formData.get("password") as string;
+
+    if (!selfie || !idImage || !email || !password) {
+      console.error(`❌ [${requestId}] Missing required fields`);
+      return NextResponse.json(
+        { error: "All fields (selfie, ID image, email, password) are required." }, 
+        { status: 400 }
+      );
+    }
+
+    // Process images
+    const [selfieBuffer, idBuffer] = await Promise.all([
+      ImageProcessor.processImage(selfie),
+      ImageProcessor.processImage(idImage),
+    ]);
+
+    // Upload to Cloudinary
+    const [selfieUpload, idUpload] = await Promise.all([
+      CloudinaryService.uploadImage(selfieBuffer, selfie.type),
+      CloudinaryService.uploadImage(idBuffer, idImage.type),
+    ]);
+
+    // Perform OCR on ID image
+    const ocrText = await OCRService.performOCRWithRetry(idBuffer);
+
+    // Validate ID document type
+    const isLikelyID = ID_KEYWORDS.some(keyword => 
+      ocrText.toLowerCase().includes(keyword.toLowerCase())
+    );
+    
+    if (!isLikelyID) {
+      console.warn(`⚠️ [${requestId}] OCR output may not be from a valid ID document`);
+    }
+
+    // Extract ID information
+    const extractedInfo = IDInfoExtractor.extractIDInfo(ocrText);
+
+    // Validate minimum required fields
+    const validFields = [
+      extractedInfo.idName, 
+      extractedInfo.idNumber, 
+      extractedInfo.idDOB
+    ].filter(Boolean).length;
+    
+    if (validFields < MIN_REQUIRED_FIELDS) {
+      console.error(`❌ [${requestId}] Insufficient ID information extracted`);
+      return NextResponse.json(
+        { error: "Could not extract sufficient information from the ID document." }, 
+        { status: 400 }
+      );
+    }
+
+    // Compare faces
+    const { confidence } = await FaceComparisonService.compareFaces(
+      selfieUpload.secure_url, 
+      idUpload.secure_url
+    );
+    const faceMatch = confidence >= FACE_MATCH_THRESHOLD;
+
+    // Create verification result
+    const verificationResult: VerificationResult = {
+      success: true,
+      verification: { 
+        faceMatch, 
+        confidence, 
+        threshold: FACE_MATCH_THRESHOLD 
+      },
+      document: {
+        type: "ID",
+        imageUrl: idUpload.secure_url,
+        selfieUrl: selfieUpload.secure_url,
+        extractionComplete: extractedInfo.extractionWarnings.length === 0,
+        ...extractedInfo,
+      },
+    };
+
+    // Only proceed with registration if verification succeeded
+    if (!faceMatch) {
+      console.error(`❌ [${requestId}] Face verification failed`);
+      return NextResponse.json({
+        verification: {
+          ...verificationResult,
+          success: false
+        },
+        error: "Face verification failed. Please ensure your selfie matches your ID photo."
+      }, { status: 400 });
+    }
+
+    // Prepare registration data
+    const { firstName, lastName } = UserRegistrationService.extractNames(extractedInfo.idName);
+    const registrationData: UserRegistrationData = {
+      email,
+      password,
+      firstName,
+      lastName,
+      idNumber: extractedInfo.idNumber || '',
+      dateOfBirth: extractedInfo.idDOB || '',
+      idImageUrl: idUpload.secure_url,
+      selfieImageUrl: selfieUpload.secure_url
+    };
+
+    // Register user
+    const registrationResult = await UserRegistrationService.registerUser(registrationData);
+    
+    if (!registrationResult.success) {
+      console.error(`❌ [${requestId}] Registration failed: ${registrationResult.error}`);
+      return NextResponse.json({
+        verification: verificationResult,
+        registration: registrationResult
+      }, { status: 400 });
+    }
+
+    // Log completion
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log(`✅ [${requestId}] Verification and registration completed in ${duration}s`);
+
+    // Return successful response
+    return NextResponse.json({
+      verification: verificationResult,
+      registration: registrationResult
+    });
+
+  } catch (error: any) {
+    console.error(`❌ [${requestId}] Error:`, error);
+    const statusCode = error.message.includes("Missing required") ? 500 : 400;
+    const errorMessage = error.message || "An unexpected error occurred during verification";
+    
+    return NextResponse.json(
+      { error: errorMessage }, 
+      { status: statusCode }
+    );
+  }
+}
