@@ -2,6 +2,8 @@ import bcrypt from "bcrypt";
 import prisma from "@/app/libs/prismadb";
 import { NextResponse } from "next/server";
 import { UserRole } from "@prisma/client";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/authOptions";
 
 function parseDate(dateStr: string): Date | null {
   try {
@@ -24,10 +26,13 @@ export async function POST(request: Request) {
   const errorContext: any = {};
 
   try {
+    const session = await getServerSession(authOptions);
+    const isLoggedIn = !!session?.user;
+    const googleUserEmail = session?.user?.email || null;
+
     const body = await request.json();
     console.log("📦 Incoming registration payload:", JSON.stringify(body, null, 2));
-    errorContext.requestBody = body;  
-  
+    errorContext.requestBody = body;
 
     const {
       email,
@@ -56,8 +61,19 @@ export async function POST(request: Request) {
       verified
     } = body;
 
-    if (!email || !name) {
-      return NextResponse.json({ error: "Missing required fields: email, name" }, { status: 400 });
+    const isGoogleAuth = isLoggedIn && !password && !otpCode;
+
+    if (!name || (!email && !isGoogleAuth)) {
+      return NextResponse.json(
+        {
+          error: "Missing required fields",
+          missing: [
+            ...(!name ? ["name"] : []),
+            ...(!email && !isGoogleAuth ? ["email"] : [])
+          ]
+        },
+        { status: 400 }
+      );
     }
 
     if (!Object.values(UserRole).includes(role)) {
@@ -65,11 +81,11 @@ export async function POST(request: Request) {
     }
 
     const [existingEmail, existingPhone] = await Promise.all([
-      prisma.user.findUnique({ where: { email } }),
+      email ? prisma.user.findUnique({ where: { email } }) : Promise.resolve(null),
       contactPhone ? prisma.user.findUnique({ where: { contactPhone } }) : Promise.resolve(null)
     ]);
 
-    if (existingEmail) {
+    if (!isGoogleAuth && existingEmail) {
       return NextResponse.json({ error: "Email already registered" }, { status: 409 });
     }
 
@@ -78,7 +94,7 @@ export async function POST(request: Request) {
     }
 
     // === OTP verification for non-Google accounts ===
-    if (otpCode && contactPhone) {
+    if (!isGoogleAuth && otpCode && contactPhone) {
       const otpVerification = await prisma.oTPVerification.findFirst({
         where: {
           phoneNumber: contactPhone,
@@ -123,43 +139,84 @@ export async function POST(request: Request) {
 
     const hashedPassword = password ? await bcrypt.hash(password, 12) : null;
 
-    const user = await prisma.user.create({
-      data: {
-        email,
-        name,
-        contactPhone: contactPhone || null,
-        hashedPassword,
-        role,
-        isOtpVerified: !!otpCode,
-        isFaceVerified: role === "PROVIDER",
-        verified: role === "PROVIDER" ? true : !!verified,
-        selfieImage: selfieImage || selfieUrl || null,
-        idImage: idImage || imageUrl || null,
-        faceConfidence: faceConfidence || null,
-        idName: idName || null,
-        idNumber: idNumber || personalIdNumber || null,
-        idDOB: parsedDOB,
-        idExpiryDate: parsedExpiry,
-        idIssueDate: parsedIssue,
-        idIssuer: idIssuer || null,
-        personalIdNumber: personalIdNumber || null,
-        nationality: nationality || null,
-        gender: gender || null,
-        placeOfIssue: placeOfIssue || null,
-        idType: idType || null,
-        rawText: rawText || null
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        contactPhone: true,
-        isFaceVerified: true,
-        verified: true,
-        createdAt: true
-      }
-    });
+    let user;
+
+    if (isGoogleAuth && googleUserEmail) {
+      user = await prisma.user.update({
+        where: { email: googleUserEmail },
+        data: {
+          name,
+          contactPhone: contactPhone || null,
+          role,
+          isOtpVerified: false,
+          isFaceVerified: role === "PROVIDER",
+          verified: role === "PROVIDER" ? true : !!verified,
+          selfieImage: selfieImage || selfieUrl || null,
+          idImage: idImage || imageUrl || null,
+          faceConfidence: faceConfidence || null,
+          idName: idName || null,
+          idNumber: idNumber || personalIdNumber || null,
+          idDOB: parsedDOB,
+          idExpiryDate: parsedExpiry,
+          idIssueDate: parsedIssue,
+          idIssuer: idIssuer || null,
+          personalIdNumber: personalIdNumber || null,
+          nationality: nationality || null,
+          gender: gender || null,
+          placeOfIssue: placeOfIssue || null,
+          idType: idType || null,
+          rawText: rawText || null
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          contactPhone: true,
+          isFaceVerified: true,
+          verified: true,
+          createdAt: true
+        }
+      });
+    } else {
+      user = await prisma.user.create({
+        data: {
+          email: email || null,
+          name,
+          contactPhone: contactPhone || null,
+          hashedPassword,
+          role,
+          isOtpVerified: !isGoogleAuth,
+          isFaceVerified: role === "PROVIDER",
+          verified: role === "PROVIDER" ? true : !!verified,
+          selfieImage: selfieImage || selfieUrl || null,
+          idImage: idImage || imageUrl || null,
+          faceConfidence: faceConfidence || null,
+          idName: idName || null,
+          idNumber: idNumber || personalIdNumber || null,
+          idDOB: parsedDOB,
+          idExpiryDate: parsedExpiry,
+          idIssueDate: parsedIssue,
+          idIssuer: idIssuer || null,
+          personalIdNumber: personalIdNumber || null,
+          nationality: nationality || null,
+          gender: gender || null,
+          placeOfIssue: placeOfIssue || null,
+          idType: idType || null,
+          rawText: rawText || null
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          contactPhone: true,
+          isFaceVerified: true,
+          verified: true,
+          createdAt: true
+        }
+      });
+    }
 
     return NextResponse.json({
       success: true,
