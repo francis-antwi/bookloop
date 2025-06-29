@@ -1,4 +1,5 @@
 "use client";
+
 import { useCallback, useState, useRef, useEffect } from "react";
 import { AiOutlineMenu } from "react-icons/ai";
 import { useRouter } from "next/navigation";
@@ -119,19 +120,22 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
     }
   };
 
+  const isVerifiedProvider =
+    currentUser?.role === "PROVIDER" && currentUser?.isFaceVerified;
+
   const menuItems = currentUser
     ? [
         { onClick: () => router.push("/"), label: "Home" },
         { onClick: () => router.push("/favourites"), label: "Favourites" },
         { onClick: () => router.push("/bookings"), label: "Bookings" },
-        ...(currentUser?.role === "PROVIDER"
+        ...(isVerifiedProvider
           ? [
               { onClick: () => router.push("/my-listings"), label: "Listings" },
               { onClick: () => router.push("/approvals"), label: "Approvals" },
             ]
           : []),
         { onClick: () => router.push("/notifications"), label: "Notifications" },
-        ...(session?.user?.role === "PROVIDER"
+        ...(isVerifiedProvider
           ? [{ onClick: onRent, label: "Get Listed" }]
           : []),
         {
@@ -143,13 +147,12 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
     : [
         { onClick: loginModal.onOpen, label: "Login" },
         { onClick: registerModal.onOpen, label: "Sign Up" },
-      
       ];
 
   return (
     <div className="relative" ref={dropdownRef}>
       <div className="flex flex-row items-center gap-3">
-        {currentUser?.role === "PROVIDER" && (
+        {isVerifiedProvider && (
           <button
             onClick={onRent}
             className="hidden md:flex items-center gap-2 text-sm font-semibold py-3 px-6 rounded-full bg-gradient-to-r from-rose-500 to-pink-500 text-white hover:from-rose-600 hover:to-pink-600 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2"
