@@ -263,9 +263,11 @@ const performOCRWithRetry = async (imageBuffer: Buffer): Promise<string> => {
 const extractIDInfo = (text: string): IDInfo => {
   const lines = getLines(text);
   const warnings: string[] = [];
-  
+
   console.log("🧾 OCR Lines:");
   lines.forEach((line, i) => console.log(`${i.toString().padStart(2)}:`, line));
+
+  const joinedText = lines.join(" ");
 
   const idType = extractField(lines, [
     /(passport|visa|driver'?s? license|national id|identity card|ghana card|ecowas card|voter'?s? id)/i,
@@ -273,100 +275,87 @@ const extractIDInfo = (text: string): IDInfo => {
     /type:?\s*([a-z\s]+)/i
   ]);
 
-  const namePatterns = [
-    /name:?\s*([a-z\s,.'-]+)/i,
-    /surname:?\s*([a-z\s,.'-]+)/i,
-    /full name:?\s*([a-z\s,.'-]+)/i,
-    /^([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})$/,
-    /(?:applicant|holder)'?s? name:?\s*([a-z\s,.'-]+)/i
-  ];
-  const idName = extractField(lines, namePatterns);
+  const idName = extractField(lines, [
+    /name:?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/i,
+    /surname:?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/i,
+    /full name:?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/i,
+    /^([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})$/i,
+    /(?:holder|applicant)'?s name:?\s*([a-z\s,.'-]+)/i
+  ]) || extractField([joinedText], [/([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/]);
 
   const idNumber = extractField(lines, [
-    /(?:id|number|no\.?):?\s*([A-Z0-9\-]{6,})/i,
-    /[A-Z]{2,3}\d{6,}/,
-    /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/,
-    /(?:personal|unique) id:?\s*([A-Z0-9\-]+)/i
+    /(?:id number|card number|no\.?):?\s*([A-Z0-9]{6,})/i,
+    /\b[A-Z]{2,3}\d{6,}\b/,
+    /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/
   ]);
 
   const personalIdNumber = extractField(lines, [
-    /(?:personal|unique) (?:id|number):?\s*([A-Z0-9\-]+)/i,
-    /pin:?\s*([A-Z0-9\-]+)/i,
-    /national id:?\s*([A-Z0-9\-]+)/i
+    /personal id:?\s*([A-Z0-9]+)/i,
+    /pin:?\s*([A-Z0-9]+)/i,
+    /national id:?\s*([A-Z0-9]+)/i
   ]);
 
-  const dateLines = lines.flatMap((line, idx) => 
-    [...line.matchAll(/(?:date of birth|dob|issued|expir|date):?\s*(\d{2,4}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/gi)]
-      .map(m => ({ date: m[1], line, idx }))
-  ).sort((a, b) => a.idx - b.idx);
+  const idDOB = extractField(lines, [
+    /(?:dob|date of birth):?\s*(\d{2}[\/\-\.]\d{2}[\/\-\.]\d{2,4})/i
+  ]) || normalizeDate(extractField(lines, [/\b\d{2}[\/\-\.]\d{2}[\/\-\.]\d{4}\b/]) ?? "");
 
-  let idDOB = null, idIssueDate = null, idExpiryDate = null;
-  
-  for (const { date, line } of dateLines) {
-    const normalized = normalizeDate(date);
-    if (!normalized) continue;
-    
-    if (line.toLowerCase().includes('birth') || line.toLowerCase().includes('dob')) {
-      idDOB = normalized;
-    } else if (line.toLowerCase().includes('issue') || line.toLowerCase().includes('issued')) {
-      idIssueDate = normalized;
-    } else if (line.toLowerCase().includes('expir') || line.toLowerCase().includes('valid')) {
-      idExpiryDate = normalized;
-    } else if (!idDOB) {
-      idDOB = normalized;
-    } else if (!idIssueDate) {
-      idIssueDate = normalized;
-    } else {
-      idExpiryDate = normalized;
-    }
-  }
+  const idIssueDate = extractField(lines, [
+    /(?:date of issue|issued):?\s*(\d{2}[\/\-\.]\d{2}[\/\-\.]\d{2,4})/i
+  ]) || normalizeDate(extractField(lines, [/\b\d{2}[\/\-\.]\d{2}[\/\-\.]\d{4}\b/]) ?? "");
+
+  const idExpiryDate = extractField(lines, [
+    /(?:expiry|expires|valid until):?\s*(\d{2}[\/\-\.]\d{2}[\/\-\.]\d{2,4})/i
+  ]) || normalizeDate(extractField(lines, [/\b\d{2}[\/\-\.]\d{2}[\/\-\.]\d{4}\b/]) ?? "");
 
   const idIssuer = extractField(lines, [
-    /(?:issued by|authority|issuer):?\s*([A-Za-z\s\-]+)/i,
-    /(?:government|republic) of ([A-Za-z\s\-]+)/i,
-    /(?:ministry|department) of ([A-Za-z\s\-]+)/i
+    /issued by:? ([a-z\s]+)/i,
+    /authority:? ([a-z\s]+)/i,
+    /republic of ([A-Za-z\s]+)/i
   ]);
 
   const placeOfIssue = extractField(lines, [
-    /(?:place of issue|issued at):?\s*([A-Za-z\s\-]+)/i,
-    /(?:location|city|office):?\s*([A-Za-z\s\-]+)/i
+    /issued at:? ([a-z\s]+)/i,
+    /place of issue:? ([a-z\s]+)/i,
+    /location:? ([a-z\s]+)/i
   ]);
 
   const idGender = extractField(lines, [
-    /(?:sex|gender):?\s*([A-Za-z]+)/i,
+    /gender:? ([A-Z]+)/i,
     /\b(MALE|FEMALE)\b/i
   ]);
 
   const idNationality = extractField(lines, [
-    /(?:nationality|country):?\s*([A-Za-z\s\-]+)/i,
-    /citizen of ([A-Za-z\s\-]+)/i
+    /nationality:? ([A-Z\s]+)/i,
+    /citizen of ([A-Z\s]+)/i
   ]);
 
+  // Add warnings for missing important fields
   if (!idName) warnings.push("Name not found");
   if (!idNumber && !personalIdNumber) warnings.push("ID number not found");
   if (!idDOB) warnings.push("Date of birth not found");
-  if (!idIssuer) warnings.push("Issuing authority not found");
-  if (dateLines.length === 0) warnings.push("No dates found in document");
+  if (!idIssuer) warnings.push("Issuer not found");
+  if (!idType) warnings.push("ID type not detected");
 
   const info: IDInfo = {
     idName,
     idNumber,
     personalIdNumber,
-    idDOB,
-    idIssueDate,
-    idExpiryDate,
+    idDOB: normalizeDate(idDOB || ""),
+    idIssueDate: normalizeDate(idIssueDate || ""),
+    idExpiryDate: normalizeDate(idExpiryDate || ""),
     idIssuer,
     placeOfIssue,
     idType,
     idGender,
     idNationality,
     rawText: text,
-    extractionWarnings: warnings,
+    extractionWarnings: warnings
   };
 
   logFieldSummary(info);
   return info;
 };
+
 
 const compareFaces = async (selfieUrl: string, idUrl: string): Promise<{ confidence: number }> => {
   const params = new URLSearchParams({
