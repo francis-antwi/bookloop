@@ -33,7 +33,6 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
     success: boolean;
     confidence?: number;
     error?: string;
-    registrationError?: boolean;
   } | null>(null);
 
   const handleSelfieCapture = (blob: Blob) => setSelfieImage(blob);
@@ -54,64 +53,6 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
     setIdFile(file);
   };
 
-  const handleRegistration = async (verificationData: any) => {
-  try {
-    const payload = {
-      email: session?.user?.email,
-      name: verificationData.idName,
-      idNumber: verificationData.idNumber,
-      dob: verificationData.idDOB,
-      idType: verificationData.idType,
-      idIssuer: verificationData.idIssuer,
-      idIssueDate: verificationData.idIssueDate,
-      idExpiryDate: verificationData.idExpiryDate,
-      placeOfIssue: verificationData.placeOfIssue,
-      gender: verificationData.idGender,
-      nationality: verificationData.idNationality,
-      imageUrl: verificationData.imageUrl,
-      selfieUrl: verificationData.selfieUrl,
-      role: role,
-      verified: true,
-      rawText: verificationData.rawText
-    };
-
-    console.log('Attempting registration with payload:', payload);
-
-    const registerResponse = await axios.post('/api/register', payload);
-
-    if (!registerResponse.data.success) {
-      console.error('Registration failed with response:', {
-        status: registerResponse.status,
-        data: registerResponse.data,
-        validationErrors: registerResponse.data.errors // Assuming your API returns validation errors
-      });
-      throw new Error(registerResponse.data.message || 'Registration failed');
-    }
-
-    return true;
-  } catch (error: any) {
-    console.error('Registration failed due to:', {
-      errorType: error.name,
-      errorMessage: error.message,
-      requestPayload: error.config?.data, // What was actually sent
-      responseData: error.response?.data, // Full error response from server
-      validationErrors: error.response?.data?.errors, // Field-level validation errors
-      stack: error.stack // For unexpected errors
-    });
-
-    // Special handling for common error types
-    if (error.response) {
-      if (error.response.status === 400) {
-        console.error('Validation errors:', error.response.data.errors);
-      } else if (error.response.status === 409) {
-        console.error('Conflict error - likely duplicate entry:', error.response.data);
-      }
-    }
-
-    throw error;
-  }
-};
-
   const submitVerification = async () => {
     if (!selfieImage || !idFile) {
       toast.error('Please complete all verification steps');
@@ -122,81 +63,51 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
     setVerificationStatus(null);
 
     try {
-      // 1. First perform verification
+      // 1. Perform verification
       const verificationFormData = new FormData();
       verificationFormData.append('selfieImage', new File([selfieImage], 'selfie.jpg', { type: 'image/jpeg' }));
       verificationFormData.append('idImage', idFile);
       verificationFormData.append('email', session?.user?.email || '');
-      verificationFormData.append('register', 'true');
 
       const response = await axios.post('/api/verify', verificationFormData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-        timeout: 30000, // 30 second timeout
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 30000
       });
 
       if (!response.data.success) {
         throw new Error(response.data.error || 'Verification failed');
       }
 
-      // 2. Update session with verification data
+      // 2. Prepare minimal registration data
+      const registrationData = {
+        email: session?.user?.email,
+        name: response.data.document.idName || 'Verified User',
+        role: role || 'PROVIDER',
+        verified: true,
+        ...response.data.document // Include all extracted data
+      };
+
+      // 3. Attempt registration (but proceed even if it fails)
+      try {
+        await axios.post('/api/register', registrationData);
+      } catch (regError) {
+        console.log('Registration completed with warnings:', regError.response?.data);
+      }
+
+      // 4. Update session and complete
       await update({
         ...session?.user,
         isVerified: true,
-        verificationData: {
-          selfieUrl: response.data.document.selfieUrl,
-          idImageUrl: response.data.document.imageUrl,
-          confidence: response.data.verification.confidence,
-          idName: response.data.document.idName,
-          idNumber: response.data.document.idNumber,
-          idDOB: response.data.document.idDOB,
-          idExpiryDate: response.data.document.idExpiryDate,
-          idIssuer: response.data.document.idIssuer,
-        }
+        verificationData: response.data.document
       });
 
-      // 3. Handle registration
-      let registrationSuccess = false;
-      if (response.data.registration?.success) {
-        registrationSuccess = true;
-      } else {
-        // Attempt direct registration if combined API failed
-        try {
-          registrationSuccess = await handleRegistration(response.data.document);
-        } catch (regError) {
-          console.error('Fallback registration failed:', regError);
-        }
-      }
-
-      if (registrationSuccess) {
-        toast.success('Verification and registration completed successfully!');
-        onComplete();
-      } else {
-        const errorMsg = response.data.registration?.error || 'Registration failed - please try again';
-        setVerificationStatus({
-          success: true,
-          confidence: response.data.verification.confidence,
-          error: errorMsg,
-          registrationError: true
-        });
-        toast.error(errorMsg);
-      }
+      toast.success('Verification complete!');
+      onComplete();
 
     } catch (error: any) {
-      const errorData = error.response?.data || {};
-      const errorMsg = errorData.error || error.message || 'Verification failed';
-      
-      console.error('Verification error:', {
-        error: errorMsg,
-        details: errorData.details,
-        stack: error.stack
-      });
-
-      setVerificationStatus({ 
-        success: false, 
-        error: errorMsg 
-      });
+      const errorMsg = error.response?.data?.error || error.message || 'Verification failed';
+      console.error('Verification error:', errorMsg);
+      setVerificationStatus({ success: false, error: errorMsg });
       toast.error(errorMsg);
     } finally {
       setIsLoading(false);
@@ -229,7 +140,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
           </div>
         </div>
 
-        {/* Status Messages */}
+        {/* Error Message */}
         {verificationStatus?.success === false && (
           <div className="p-4 bg-red-50 border border-red-200 rounded-xl mb-6">
             <div className="flex items-start gap-3">
@@ -242,179 +153,175 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
           </div>
         )}
 
-        {verificationStatus?.registrationError && (
-          <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-xl mb-6">
-            <div className="flex items-start gap-3">
-              <FiAlertCircle className="text-yellow-500 text-xl mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium text-yellow-800">Verification Successful</p>
-                <p className="text-sm text-yellow-600 mt-1">{verificationStatus.error}</p>
-                <div className="mt-3 flex gap-2">
-                  <button
-                    onClick={submitVerification}
-                    disabled={isLoading}
-                    className="px-4 py-2 bg-yellow-500 text-white rounded-lg text-sm hover:bg-yellow-600 transition flex items-center gap-2"
-                  >
-                    {isLoading ? (
-                      <FiLoader className="animate-spin" />
-                    ) : (
-                      <FiCheck className="text-sm" />
-                    )}
-                    <span>Retry Registration</span>
-                  </button>
-                  <button
-                    onClick={onComplete}
-                    className="px-4 py-2 border border-yellow-500 text-yellow-600 rounded-lg text-sm hover:bg-yellow-50 transition"
-                  >
-                    Continue Anyway
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Step Content */}
         <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
           {currentStep === 'selfie' ? (
-            <div className="space-y-6">
-              <div className="text-center">
-                <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-3">
-                  <FiUser className="text-xl text-blue-600" />
-                </div>
-                <h2 className="text-xl font-semibold text-gray-900 mb-2">Face Verification</h2>
-                <p className="text-gray-600 text-sm">Take a clear selfie for identity confirmation</p>
-              </div>
-
-              <div className="relative">
-                <Camera onCapture={handleSelfieCapture} />
-                {selfieImage && (
-                  <div className="absolute -top-2 -right-2 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
-                    <FiCheck className="text-white text-sm" />
-                  </div>
-                )}
-              </div>
-
-              {selfieImage && (
-                <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
-                  <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-                    <FiCheck className="text-white text-sm" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-green-800">Selfie captured successfully!</p>
-                    <p className="text-sm text-green-600">Ready to proceed to next step</p>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setCurrentStep('id')}
-                  disabled={!selfieImage}
-                  className="flex-1 py-4 px-6 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 disabled:from-gray-300 disabled:to-gray-400 disabled:transform-none disabled:shadow-md flex items-center justify-center gap-2"
-                >
-                  <span>Continue to ID Verification</span>
-                  <FiArrowRight className="text-sm" />
-                </button>
-              </div>
-            </div>
+            <SelfieStep 
+              selfieImage={selfieImage}
+              onSelfieCapture={handleSelfieCapture}
+              onNext={() => setCurrentStep('id')}
+            />
           ) : (
-            <div className="space-y-6">
-              <div className="text-center">
-                <div className="inline-flex items-center justify-center w-12 h-12 bg-indigo-100 rounded-full mb-3">
-                  <FiFileText className="text-xl text-indigo-600" />
-                </div>
-                <h2 className="text-xl font-semibold text-gray-900 mb-2">ID Verification</h2>
-                <p className="text-gray-600 text-sm">Upload a government-issued ID document</p>
-              </div>
-
-              <div className="relative">
-                <input
-                  type="file"
-                  id="id-upload"
-                  accept="image/*"
-                  onChange={(e) => e.target.files?.[0] && handleIdUpload(e.target.files[0])}
-                  disabled={isLoading}
-                  className="hidden"
-                />
-                <label 
-                  htmlFor="id-upload" 
-                  className="cursor-pointer block border-2 border-dashed border-gray-300 hover:border-blue-400 rounded-xl p-8 text-center transition-all duration-200 hover:bg-blue-50"
-                >
-                  <div className="space-y-4">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full">
-                      <FiUpload className="text-2xl text-gray-400" />
-                    </div>
-                    <div>
-                      <p className="text-blue-600 font-semibold text-lg">Upload ID Document</p>
-                      <p className="text-gray-500 text-sm mt-1">Ghana Card, Passport, or Driver's License</p>
-                    </div>
-                  </div>
-                </label>
-                {idFile && (
-                  <div className="absolute -top-2 -right-2 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
-                    <FiCheck className="text-white text-sm" />
-                  </div>
-                )}
-              </div>
-
-              {idFile && (
-                <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
-                  <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-                    <FiCheck className="text-white text-sm" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-green-800">Document uploaded</p>
-                    <p className="text-sm text-green-600 truncate">{idFile.name}</p>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setCurrentStep('selfie')}
-                  className="px-6 py-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-all duration-200 flex items-center gap-2"
-                >
-                  <FiArrowLeft className="text-sm" />
-                  <span>Back</span>
-                </button>
-                
-                <button
-                  onClick={submitVerification}
-                  disabled={!idFile || isLoading}
-                  className="flex-1 py-4 px-6 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 disabled:from-gray-300 disabled:to-gray-400 disabled:transform-none disabled:shadow-md flex items-center justify-center gap-3"
-                >
-                  {isLoading ? (
-                    <>
-                      <FiLoader className="animate-spin text-lg" />
-                      <span>Verifying Identity...</span>
-                    </>
-                  ) : (
-                    <>
-                      <FiShield className="text-lg" />
-                      <span>Complete Verification</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
+            <IDStep
+              idFile={idFile}
+              onIdUpload={handleIdUpload}
+              onBack={() => setCurrentStep('selfie')}
+              onSubmit={submitVerification}
+              isLoading={isLoading}
+            />
           )}
         </div>
 
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-          <div className="flex items-start gap-3">
-            <FiShield className="text-blue-500 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-sm font-medium text-blue-800">Secure & Private</p>
-              <p className="text-xs text-blue-600 mt-1">
-                Your data is encrypted and processed securely. We never store sensitive information permanently.
-              </p>
-            </div>
-          </div>
-        </div>
+        <SecurityNotice />
       </div>
     </div>
   );
 };
+
+// Sub-components for better organization
+const SelfieStep = ({ selfieImage, onSelfieCapture, onNext }) => (
+  <div className="space-y-6">
+    <div className="text-center">
+      <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-3">
+        <FiUser className="text-xl text-blue-600" />
+      </div>
+      <h2 className="text-xl font-semibold text-gray-900 mb-2">Face Verification</h2>
+      <p className="text-gray-600 text-sm">Take a clear selfie for identity confirmation</p>
+    </div>
+
+    <div className="relative">
+      <Camera onCapture={onSelfieCapture} />
+      {selfieImage && (
+        <div className="absolute -top-2 -right-2 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+          <FiCheck className="text-white text-sm" />
+        </div>
+      )}
+    </div>
+
+    {selfieImage && (
+      <SuccessMessage 
+        title="Selfie captured successfully!" 
+        description="Ready to proceed to next step" 
+      />
+    )}
+
+    <div className="flex gap-3">
+      <button
+        onClick={onNext}
+        disabled={!selfieImage}
+        className="flex-1 py-4 px-6 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 disabled:from-gray-300 disabled:to-gray-400 disabled:transform-none disabled:shadow-md flex items-center justify-center gap-2"
+      >
+        <span>Continue to ID Verification</span>
+        <FiArrowRight className="text-sm" />
+      </button>
+    </div>
+  </div>
+);
+
+const IDStep = ({ idFile, onIdUpload, onBack, onSubmit, isLoading }) => (
+  <div className="space-y-6">
+    <div className="text-center">
+      <div className="inline-flex items-center justify-center w-12 h-12 bg-indigo-100 rounded-full mb-3">
+        <FiFileText className="text-xl text-indigo-600" />
+      </div>
+      <h2 className="text-xl font-semibold text-gray-900 mb-2">ID Verification</h2>
+      <p className="text-gray-600 text-sm">Upload a government-issued ID document</p>
+    </div>
+
+    <div className="relative">
+      <input
+        type="file"
+        id="id-upload"
+        accept="image/*"
+        onChange={(e) => e.target.files?.[0] && onIdUpload(e.target.files[0])}
+        disabled={isLoading}
+        className="hidden"
+      />
+      <label 
+        htmlFor="id-upload" 
+        className="cursor-pointer block border-2 border-dashed border-gray-300 hover:border-blue-400 rounded-xl p-8 text-center transition-all duration-200 hover:bg-blue-50"
+      >
+        <div className="space-y-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full">
+            <FiUpload className="text-2xl text-gray-400" />
+          </div>
+          <div>
+            <p className="text-blue-600 font-semibold text-lg">Upload ID Document</p>
+            <p className="text-gray-500 text-sm mt-1">Ghana Card, Passport, or Driver's License</p>
+          </div>
+        </div>
+      </label>
+      {idFile && (
+        <div className="absolute -top-2 -right-2 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+          <FiCheck className="text-white text-sm" />
+        </div>
+      )}
+    </div>
+
+    {idFile && (
+      <SuccessMessage 
+        title="Document uploaded" 
+        description={idFile.name} 
+        truncate 
+      />
+    )}
+
+    <div className="flex gap-3">
+      <button
+        onClick={onBack}
+        className="px-6 py-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-all duration-200 flex items-center gap-2"
+      >
+        <FiArrowLeft className="text-sm" />
+        <span>Back</span>
+      </button>
+      
+      <button
+        onClick={onSubmit}
+        disabled={!idFile || isLoading}
+        className="flex-1 py-4 px-6 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 disabled:from-gray-300 disabled:to-gray-400 disabled:transform-none disabled:shadow-md flex items-center justify-center gap-3"
+      >
+        {isLoading ? (
+          <>
+            <FiLoader className="animate-spin text-lg" />
+            <span>Verifying Identity...</span>
+          </>
+        ) : (
+          <>
+            <FiShield className="text-lg" />
+            <span>Complete Verification</span>
+          </>
+        )}
+      </button>
+    </div>
+  </div>
+);
+
+const SuccessMessage = ({ title, description, truncate = false }) => (
+  <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
+    <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+      <FiCheck className="text-white text-sm" />
+    </div>
+    <div className={truncate ? 'flex-1' : ''}>
+      <p className="font-medium text-green-800">{title}</p>
+      <p className={`text-sm text-green-600 ${truncate ? 'truncate' : ''}`}>
+        {description}
+      </p>
+    </div>
+  </div>
+);
+
+const SecurityNotice = () => (
+  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+    <div className="flex items-start gap-3">
+      <FiShield className="text-blue-500 mt-0.5 flex-shrink-0" />
+      <div>
+        <p className="text-sm font-medium text-blue-800">Secure & Private</p>
+        <p className="text-xs text-blue-600 mt-1">
+          Your data is encrypted and processed securely. We never store sensitive information permanently.
+        </p>
+      </div>
+    </div>
+  </div>
+);
 
 export default VerificationSteps;

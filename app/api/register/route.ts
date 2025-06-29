@@ -2,6 +2,7 @@ import bcrypt from "bcrypt";
 import prisma from "@/app/libs/prismadb";
 import { NextResponse } from "next/server";
 import { UserRole } from "@prisma/client";
+import { signJwt } from "@/lib/jwt"; // Add this helper to sign a JWT if not already present
 
 function parseDate(dateStr: string): Date | null {
   try {
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    errorContext.requestBody = body; // Log initial request
+    errorContext.requestBody = body;
 
     const {
       email,
@@ -47,7 +48,6 @@ export async function POST(request: Request) {
       otpCode
     } = body;
 
-    // Validate required fields
     const requiredFields = { email, name, password, role, contactPhone };
     const missingFields = Object.entries(requiredFields)
       .filter(([_, value]) => !value)
@@ -61,7 +61,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate OTP via Prisma
     const otpVerification = await prisma.oTPVerification.findFirst({
       where: {
         phoneNumber: contactPhone,
@@ -89,7 +88,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check for existing users
     const [existingEmail, existingPhone] = await Promise.all([
       prisma.user.findUnique({ where: { email } }),
       prisma.user.findUnique({ where: { contactPhone } })
@@ -102,37 +100,26 @@ export async function POST(request: Request) {
 
     if (existingEmail) {
       return NextResponse.json(
-        { 
-          error: "This email is already registered",
-          details: { registeredEmail: existingEmail.email }
-        },
+        { error: "This email is already registered", details: { registeredEmail: existingEmail.email } },
         { status: 409 }
       );
     }
 
     if (existingPhone) {
       return NextResponse.json(
-        { 
-          error: "This phone number is already registered",
-          details: { registeredPhone: existingPhone.contactPhone }
-        },
+        { error: "This phone number is already registered", details: { registeredPhone: existingPhone.contactPhone } },
         { status: 409 }
       );
     }
 
-    // Validate role
     if (!Object.values(UserRole).includes(role)) {
       errorContext.invalidRole = role;
       return NextResponse.json(
-        { 
-          error: "Invalid user role selected",
-          details: { validRoles: Object.values(UserRole) }
-        },
+        { error: "Invalid user role selected", details: { validRoles: Object.values(UserRole) } },
         { status: 400 }
       );
     }
 
-    // Validate email format
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       errorContext.invalidEmail = email;
       return NextResponse.json(
@@ -141,19 +128,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate password length
     if (password.length < 8) {
       errorContext.passwordLength = password.length;
       return NextResponse.json(
-        { 
-          error: "Password must be at least 8 characters",
-          details: { length: password.length }
-        },
+        { error: "Password must be at least 8 characters", details: { length: password.length } },
         { status: 400 }
       );
     }
 
-    // Provider-specific validation
     let parsedDOB: Date | null = null;
     let parsedExpiry: Date | null = null;
     let parsedIssueDate: Date | null = null;
@@ -195,15 +177,11 @@ export async function POST(request: Request) {
 
       if (typeof faceConfidence !== "number" || faceConfidence < 0) {
         return NextResponse.json(
-          { 
-            error: "Invalid face verification confidence score",
-            details: { score: faceConfidence }
-          },
+          { error: "Invalid face verification confidence score", details: { score: faceConfidence } },
           { status: 400 }
         );
       }
 
-      // Date parsing and validation
       parsedDOB = idDOB ? parseDate(idDOB) : null;
       parsedExpiry = idExpiryDate ? parseDate(idExpiryDate) : null;
       parsedIssueDate = idIssueDate ? parseDate(idIssueDate) : null;
@@ -216,23 +194,16 @@ export async function POST(request: Request) {
 
       if (idDOB && !parsedDOB) {
         return NextResponse.json(
-          { 
-            error: "Invalid date of birth format (use DD/MM/YYYY)",
-            details: { formatExample: "31/12/1990" }
-          },
+          { error: "Invalid date of birth format (use DD/MM/YYYY)", details: { formatExample: "31/12/1990" } },
           { status: 400 }
         );
       }
 
       if (parsedDOB && (parsedDOB.getFullYear() < 1900 || parsedDOB > new Date())) {
         return NextResponse.json(
-          { 
+          {
             error: "Invalid date of birth",
-            details: { 
-              date: parsedDOB.toISOString(),
-              minYear: 1900,
-              maxDate: new Date().toISOString() 
-            }
+            details: { date: parsedDOB.toISOString(), minYear: 1900, maxDate: new Date().toISOString() }
           },
           { status: 400 }
         );
@@ -240,33 +211,21 @@ export async function POST(request: Request) {
 
       if (idExpiryDate && !parsedExpiry) {
         return NextResponse.json(
-          { 
-            error: "Invalid ID expiry date format (use DD/MM/YYYY)",
-            details: { formatExample: "31/12/2030" }
-          },
+          { error: "Invalid ID expiry date format (use DD/MM/YYYY)", details: { formatExample: "31/12/2030" } },
           { status: 400 }
         );
       }
 
       if (parsedExpiry && parsedExpiry < new Date()) {
         return NextResponse.json(
-          { 
-            error: "ID document has expired",
-            details: { 
-              expiryDate: parsedExpiry.toISOString(),
-              currentDate: new Date().toISOString() 
-            }
-          },
+          { error: "ID document has expired", details: { expiryDate: parsedExpiry.toISOString(), currentDate: new Date().toISOString() } },
           { status: 400 }
         );
       }
 
       if (idIssueDate && !parsedIssueDate) {
         return NextResponse.json(
-          { 
-            error: "Invalid ID issue date format (use DD/MM/YYYY)",
-            details: { formatExample: "31/12/2020" }
-          },
+          { error: "Invalid ID issue date format (use DD/MM/YYYY)", details: { formatExample: "31/12/2020" } },
           { status: 400 }
         );
       }
@@ -274,7 +233,6 @@ export async function POST(request: Request) {
 
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create user transactionally
     const user = await prisma.$transaction(async (tx) => {
       const userData = {
         email,
@@ -318,16 +276,31 @@ export async function POST(request: Request) {
       return createdUser;
     });
 
-    return NextResponse.json(
-      {
-        success: true,
-        user,
-        message: role === "PROVIDER"
-          ? "Provider account created successfully"
-          : "Account created successfully"
-      },
-      { status: 201 }
-    );
+    // 🔐 Issue JWT and set cookie for auto-login
+    const token = signJwt({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      isFaceVerified: !!user.isFaceVerified
+    });
+
+    const response = NextResponse.json({
+      success: true,
+      user,
+      token,
+      message: role === "PROVIDER"
+        ? "Provider account created and logged in"
+        : "Account created and logged in"
+    });
+
+    response.cookies.set("auth-token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 60 * 60 * 24 * 7,
+      path: "/"
+    });
+
+    return response;
 
   } catch (error: any) {
     const errorDetails = {
