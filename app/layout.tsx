@@ -53,32 +53,41 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // ✅ Attempt to get session using NextAuth
+  // ✅ Get session via getServerSession
   let session = await getServerSession(authOptions);
 
-  // 🔁 Fallback to getToken for App Router (if getServerSession fails)
+  // 🔁 Fallback to getToken in App Router environments
   if (!session) {
-    const token = await getToken({
-      req: { headers: { cookie: cookies().toString() } },
-      secret: process.env.NEXTAUTH_SECRET,
-    });
+    try {
+      const token = await getToken({
+        req: { headers: { cookie: cookies().toString() } },
+        secret: process.env.NEXTAUTH_SECRET,
+      });
 
-    if (token?.email) {
-      session = {
-        user: {
-          name: token.name ?? null,
-          email: token.email ?? null,
-          image: token.picture ?? null,
-        },
-        expires: token.exp
-          ? new Date(token.exp * 1000).toISOString()
-          : "", // Optional
-      };
+      if (token?.email) {
+        session = {
+          user: {
+            name: token.name ?? null,
+            email: token.email ?? null,
+            image: token.picture ?? null,
+          },
+          expires: token.exp
+            ? new Date(token.exp * 1000).toISOString()
+            : "",
+        };
+      }
+    } catch (err) {
+      console.error("❌ Error retrieving session via token:", err);
     }
   }
 
-  // ✅ Get current user based on session
-  const currentUser = await getCurrentUser();
+  // ✅ Get current user from DB based on session
+  let currentUser = null;
+  try {
+    currentUser = await getCurrentUser();
+  } catch (err) {
+    console.error("❌ Failed to fetch current user from DB:", err);
+  }
 
   return (
     <html lang="en">
@@ -94,7 +103,7 @@ export default async function RootLayout({
             <div className="pb-20 pt-28">{children}</div>
           </Client>
 
-          {/* ✅ Tidio Chat Script */}
+          {/* ✅ Tidio Chat Integration */}
           <Script
             src="//code.tidio.co/dph8r5uefv6snwp4etkml9rwp98eeed5.js"
             strategy="afterInteractive"

@@ -29,6 +29,7 @@ import {
   FiRefreshCw
 } from 'react-icons/fi';
 import Camera from '../inputs/Camera';
+import PhoneAuth from "@/app/components/PhoneAuth";
 
 interface VerificationResponse {
   verification: {
@@ -61,15 +62,7 @@ const RegisterModal = () => {
     success: boolean;
     faceConfidence: number | null;
   } | null>(null);
-  
-  // OTP related states
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
-  const [isOtpSent, setIsOtpSent] = useState(false);
-  const [isOtpVerified, setIsOtpVerified] = useState(false);
-  const [otpTimer, setOtpTimer] = useState(0);
-  const [canResendOtp, setCanResendOtp] = useState(false);
-  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
-  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isPhoneVerified, setIsPhoneVerified] = useState(false);
 
   const {
     register,
@@ -91,18 +84,10 @@ const RegisterModal = () => {
 
   const watchedValues = watch();
 
-  // OTP Timer effect
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (otpTimer > 0) {
-      interval = setInterval(() => {
-        setOtpTimer((prev) => prev - 1);
-      }, 1000);
-    } else if (otpTimer === 0 && isOtpSent) {
-      setCanResendOtp(true);
-    }
-    return () => clearInterval(interval);
-  }, [otpTimer, isOtpSent]);
+  const handlePhoneVerified = (phoneNumber: string) => {
+    setIsPhoneVerified(true);
+    toast.success('Phone number verified successfully!');
+  };
 
   const steps = [
     { 
@@ -130,7 +115,7 @@ const RegisterModal = () => {
       field: 'phoneVerification', 
       label: 'Verify Phone Number',
       icon: FiShield,
-      description: 'Enter the 6-digit code sent to your WhatsApp'
+      description: 'We\'ll send a verification code to your phone'
     },
     { 
       field: 'password', 
@@ -161,7 +146,6 @@ const RegisterModal = () => {
     },
   ];
 
-  // Filter steps based on user role
   const getFilteredSteps = () => {
     if (watchedValues.role === 'CUSTOMER') {
       return steps.filter(step => !step.providerOnly);
@@ -171,123 +155,43 @@ const RegisterModal = () => {
 
   const filteredSteps = getFilteredSteps();
 
-  // Send OTP function
-  const sendOtp = async () => {
-    const contactPhone = watchedValues.contactPhone;
-    if (!contactPhone || contactPhone.trim().length === 0) {
-      toast.error('Please enter a phone number first');
-      return;
-    }
-
-    setIsSendingOtp(true);
-    try {
-      await axios.post('/api/send-otp', { contactPhone });
-      setIsOtpSent(true);
-      setOtpTimer(60); // 60 seconds countdown
-      setCanResendOtp(false);
-      toast.success('OTP sent successfully!');
-    } catch (error: any) {
-      console.error('Error sending OTP:', error);
-      toast.error(error.response?.data?.error || 'Failed to send OTP');
-    } finally {
-      setIsSendingOtp(false);
-    }
-  };
-
-  // Verify OTP function
-  const verifyOtp = async () => {
-    const otpCode = otp.join('');
-    if (otpCode.length !== 6) {
-      toast.error('Please enter the complete 6-digit code');
-      return;
-    }
-
-    setIsVerifyingOtp(true);
-    try {
-      await axios.post('/api/verify-otp', {
-        contactPhone: watchedValues.contactPhone,
-        otp: otpCode,
-      });
-      setIsOtpVerified(true);
-      toast.success('Phone number verified successfully!');
-    } catch (error: any) {
-      console.error('Error verifying OTP:', error);
-      toast.error(error.response?.data?.error || 'Invalid OTP code');
-      setOtp(['', '', '', '', '', '']);
-    } finally {
-      setIsVerifyingOtp(false);
-    }
-  };
-
-  // Handle OTP input change
-  const handleOtpChange = (index: number, value: string) => {
-    if (!/^\d*$/.test(value)) return; // Only allow digits
-    
-    const newOtp = [...otp];
-    newOtp[index] = value;
-    setOtp(newOtp);
-
-    // Auto-focus next input
-    if (value && index < 5) {
-      const nextInput = document.getElementById(`otp-${index + 1}`);
-      nextInput?.focus();
-    }
-  };
-
-  // Handle OTP backspace
-  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
-    if (e.key === 'Backspace' && !otp[index] && index > 0) {
-      const prevInput = document.getElementById(`otp-${index - 1}`);
-      prevInput?.focus();
-    }
-  };
-
   const onSubmit: SubmitHandler<FieldValues> = async (data) => {
-    // All users must verify phone number
-    if (!isOtpVerified) {
-      toast.error('Please verify your phone number first.');
+    // If user is a customer, skip ID/face verification
+    if (data.role === 'CUSTOMER') {
+      setIsLoading(true);
+      try {
+        await axios.post('/api/register', {
+          ...data,
+          isPhoneVerified: true,
+          isFaceVerified: false, // Customers don't need face verification
+        });
+
+        // Automatically log in the customer
+        const loginRes = await signIn("credentials", {
+          redirect: false,
+          email: data.email,
+          password: data.password,
+        });
+
+        if (loginRes?.ok) {
+          toast.success('Account created and logged in!');
+          registerModal.onClose();
+        } else {
+          toast.error('Registration succeeded, but auto-login failed.');
+          loginModal.onOpen();
+        }
+      } catch (err: any) {
+        console.error('Registration error:', err);
+        const errorMessage = err.response?.data?.error || 
+                          err.response?.data?.message || 
+                          err.message || 
+                          "Registration failed. Please try again.";
+        toast.error(errorMessage);
+      } finally {
+        setIsLoading(false);
+      }
       return;
     }
-
-
-
-// If user is a customer, skip ID/face verification
-if (data.role === 'CUSTOMER') {
-  setIsLoading(true);
-  try {
-    await axios.post('/api/register', {
-      ...data,
-      isPhoneVerified: true,
-      isFaceVerified: false, // Customers don't need face verification
-    });
-
-    // Automatically log in the customer
-    const loginRes = await signIn("credentials", {
-      redirect: false,
-      email: data.email,
-      password: data.password,
-    });
-
-    if (loginRes?.ok) {
-      toast.success('Account created and logged in!');
-      registerModal.onClose();
-    } else {
-      toast.error('Registration succeeded, but auto-login failed.');
-      loginModal.onOpen();
-    }
-  } catch (err: any) {
-    console.error('Registration error:', err);
-    const errorMessage = err.response?.data?.error || 
-                      err.response?.data?.message || 
-                      err.message || 
-                      "Registration failed. Please try again.";
-    toast.error(errorMessage);
-  } finally {
-    setIsLoading(false);
-  }
-  return;
-}
-
 
     // For service providers, proceed with verification
     if (!selfieImageBlob || !idFile) {
@@ -361,7 +265,7 @@ if (data.role === 'CUSTOMER') {
     
     // Handle phone verification step
     if (current.field === 'phoneVerification') {
-      if (!isOtpVerified) {
+      if (!isPhoneVerified) {
         toast.error('Please verify your phone number first');
         return;
       }
@@ -369,11 +273,10 @@ if (data.role === 'CUSTOMER') {
       return;
     }
 
-    // Handle phone number step - send OTP
+    // Handle phone number step
     if (current.field === 'contactPhone') {
       const valid = await trigger(current.field);
       if (valid) {
-        await sendOtp();
         setCurrentStep((prev) => prev + 1);
       }
       return;
@@ -406,7 +309,6 @@ if (data.role === 'CUSTOMER') {
     }
   };
 
-  // Allow jumping to any completed step
   const jumpToStep = (stepIndex: number) => {
     if (stepIndex < currentStep || isStepValid(stepIndex)) {
       setCurrentStep(stepIndex);
@@ -415,7 +317,7 @@ if (data.role === 'CUSTOMER') {
 
   const isStepValid = (stepIndex: number) => {
     const field = filteredSteps[stepIndex].field;
-    if (field === 'phoneVerification') return isOtpVerified;
+    if (field === 'phoneVerification') return isPhoneVerified;
     if (field === 'selfieImage') return !!selfieImageBlob;
     if (field === 'idImage') return !!idFile;
     if (field === 'role') return !!watchedValues.role && !errors.role;
@@ -501,79 +403,22 @@ if (data.role === 'CUSTOMER') {
           <div className="space-y-4 sm:space-y-6">
             {currentField.field === 'phoneVerification' ? (
               <div className="space-y-4 sm:space-y-6">
-                {/* Phone number display */}
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 sm:p-4 text-center">
-                  <p className="text-xs sm:text-sm text-blue-600 mb-1">Code sent to:</p>
+                  <p className="text-xs sm:text-sm text-blue-600 mb-1">We'll send a verification code to:</p>
                   <p className="font-medium text-blue-800">{watchedValues.contactPhone}</p>
                 </div>
 
-                {/* OTP Input */}
-                <div className="space-y-3 sm:space-y-4">
-                  <div className="flex justify-center gap-2 sm:gap-3">
-                    {otp.map((digit, index) => (
-                      <input
-                        key={index}
-                        id={`otp-${index}`}
-                        type="text"
-                        inputMode="numeric"
-                        maxLength={1}
-                        value={digit}
-                        onChange={(e) => handleOtpChange(index, e.target.value)}
-                        onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                        className="w-10 h-10 sm:w-12 sm:h-12 text-center text-base sm:text-lg font-semibold border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none transition-colors duration-200"
-                        disabled={isVerifyingOtp || isOtpVerified}
-                      />
-                    ))}
+                <PhoneAuth 
+                  phoneNumber={watchedValues.contactPhone}
+                  onVerified={handlePhoneVerified}
+                />
+
+                {isPhoneVerified && (
+                  <div className="flex items-center gap-2 text-green-600 bg-green-50 p-2 sm:p-3 rounded-xl text-sm">
+                    <FiCheck className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <span className="font-medium">Phone number verified successfully!</span>
                   </div>
-
-                  {/* Verify Button */}
-                  {!isOtpVerified && (
-                    <button
-                      onClick={verifyOtp}
-                      disabled={otp.join('').length !== 6 || isVerifyingOtp}
-                      className={`w-full py-2 sm:py-3 rounded-xl font-medium transition-all duration-200 ${
-                        otp.join('').length === 6 && !isVerifyingOtp
-                          ? 'bg-blue-600 text-white hover:bg-blue-700'
-                          : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                      }`}
-                    >
-                      {isVerifyingOtp ? (
-                        <div className="flex items-center justify-center gap-2">
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                          Verifying...
-                        </div>
-                      ) : (
-                        'Verify Code'
-                      )}
-                    </button>
-                  )}
-
-                  {/* Success Message */}
-                  {isOtpVerified && (
-                    <div className="flex items-center gap-2 text-green-600 bg-green-50 p-2 sm:p-3 rounded-xl text-sm">
-                      <FiCheck className="w-4 h-4 sm:w-5 sm:h-5" />
-                      <span className="font-medium">Phone number verified successfully!</span>
-                    </div>
-                  )}
-
-                  {/* Resend OTP */}
-                  <div className="text-center">
-                    {otpTimer > 0 ? (
-                      <p className="text-xs sm:text-sm text-gray-500">
-                        Resend code in {otpTimer} seconds
-                      </p>
-                    ) : canResendOtp && !isOtpVerified ? (
-                      <button
-                        onClick={sendOtp}
-                        disabled={isSendingOtp}
-                        className="text-xs sm:text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1 mx-auto"
-                      >
-                        <FiRefreshCw className={`w-3 h-3 sm:w-4 sm:h-4 ${isSendingOtp ? 'animate-spin' : ''}`} />
-                        {isSendingOtp ? 'Sending...' : 'Resend Code'}
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
+                )}
               </div>
             ) : currentField.field === 'role' ? (
               <div className="space-y-3 sm:space-y-4">
@@ -783,24 +628,15 @@ if (data.role === 'CUSTOMER') {
             {currentStep < filteredSteps.length - 1 ? (
               <button
                 onClick={handleNext}
-                disabled={!canProceed || isLoading || isSendingOtp}
+                disabled={!canProceed || isLoading}
                 className={`flex items-center gap-1 sm:gap-2 px-6 sm:px-8 py-2 sm:py-3 rounded-xl font-medium transition-all duration-200 text-sm sm:text-base ${
-                  canProceed && !isLoading && !isSendingOtp
+                  canProceed && !isLoading
                     ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl'
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 }`}
               >
-                {isSendingOtp ? (
-                  <>
-                    <div className="w-3 h-3 sm:w-4 sm:h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
-                    Sending OTP...
-                  </>
-                ) : (
-                  <>
-                    Continue
-                    <FiArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
-                  </>
-                )}
+                Continue
+                <FiArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
               </button>
             ) : (
               <button
