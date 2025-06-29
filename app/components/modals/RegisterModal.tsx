@@ -230,6 +230,7 @@ const RegisterModal = () => {
           idDOB: document.idDOB,
           idExpiryDate: document.idExpiryDate,
           idIssuer: document.idIssuer,
+          
         });
 
         toast.success('Account created successfully!');

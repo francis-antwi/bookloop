@@ -23,11 +23,10 @@ export async function POST(request: Request) {
       name,
       contactPhone,
       password,
-      role,
+      role, // No default - must be explicitly selected
       selfieImage,
       idImage,
       faceConfidence,
-      isFaceVerified,
       idName,
       idNumber,
       idDOB,
@@ -35,118 +34,244 @@ export async function POST(request: Request) {
       idIssuer,
       idIssueDate,
       personalIdNumber,
+      otpCode
     } = body;
 
-    if (!email || !name || !password || !role || !contactPhone) {
-      return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
+    // Strict validation - role must be provided
+    const requiredFields = {
+      email,
+      name,
+      password,
+      role,
+      contactPhone,
+      otpCode
+    };
+
+    const missingFields = Object.entries(requiredFields)
+      .filter(([_, value]) => !value)
+      .map(([key]) => key);
+
+    if (missingFields.length > 0) {
+      return NextResponse.json(
+        { error: `Missing required fields: ${missingFields.join(", ")}` },
+        { status: 400 }
+      );
     }
 
-    const validRoles: UserRole[] = ["CUSTOMER", "PROVIDER"];
-    if (!validRoles.includes(role)) {
-      return NextResponse.json({ error: "Invalid role selected." }, { status: 400 });
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return NextResponse.json({ error: "Invalid email format." }, { status: 400 });
-    }
-
-    if (password.length < 8) {
-      return NextResponse.json({ error: "Password must be at least 8 characters long." }, { status: 400 });
-    }
-
-    const emailExists = await prisma.user.findUnique({ where: { email } });
-    if (emailExists) {
-      return NextResponse.json({ error: "Email already in use." }, { status: 409 });
-    }
-
-    const phoneUser = await prisma.user.findFirst({
-      where: { contactPhone, isOtpVerified: true },
+    // Validate OTP first
+    const otpVerification = await prisma.oTPVerification.findFirst({
+      where: {
+        phoneNumber: contactPhone,
+        code: otpCode,
+        verified: true,
+        expiresAt: { gt: new Date() }
+      }
     });
 
-    if (!phoneUser) {
-      return NextResponse.json({ error: "Phone number must be OTP-verified before registration." }, { status: 403 });
+    if (!otpVerification) {
+      return NextResponse.json(
+        { 
+          error: "OTP verification failed",
+          details: otpCode 
+            ? "The OTP is invalid or has expired"
+            : "No OTP code provided"
+        },
+        { status: 403 }
+      );
     }
 
-    if (phoneUser.otpExpiresAt && new Date(phoneUser.otpExpiresAt) < new Date()) {
-      return NextResponse.json({ error: "OTP expired. Please verify again." }, { status: 403 });
+    // Check for existing users
+    const [existingEmail, existingPhone] = await Promise.all([
+      prisma.user.findUnique({ where: { email } }),
+      prisma.user.findUnique({ where: { contactPhone } })
+    ]);
+
+    if (existingEmail) {
+      return NextResponse.json(
+        { error: "This email is already registered" },
+        { status: 409 }
+      );
     }
 
-    let parsedDOB = null;
-    let parsedExpiry = null;
-    let parsedIssueDate = null;
+    if (existingPhone) {
+      return NextResponse.json(
+        { error: "This phone number is already registered" },
+        { status: 409 }
+      );
+    }
+
+    // Strict role validation
+    if (!Object.values(UserRole).includes(role)) {
+      return NextResponse.json(
+        { error: "Invalid user role selected" },
+        { status: 400 }
+      );
+    }
+
+    // Validate email format
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json(
+        { error: "Please enter a valid email address" },
+        { status: 400 }
+      );
+    }
+
+    // Validate password strength
+    if (password.length < 8) {
+      return NextResponse.json(
+        { error: "Password must be at least 8 characters" },
+        { status: 400 }
+      );
+    }
+
+    // Provider-specific validation
+    if (role === "PROVIDER") {
+      const providerRequirements = {
+        selfieImage: "Selfie image is required",
+        idImage: "ID image is required",
+        faceConfidence: "Face verification score is required",
+        idName: "Full name from ID is required",
+        idNumber: "ID number is required"
+      };
+
+      const missingProviderFields = Object.entries({
+        selfieImage,
+        idImage,
+        faceConfidence,
+        idName,
+        idNumber
+      }).filter(([_, value]) => !value);
+
+      if (missingProviderFields.length > 0) {
+        return NextResponse.json(
+          {
+            error: "Incomplete provider information",
+            missingFields: missingProviderFields.map(([key]) => providerRequirements[key])
+          },
+          { status: 400 }
+        );
+      }
+
+      if (typeof faceConfidence !== "number" || faceConfidence < 0) {
+        return NextResponse.json(
+          { error: "Invalid face verification confidence score" },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Parse and validate dates (only for providers)
+    let parsedDOB: Date | null = null;
+    let parsedExpiry: Date | null = null;
+    let parsedIssueDate: Date | null = null;
 
     if (role === "PROVIDER") {
-      if (!selfieImage || !idImage || typeof faceConfidence !== "number" || isFaceVerified !== true) {
-        return NextResponse.json({ error: "Face verification required before registration." }, { status: 400 });
-      }
-
-      if (!idName || !idNumber) {
-        return NextResponse.json({ error: "Incomplete ID information extracted." }, { status: 400 });
-      }
-
       parsedDOB = idDOB ? parseDate(idDOB) : null;
-      parsedExpiry = idExpiryDate ? parseDate(idExpiryDate) : null;
-      parsedIssueDate = idIssueDate ? parseDate(idIssueDate) : null;
-
-      if (!parsedDOB) console.warn("⚠️ Invalid DOB parsed:", idDOB);
-      if (!parsedExpiry) console.warn("⚠️ Invalid expiry date parsed:", idExpiryDate);
-      if (!parsedIssueDate && idIssueDate) console.warn("⚠️ Invalid issue date parsed:", idIssueDate);
-
-      if (parsedDOB && (parsedDOB.getFullYear() < 1900 || parsedDOB.getFullYear() > new Date().getFullYear())) {
-        return NextResponse.json({ error: "Invalid date of birth." }, { status: 400 });
+      if (idDOB && !parsedDOB) {
+        return NextResponse.json(
+          { error: "Invalid date of birth format (use DD/MM/YYYY)" },
+          { status: 400 }
+        );
       }
 
-      if (parsedExpiry && (parsedExpiry.getFullYear() < 2020 || parsedExpiry.getFullYear() > 2100)) {
-        return NextResponse.json({ error: "Invalid ID expiry date." }, { status: 400 });
+      parsedExpiry = idExpiryDate ? parseDate(idExpiryDate) : null;
+      if (idExpiryDate && !parsedExpiry) {
+        return NextResponse.json(
+          { error: "Invalid ID expiry date format (use DD/MM/YYYY)" },
+          { status: 400 }
+        );
+      }
+
+      parsedIssueDate = idIssueDate ? parseDate(idIssueDate) : null;
+      if (idIssueDate && !parsedIssueDate) {
+        return NextResponse.json(
+          { error: "Invalid ID issue date format (use DD/MM/YYYY)" },
+          { status: 400 }
+        );
+      }
+
+      // Validate date ranges
+      if (parsedDOB && (
+        parsedDOB.getFullYear() < 1900 || 
+        parsedDOB > new Date()
+      )) {
+        return NextResponse.json(
+          { error: "Invalid date of birth" },
+          { status: 400 }
+        );
+      }
+
+      if (parsedExpiry && parsedExpiry < new Date()) {
+        return NextResponse.json(
+          { error: "ID document has expired" },
+          { status: 400 }
+        );
       }
     }
 
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    const updatedUser = await prisma.user.update({
-      where: { id: phoneUser.id },
-      data: {
-        email,
-        name,
-        password: hashedPassword, // ✅ CORRECT FIELD
-        role,
-        isFaceVerified: role === "PROVIDER" ? true : false,
-        selfieImage: role === "PROVIDER" ? selfieImage : undefined,
-        idImage: role === "PROVIDER" ? idImage : undefined,
-        faceConfidence: role === "PROVIDER" ? faceConfidence : undefined,
-        idName: role === "PROVIDER" ? idName : undefined,
-        idNumber: role === "PROVIDER" ? idNumber : undefined,
-        idDOB: role === "PROVIDER" ? parsedDOB : undefined,
-        idExpiryDate: role === "PROVIDER" ? parsedExpiry : undefined,
-        idIssueDate: role === "PROVIDER" ? parsedIssueDate : undefined,
-        idIssuer: role === "PROVIDER" ? idIssuer : undefined,
-        personalIdNumber: role === "PROVIDER" ? personalIdNumber : undefined,
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        isFaceVerified: true,
-        selfieImage: true,
-        idImage: true,
-        faceConfidence: true,
-        idName: true,
-        idNumber: true,
-        idDOB: true,
-        idExpiryDate: true,
-        idIssueDate: true,
-        personalIdNumber: true,
-        idIssuer: true,
-        createdAt: true,
-      },
+    // Create user in transaction
+    const result = await prisma.$transaction(async (tx) => {
+      const newUser = await tx.user.create({
+        data: {
+          email,
+          name,
+          contactPhone,
+          hashedPassword,
+          role,
+          isOtpVerified: true,
+          ...(role === "PROVIDER" && {
+            isFaceVerified: true,
+            selfieImage,
+            idImage,
+            faceConfidence,
+            idName,
+            idNumber,
+            idDOB: parsedDOB,
+            idExpiryDate: parsedExpiry,
+            idIssueDate: parsedIssueDate,
+            idIssuer,
+            personalIdNumber
+          })
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          contactPhone: true,
+          isFaceVerified: true,
+          createdAt: true
+        }
+      });
+
+      await tx.oTPVerification.delete({
+        where: { id: otpVerification.id }
+      });
+
+      return newUser;
     });
 
-    return NextResponse.json({ success: true, user: updatedUser }, { status: 201 });
+    return NextResponse.json({ 
+      success: true, 
+      user: result,
+      message: role === "PROVIDER" 
+        ? "Provider account created successfully" 
+        : "Account created successfully"
+    }, { status: 201 });
 
   } catch (error: any) {
-    console.error("🔴 Registration error:", error);
-    return NextResponse.json({ error: "Internal server error." }, { status: 500 });
+    console.error("Registration error:", error);
+    return NextResponse.json(
+      { 
+        error: "Registration failed",
+        details: process.env.NODE_ENV === "development" 
+          ? error.message 
+          : "Please try again later"
+      },
+      { status: 500 }
+    );
   }
 }

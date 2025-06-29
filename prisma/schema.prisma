@@ -36,10 +36,10 @@ model User {
   name             String?
   email            String?    @unique
   emailVerified    DateTime?
-  contactPhone     String?
+  contactPhone     String?    @unique
   image            String?
   hashedPassword   String?
-  role             UserRole?
+  role             UserRole?  @default(CUSTOMER)
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
 
@@ -48,13 +48,13 @@ model User {
   resetToken       String?
   resetTokenExpiry DateTime?
 
-  // ✅ Face++ Verification Fields
+  // Face Verification Fields
   selfieImage      String?
   idImage          String?
   faceConfidence   Float?
   isFaceVerified   Boolean    @default(false)
 
-  // ✅ Extracted ID Info
+  // ID Information
   idName           String?
   idNumber         String?
   idDOB            DateTime?
@@ -63,16 +63,25 @@ model User {
   personalIdNumber String?
   idIssueDate      DateTime?
 
-  // ✅ OTP Fields
-  otpCode          String?
-  otpExpiresAt     DateTime?
-  isOtpVerified    Boolean?
+  // OTP Status (not used for verification)
+  isOtpVerified    Boolean    @default(false)
 
-  // ✅ Relations
+  // Relations
   accounts         Account[]
   listings         Listing[]
   reservations     Reservation[]
   notifications    Notification[]
+}
+
+model OTPVerification {
+  id          String   @id @default(uuid())
+  phoneNumber String
+  code        String
+  verified    Boolean  @default(false)
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([phoneNumber])
 }
 
 model Account {
@@ -90,13 +99,13 @@ model Account {
   id_token           String?
   session_state      String?
 
-  // ✅ Face++ Verification Fields
+  // Face Verification Fields
   selfieImage        String?
   idImage            String?
   faceConfidence     Float?
   isFaceVerified     Boolean  @default(false)
 
-  // ✅ Extracted ID Info
+  // ID Information
   idName             String?
   idNumber           String?
   personalIdNumber   String?
