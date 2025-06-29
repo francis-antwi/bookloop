@@ -1,259 +1,331 @@
-// app/api/verify/route.ts
-import { NextResponse } from "next/server";
-const cloudinary = require("cloudinary").v2;
-import axios from "axios";
+'use client';
 
-// === Cloudinary Config ===
-cloudinary.config({
-  cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!,
-  api_key: process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY!,
-  api_secret: process.env.CLOUDINARY_API_SECRET!,
-});
+import { useState } from 'react';
+import {
+  FiCamera,
+  FiUpload,
+  FiCheck,
+  FiLoader,
+  FiArrowLeft,
+  FiArrowRight,
+  FiShield,
+  FiUser,
+  FiFileText,
+  FiAlertCircle
+} from 'react-icons/fi';
+import { useSession } from 'next-auth/react';
+import axios from 'axios';
+import toast from 'react-hot-toast';
+import Camera from '../components/inputs/Camera';
 
-// === Types ===
-interface IDInfo {
-  idName: string | null;
-  idNumber: string | null;
-  personalIdNumber: string | null;
-  idDOB: string | null;
-  idIssueDate: string | null;
-  idExpiryDate: string | null;
-  idIssuer: string | null;
-  placeOfIssue: string | null;
-  idType: string | null;
-  idGender: string | null;
-  idNationality: string | null;
-  rawText: string;
-  extractionWarnings: string[];
+interface VerificationStepsProps {
+  role: string;
+  onComplete: () => void;
 }
 
-interface VerificationResult {
-  success: boolean;
-  verification: {
-    faceMatch: boolean;
-    confidence: number;
-    threshold: number;
-  };
-  document: IDInfo & {
-    type: string;
-    imageUrl: string;
-    selfieUrl: string;
-    extractionComplete: boolean;
-  };
-  registration?: {
+const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
+  const { data: session, update } = useSession();
+  const [currentStep, setCurrentStep] = useState<'selfie' | 'id'>('selfie');
+  const [selfieImage, setSelfieImage] = useState<Blob | null>(null);
+  const [idFile, setIdFile] = useState<File | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState<{
     success: boolean;
-    userId?: string;
+    confidence?: number;
     error?: string;
-  };
-}
+  } | null>(null);
 
-const OCR_MAX_RETRIES = 3;
-const OCR_TIMEOUT_MS = 60000;
-const ABSOLUTE_MIN_SIZE = 20000;
-const MAX_IMAGE_SIZE = 5_000_000;
-const FACE_MATCH_THRESHOLD = 80;
-
-const ID_KEYWORDS = [
-  "passport", "driver", "license", "identity", "id card",
-  "ghana card", "ecowas", "national", "identification", "document"
-];
-
-const getLines = (text: string): string[] =>
-  text.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 3);
-
-const extractField = (lines: string[], patterns: RegExp[]): string | null => {
-  for (const line of lines) {
-    for (const pattern of patterns) {
-      const match = line.match(pattern);
-      if (match) return match[1]?.trim() || match[0].trim();
+  const handleSelfieCapture = (blob: Blob) => setSelfieImage(blob);
+  
+  const handleIdUpload = (file: File) => {
+    if (!file.type.match(/image\/(jpeg|png|jpg)/)) {
+      toast.error('Only JPEG/PNG images are allowed');
+      return;
     }
-  }
-  return null;
-};
-
-const normalizeDate = (raw: string): string | null => {
-  const cleaned = raw.replace(/[.,]/g, '').trim();
-  const d = new Date(cleaned);
-  if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
-  return null;
-};
-
-const validateFile = async (file: File) => {
-  const allowed = ["image/jpeg", "image/png"];
-  console.log(`📄 Validating file: ${file.name}, Type: ${file.type}, Size: ${file.size} bytes`);
-  if (!allowed.includes(file.type)) throw new Error("Only JPEG or PNG images allowed.");
-  if (file.size < ABSOLUTE_MIN_SIZE) throw new Error(`Image too small. File size: ${file.size} bytes`);
-  if (file.size > MAX_IMAGE_SIZE) throw new Error("Image too large. Max 5MB.");
-};
-
-const uploadToCloudinary = async (file: File) => {
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const base64 = buffer.toString("base64");
-  const uri = `data:${file.type};base64,${base64}`;
-  return await cloudinary.uploader.upload(uri, {
-    folder: "id_verification",
-    upload_preset: process.env.CLOUDINARY_UPLOAD_PRESET
-  });
-};
-
-const performOCRWithRetry = async (file: File): Promise<string> => {
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const base64Image = `data:${file.type};base64,${buffer.toString("base64")}`;
-  const params = new URLSearchParams({
-    apikey: process.env.OCR_SPACE_API_KEY!,
-    base64Image,
-    language: "eng",
-    OCREngine: "5"
-  });
-  for (let i = 0; i < OCR_MAX_RETRIES; i++) {
-    try {
-      const res = await axios.post("https://api.ocr.space/parse/image", params, {
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        timeout: OCR_TIMEOUT_MS
-      });
-      const text = res.data?.ParsedResults?.[0]?.ParsedText;
-      if (text && text.length > 20) return text;
-      throw new Error("OCR text too short");
-    } catch (err) {
-      if (i === OCR_MAX_RETRIES - 1) throw err;
-      await new Promise(res => setTimeout(res, 1000 * (i + 1)));
+    if (file.size < 20000) {
+      toast.error('Image too small. Try a higher-quality photo.');
+      return;
     }
-  }
-  throw new Error("OCR failed after retries");
-};
-
-const extractIDInfo = (text: string): IDInfo => {
-  const lines = getLines(text);
-  const joined = lines.join(" ");
-  const warn: string[] = [];
-
-  const log = (key: string, val: string | null) => {
-    console.log(`📌 ${key}:`, val || '[NOT FOUND]');
-    if (!val) warn.push(`${key} not found`);
-    return val;
+    if (file.size > 5000000) {
+      toast.error('Image too large. Max 5MB.');
+      return;
+    }
+    setIdFile(file);
   };
 
-  const namePatterns = [
-    /name[:\-\s]*([A-Z][a-zA-Z'`\-\s]{2,})/i,
-    /surname[:\-\s]*([A-Z][a-zA-Z'`\-\s]{2,})/i,
-    /given names?[:\-\s]*([A-Z][a-zA-Z'`\-\s]{2,})/i,
-    /^([A-Z][a-z]{2,}(\s+[A-Z][a-z]{2,}){1,3})$/
-  ];
-
-  return {
-    idName: log("idName", extractField(lines, namePatterns)),
-    idNumber: log("idNumber", extractField(lines, [/id(?:\s*no|number)?[:\-\s]*([A-Z0-9\-]+)/i, /card number[:\s]*([A-Z0-9]+)/i])),
-    personalIdNumber: log("personalIdNumber", extractField(lines, [/ghana card no[:\-\s]*([A-Z0-9]+)/i])),
-    idDOB: log("idDOB", normalizeDate(extractField(lines, [/birth(?:\s*date)?[:\-\s]*([\d\w\s\/\-\.]+)/i]) || "")),
-    idIssueDate: log("idIssueDate", normalizeDate(extractField(lines, [/issue(?:d)?(?:\s*date)?[:\-\s]*([\d\w\s\/\-\.]+)/i]) || "")),
-    idExpiryDate: log("idExpiryDate", normalizeDate(extractField(lines, [/expiry(?:\s*date)?[:\-\s]*([\d\w\s\/\-\.]+)/i]) || "")),
-    idIssuer: log("idIssuer", extractField(lines, [/issued by[:\-\s]*([A-Za-z\s]+)/i])),
-    placeOfIssue: log("placeOfIssue", extractField(lines, [/place of issue[:\-\s]*([A-Za-z\s]+)/i])),
-    idType: log("idType", extractField([joined], [new RegExp(ID_KEYWORDS.join("|"), "i")])),
-    idGender: log("idGender", extractField(lines, [/gender[:\-\s]*([MF]|Male|Female)/i])),
-    idNationality: log("idNationality", extractField(lines, [/nationality[:\-\s]*([A-Za-z]+)/i])),
-    rawText: text,
-    extractionWarnings: warn
-  };
-};
-
-const compareFaces = async (selfieUrl: string, idUrl: string) => {
-  const params = new URLSearchParams({
-    api_key: process.env.FACEPP_API_KEY!,
-    api_secret: process.env.FACEPP_API_SECRET!,
-    image_url1: selfieUrl,
-    image_url2: idUrl
-  });
-  const res = await axios.post("https://api-us.faceplusplus.com/facepp/v3/compare", params);
-  if (!res.data || typeof res.data.confidence !== "number") {
-    throw new Error("Face++ confidence not returned.");
+  const submitVerification = async () => {
+  if (!selfieImage || !idFile) {
+    toast.error('Please complete all verification steps');
+    return;
   }
-  return { confidence: res.data.confidence };
-};
 
-export async function POST(req: Request) {
-  const id = Math.random().toString(36).substring(2, 8);
-  console.log(`🚀 [${id}] Starting verification`);
+  setIsLoading(true);
+  setVerificationStatus(null);
+
   try {
-    const formData = await req.formData();
-    const selfie = formData.get("selfieImage") as File;
-    const idImage = formData.get("idImage") as File;
-    const email = formData.get("email")?.toString();
-    const shouldRegister = formData.get("register") === "true";
+    // 1. Perform verification
+    const verificationFormData = new FormData();
+    verificationFormData.append('selfieImage', new File([selfieImage], 'selfie.jpg', { type: 'image/jpeg' }));
+    verificationFormData.append('idImage', idFile);
+    verificationFormData.append('email', session?.user?.email || '');
 
-    if (!selfie || !idImage) throw new Error("Missing required files.");
+    const response = await axios.post('/api/verify', verificationFormData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000
+    });
 
-    await Promise.all([validateFile(selfie), validateFile(idImage)]);
-
-    const [selfieUpload, idUpload] = await Promise.all([
-      uploadToCloudinary(selfie),
-      uploadToCloudinary(idImage)
-    ]);
-
-    const rawText = await performOCRWithRetry(idImage);
-    const info = extractIDInfo(rawText);
-
-    const requiredFields = [info.idName, info.idDOB, info.idNumber || info.personalIdNumber];
-    if (requiredFields.filter(Boolean).length < 2) {
-      return NextResponse.json({
-        error: `Could not extract enough key fields. Missing: ${info.extractionWarnings.join(', ')}`
-      }, { status: 400 });
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Verification failed');
     }
 
-    const { confidence } = await compareFaces(selfieUpload.secure_url, idUpload.secure_url);
-    const faceMatch = confidence >= FACE_MATCH_THRESHOLD;
+    const extractedData = response.data.document || {};
+    const confidence = response.data.confidence || extractedData.faceConfidence || 95;
 
-    const response: VerificationResult = {
-      success: true,
-      verification: {
-        faceMatch,
-        confidence: Math.round(confidence),
-        threshold: FACE_MATCH_THRESHOLD
-      },
-      document: {
-        ...info,
-        type: info.idType || "Unknown",
-        imageUrl: idUpload.secure_url,
-        selfieUrl: selfieUpload.secure_url,
-        extractionComplete: info.extractionWarnings.length === 0
-      }
+    // 2. Prepare registration payload
+    const registrationData = {
+      email: session?.user?.email,
+      name: extractedData.idName || 'Verified User',
+      role: role || 'PROVIDER',
+      verified: true,
+      faceConfidence: confidence,
+      ...extractedData
     };
 
-    if (shouldRegister && email) {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          name: info.idName,
-          idNumber: info.idNumber || info.personalIdNumber,
-          dob: info.idDOB,
-          idType: info.idType,
-          idIssuer: info.idIssuer,
-          idIssueDate: info.idIssueDate,
-          idExpiryDate: info.idExpiryDate,
-          placeOfIssue: info.placeOfIssue,
-          gender: info.idGender,
-          nationality: info.idNationality,
-          imageUrl: idUpload.secure_url,
-          selfieUrl: selfieUpload.secure_url,
-          role: "PROVIDER",
-          verified: true,
-          rawText: info.rawText
-        })
-      });
-
-      const json = await res.json();
-      response.registration = {
-        success: res.ok,
-        userId: json.userId,
-        error: res.ok ? undefined : json.error
-      };
+    // 3. Register PROVIDER (Google users only if needed)
+    try {
+      await axios.post('/api/register', registrationData);
+    } catch (regError) {
+      console.log('Registration completed with warnings:', regError.response?.data);
     }
 
-    return NextResponse.json(response);
-  } catch (e: any) {
-    console.error(`❌ [${id}] Error:`, e.message);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    // 4. Update session
+    await update({
+      role: 'PROVIDER',
+      isFaceVerified: true,
+      verificationData: extractedData
+    });
+
+    toast.success('Verification complete!');
+    onComplete();
+
+  } catch (error: any) {
+    const errorMsg = error.response?.data?.error || error.message || 'Verification failed';
+    console.error('Verification error:', errorMsg);
+    setVerificationStatus({ success: false, error: errorMsg });
+    toast.error(errorMsg);
+  } finally {
+    setIsLoading(false);
   }
-}
+};
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-4">
+      <div className="max-w-md mx-auto">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full mb-4 shadow-lg">
+            <FiShield className="text-2xl text-white" />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Identity Verification</h1>
+          <p className="text-gray-600">You need to pass verification before you can access provider functions</p>
+        </div>
+
+        {/* Progress Bar */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-gray-700">Progress</span>
+            <span className="text-sm text-gray-500">{currentStep === 'selfie' ? '1' : '2'} of 2</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div 
+              className="bg-gradient-to-r from-blue-500 to-indigo-600 h-2 rounded-full transition-all duration-500 ease-out"
+              style={{ width: currentStep === 'selfie' ? '50%' : '100%' }}
+            />
+          </div>
+        </div>
+
+        {/* Error Message */}
+        {verificationStatus?.success === false && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-xl mb-6">
+            <div className="flex items-start gap-3">
+              <FiAlertCircle className="text-red-500 text-xl mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-medium text-red-800">Verification Failed</p>
+                <p className="text-sm text-red-600 mt-1">{verificationStatus.error}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step Content */}
+        <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
+          {currentStep === 'selfie' ? (
+            <SelfieStep 
+              selfieImage={selfieImage}
+              onSelfieCapture={handleSelfieCapture}
+              onNext={() => setCurrentStep('id')}
+            />
+          ) : (
+            <IDStep
+              idFile={idFile}
+              onIdUpload={handleIdUpload}
+              onBack={() => setCurrentStep('selfie')}
+              onSubmit={submitVerification}
+              isLoading={isLoading}
+            />
+          )}
+        </div>
+
+        <SecurityNotice />
+      </div>
+    </div>
+  );
+};
+
+// Sub-components for better organization
+const SelfieStep = ({ selfieImage, onSelfieCapture, onNext }) => (
+  <div className="space-y-6">
+    <div className="text-center">
+      <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-3">
+        <FiUser className="text-xl text-blue-600" />
+      </div>
+      <h2 className="text-xl font-semibold text-gray-900 mb-2">Face Verification</h2>
+      <p className="text-gray-600 text-sm">Take a clear selfie for identity confirmation</p>
+    </div>
+
+    <div className="relative">
+      <Camera onCapture={onSelfieCapture} />
+      {selfieImage && (
+        <div className="absolute -top-2 -right-2 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+          <FiCheck className="text-white text-sm" />
+        </div>
+      )}
+    </div>
+
+    {selfieImage && (
+      <SuccessMessage 
+        title="Selfie captured successfully!" 
+        description="Ready to proceed to next step" 
+      />
+    )}
+
+    <div className="flex gap-3">
+      <button
+        onClick={onNext}
+        disabled={!selfieImage}
+        className="flex-1 py-4 px-6 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 disabled:from-gray-300 disabled:to-gray-400 disabled:transform-none disabled:shadow-md flex items-center justify-center gap-2"
+      >
+        <span>Continue to ID Verification</span>
+        <FiArrowRight className="text-sm" />
+      </button>
+    </div>
+  </div>
+);
+
+const IDStep = ({ idFile, onIdUpload, onBack, onSubmit, isLoading }) => (
+  <div className="space-y-6">
+    <div className="text-center">
+      <div className="inline-flex items-center justify-center w-12 h-12 bg-indigo-100 rounded-full mb-3">
+        <FiFileText className="text-xl text-indigo-600" />
+      </div>
+      <h2 className="text-xl font-semibold text-gray-900 mb-2">ID Verification</h2>
+      <p className="text-gray-600 text-sm">Upload a government-issued ID document</p>
+    </div>
+
+    <div className="relative">
+      <input
+        type="file"
+        id="id-upload"
+        accept="image/*"
+        onChange={(e) => e.target.files?.[0] && onIdUpload(e.target.files[0])}
+        disabled={isLoading}
+        className="hidden"
+      />
+      <label 
+        htmlFor="id-upload" 
+        className="cursor-pointer block border-2 border-dashed border-gray-300 hover:border-blue-400 rounded-xl p-8 text-center transition-all duration-200 hover:bg-blue-50"
+      >
+        <div className="space-y-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full">
+            <FiUpload className="text-2xl text-gray-400" />
+          </div>
+          <div>
+            <p className="text-blue-600 font-semibold text-lg">Upload ID Document</p>
+            <p className="text-gray-500 text-sm mt-1">Ghana Card, Passport, or Driver's License</p>
+          </div>
+        </div>
+      </label>
+      {idFile && (
+        <div className="absolute -top-2 -right-2 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+          <FiCheck className="text-white text-sm" />
+        </div>
+      )}
+    </div>
+
+    {idFile && (
+      <SuccessMessage 
+        title="Document uploaded" 
+        description={idFile.name} 
+        truncate 
+      />
+    )}
+
+    <div className="flex gap-3">
+      <button
+        onClick={onBack}
+        className="px-6 py-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-all duration-200 flex items-center gap-2"
+      >
+        <FiArrowLeft className="text-sm" />
+        <span>Back</span>
+      </button>
+      
+      <button
+        onClick={onSubmit}
+        disabled={!idFile || isLoading}
+        className="flex-1 py-4 px-6 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 disabled:from-gray-300 disabled:to-gray-400 disabled:transform-none disabled:shadow-md flex items-center justify-center gap-3"
+      >
+        {isLoading ? (
+          <>
+            <FiLoader className="animate-spin text-lg" />
+            <span>Verifying Identity...</span>
+          </>
+        ) : (
+          <>
+            <FiShield className="text-lg" />
+            <span>Complete Verification</span>
+          </>
+        )}
+      </button>
+    </div>
+  </div>
+);
+
+const SuccessMessage = ({ title, description, truncate = false }) => (
+  <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
+    <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+      <FiCheck className="text-white text-sm" />
+    </div>
+    <div className={truncate ? 'flex-1' : ''}>
+      <p className="font-medium text-green-800">{title}</p>
+      <p className={`text-sm text-green-600 ${truncate ? 'truncate' : ''}`}>
+        {description}
+      </p>
+    </div>
+  </div>
+);
+
+const SecurityNotice = () => (
+  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+    <div className="flex items-start gap-3">
+      <FiShield className="text-blue-500 mt-0.5 flex-shrink-0" />
+      <div>
+        <p className="text-sm font-medium text-blue-800">Secure & Private</p>
+        <p className="text-xs text-blue-600 mt-1">
+          Your data is encrypted and processed securely. We never store sensitive information permanently.
+        </p>
+      </div>
+    </div>
+  </div>
+);
+
+export default VerificationSteps;

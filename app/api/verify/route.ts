@@ -2,7 +2,6 @@
 import { NextResponse } from "next/server";
 const cloudinary = require("cloudinary").v2;
 import axios from "axios";
-import sharp from "sharp";
 
 // === Cloudinary Config ===
 cloudinary.config({
@@ -81,36 +80,25 @@ const normalizeDate = (raw: string): string | null => {
 
 const validateFile = async (file: File) => {
   const allowed = ["image/jpeg", "image/png"];
+  console.log(`📄 Validating file: ${file.name}, Type: ${file.type}, Size: ${file.size} bytes`);
   if (!allowed.includes(file.type)) throw new Error("Only JPEG or PNG images allowed.");
-  if (file.size < ABSOLUTE_MIN_SIZE) throw new Error("Image too small. Try a higher-quality photo.");
+  if (file.size < ABSOLUTE_MIN_SIZE) throw new Error(`Image too small. File size: ${file.size} bytes`);
   if (file.size > MAX_IMAGE_SIZE) throw new Error("Image too large. Max 5MB.");
 };
 
-const processImageForOCR = async (file: File): Promise<Buffer> => {
-  await validateFile(file);
+const uploadToCloudinary = async (file: File) => {
   const buffer = Buffer.from(await file.arrayBuffer());
-  return sharp(buffer)
-    .rotate()
-    .resize({ width: 1200, withoutEnlargement: true })
-    .greyscale()
-    .normalize()
-    .sharpen()
-    .modulate({ brightness: 1.1 })
-    .jpeg({ quality: 90 })
-    .toBuffer();
-};
-
-const uploadToCloudinaryWithRetry = async (buffer: Buffer, fileType: string) => {
   const base64 = buffer.toString("base64");
-  const uri = `data:${fileType};base64,${base64}`;
+  const uri = `data:${file.type};base64,${base64}`;
   return await cloudinary.uploader.upload(uri, {
     folder: "id_verification",
     upload_preset: process.env.CLOUDINARY_UPLOAD_PRESET
   });
 };
 
-const performOCRWithRetry = async (buffer: Buffer): Promise<string> => {
-  const base64Image = `data:image/jpeg;base64,${buffer.toString("base64")}`;
+const performOCRWithRetry = async (file: File): Promise<string> => {
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const base64Image = `data:${file.type};base64,${buffer.toString("base64")}`;
   const params = new URLSearchParams({
     apikey: process.env.OCR_SPACE_API_KEY!,
     base64Image,
@@ -195,17 +183,14 @@ export async function POST(req: Request) {
 
     if (!selfie || !idImage) throw new Error("Missing required files.");
 
-    const [selfieBuf, idBuf] = await Promise.all([
-      processImageForOCR(selfie),
-      processImageForOCR(idImage)
-    ]);
+    await Promise.all([validateFile(selfie), validateFile(idImage)]);
 
     const [selfieUpload, idUpload] = await Promise.all([
-      uploadToCloudinaryWithRetry(selfieBuf, selfie.type),
-      uploadToCloudinaryWithRetry(idBuf, idImage.type)
+      uploadToCloudinary(selfie),
+      uploadToCloudinary(idImage)
     ]);
 
-    const rawText = await performOCRWithRetry(idBuf);
+    const rawText = await performOCRWithRetry(idImage);
     const info = extractIDInfo(rawText);
 
     const requiredFields = [info.idName, info.idDOB, info.idNumber || info.personalIdNumber];
