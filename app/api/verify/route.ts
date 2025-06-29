@@ -50,6 +50,7 @@ const RECOMMENDED_MIN_SIZE = 50000;
 const MAX_IMAGE_SIZE = 5_000_000;
 const MIN_REQUIRED_FIELDS = 2;
 const FACE_MATCH_THRESHOLD = 80;
+const CLOUDINARY_MAX_RETRIES = 2;
 const ID_KEYWORDS = [
   "passport", "driver", "license", "identity", 
   "id card", "ghana card", "ecowas", "national", 
@@ -73,13 +74,12 @@ const cleanText = (text: string): string =>
 const getLines = (text: string): string[] =>
   text.split(/\r?\n/)
     .map(cleanText)
-    .filter(line => line.length > 3); // Filter out very short lines
+    .filter(line => line.length > 3);
 
 const normalizeDate = (dateStr: string): string | null => {
   if (!dateStr) return null;
   
   try {
-    // Try common date formats
     for (const format of DATE_FORMATS) {
       const match = dateStr.match(format);
       if (match) {
@@ -88,15 +88,11 @@ const normalizeDate = (dateStr: string): string | null => {
         const month = parseInt(b);
         const year = parseInt(c);
         
-        // Determine date parts based on format
         if (a.length === 4) {
-          // YYYY-MM-DD format
           return `${a}-${b.padStart(2, '0')}-${c.padStart(2, '0')}`;
         } else if (c.length === 4) {
-          // DD-MM-YYYY format
           return `${c}-${b.padStart(2, '0')}-${a.padStart(2, '0')}`;
         } else {
-          // DD-MM-YY format (assume 21st century)
           return `20${c}-${b.padStart(2, '0')}-${a.padStart(2, '0')}`;
         }
       }
@@ -113,7 +109,6 @@ const extractField = (lines: string[], patterns: RegExp[]): string | null => {
     for (const pattern of patterns) {
       const match = line.match(pattern);
       if (match) {
-        // Return the first capture group or the full match
         return match[1]?.trim() || match[0]?.trim() || null;
       }
     }
@@ -145,47 +140,72 @@ const logFieldSummary = (idInfo: IDInfo) => {
   }
 };
 
+const validateFile = (file: File) => {
+  if (!file.type.match(/image\/(jpeg|png|jpg)/)) {
+    throw new Error('Only JPEG/PNG images are allowed');
+  }
+  if (file.size < ABSOLUTE_MIN_SIZE) {
+    throw new Error(`Image too small (min ${ABSOLUTE_MIN_SIZE/1000}KB)`);
+  }
+  if (file.size > MAX_IMAGE_SIZE) {
+    throw new Error(`Image too large (max ${MAX_IMAGE_SIZE/1000000}MB)`);
+  }
+};
+
 const processImageForOCR = async (file: File): Promise<Buffer> => {
-  if (file.size < ABSOLUTE_MIN_SIZE) throw new Error(`Image too small (${file.size} bytes).`);
-  if (file.size > MAX_IMAGE_SIZE) throw new Error(`Image too large (${file.size} bytes).`);
+  validateFile(file);
   
   const buffer = Buffer.from(await file.arrayBuffer());
   
-  // Enhanced image processing pipeline
   return sharp(buffer)
-    .rotate() // Auto-orient based on EXIF
+    .rotate()
     .resize({ 
       width: 1200, 
       withoutEnlargement: true,
       kernel: sharp.kernel.lanczos3 
     })
     .greyscale()
-    .normalize({ upper: 96 }) // Preserve some contrast
-    .linear(1.1, -10) // Slight contrast boost
+    .normalize({ upper: 96 })
+    .linear(1.1, -10)
     .sharpen({ sigma: 1.2, flat: 1, jagged: 1 })
-    .modulate({ brightness: 1.05 }) // Slight brightness boost
+    .modulate({ brightness: 1.05 })
     .jpeg({ 
       quality: 90, 
       mozjpeg: true,
-      chromaSubsampling: '4:4:4' // Better for text
+      chromaSubsampling: '4:4:4'
     })
     .toBuffer();
 };
 
-const uploadToCloudinary = async (buffer: Buffer, fileType: string) => {
+const uploadToCloudinaryWithRetry = async (buffer: Buffer, fileType: string, retries = CLOUDINARY_MAX_RETRIES) => {
   const dataURI = `data:${fileType};base64,${buffer.toString("base64")}`;
-  try {
-    const result = await cloudinary.uploader.upload(dataURI, {
-      folder: "id_verification",
-      timeout: 30000,
-      quality_analysis: true,
-      ocr: "adv_ocr", // Enable advanced OCR if available
-    });
-    return result;
-  } catch (error) {
-    console.error("❌ Cloudinary upload error:", error);
-    throw new Error("Cloudinary upload failed");
+  
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const result = await cloudinary.uploader.upload(dataURI, {
+        folder: "id_verification",
+        timeout: 40000,
+        resource_type: "auto",
+        upload_preset: process.env.CLOUDINARY_UPLOAD_PRESET, // Optional: if using upload presets
+      });
+      
+      if (result.secure_url) {
+        return result;
+      }
+      throw new Error("Upload succeeded but no URL returned");
+    } catch (error: any) {
+      console.error(`Cloudinary upload attempt ${attempt} failed:`, error.message);
+      
+      if (attempt === retries) {
+        throw new Error(`Cloudinary upload failed after ${retries} attempts: ${error.message}`);
+      }
+      
+      // Exponential backoff
+      await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
+    }
   }
+  
+  throw new Error("Cloudinary upload failed");
 };
 
 const performOCR = async (imageBuffer: Buffer): Promise<string> => {
@@ -194,12 +214,10 @@ const performOCR = async (imageBuffer: Buffer): Promise<string> => {
     apikey: process.env.OCR_SPACE_API_KEY!,
     base64Image,
     language: "eng",
-    OCREngine: "5", // Version 5 has better accuracy
+    OCREngine: "5",
     isTable: "true",
     detectOrientation: "true",
     scale: "true",
-    isCreateSearchablePdf: "false",
-    isSearchablePdfHideTextLayer: "true",
   });
 
   const response = await axios.post("https://api.ocr.space/parse/image", params, {
@@ -249,24 +267,21 @@ const extractIDInfo = (text: string): IDInfo => {
   console.log("🧾 OCR Lines:");
   lines.forEach((line, i) => console.log(`${i.toString().padStart(2)}:`, line));
 
-  // Extract ID type first as it helps with other field extraction
   const idType = extractField(lines, [
     /(passport|visa|driver'?s? license|national id|identity card|ghana card|ecowas card|voter'?s? id)/i,
     /document type:?\s*([a-z\s]+)/i,
     /type:?\s*([a-z\s]+)/i
   ]);
 
-  // Name patterns - more comprehensive matching
   const namePatterns = [
     /name:?\s*([a-z\s,.'-]+)/i,
     /surname:?\s*([a-z\s,.'-]+)/i,
     /full name:?\s*([a-z\s,.'-]+)/i,
-    /^([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})$/, // Capitalized names
+    /^([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})$/,
     /(?:applicant|holder)'?s? name:?\s*([a-z\s,.'-]+)/i
   ];
   const idName = extractField(lines, namePatterns);
 
-  // ID number patterns
   const idNumber = extractField(lines, [
     /(?:id|number|no\.?):?\s*([A-Z0-9\-]{6,})/i,
     /[A-Z]{2,3}\d{6,}/,
@@ -274,20 +289,17 @@ const extractIDInfo = (text: string): IDInfo => {
     /(?:personal|unique) id:?\s*([A-Z0-9\-]+)/i
   ]);
 
-  // Personal ID number (if different from document number)
   const personalIdNumber = extractField(lines, [
     /(?:personal|unique) (?:id|number):?\s*([A-Z0-9\-]+)/i,
     /pin:?\s*([A-Z0-9\-]+)/i,
     /national id:?\s*([A-Z0-9\-]+)/i
   ]);
 
-  // Date extraction with better context awareness
   const dateLines = lines.flatMap((line, idx) => 
     [...line.matchAll(/(?:date of birth|dob|issued|expir|date):?\s*(\d{2,4}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/gi)]
       .map(m => ({ date: m[1], line, idx }))
   ).sort((a, b) => a.idx - b.idx);
 
-  // Try to determine which date is which based on context
   let idDOB = null, idIssueDate = null, idExpiryDate = null;
   
   for (const { date, line } of dateLines) {
@@ -301,7 +313,7 @@ const extractIDInfo = (text: string): IDInfo => {
     } else if (line.toLowerCase().includes('expir') || line.toLowerCase().includes('valid')) {
       idExpiryDate = normalized;
     } else if (!idDOB) {
-      idDOB = normalized; // Assume first date is DOB if no context
+      idDOB = normalized;
     } else if (!idIssueDate) {
       idIssueDate = normalized;
     } else {
@@ -309,7 +321,6 @@ const extractIDInfo = (text: string): IDInfo => {
     }
   }
 
-  // Issuer and place of issue with better patterns
   const idIssuer = extractField(lines, [
     /(?:issued by|authority|issuer):?\s*([A-Za-z\s\-]+)/i,
     /(?:government|republic) of ([A-Za-z\s\-]+)/i,
@@ -321,7 +332,6 @@ const extractIDInfo = (text: string): IDInfo => {
     /(?:location|city|office):?\s*([A-Za-z\s\-]+)/i
   ]);
 
-  // Additional fields
   const idGender = extractField(lines, [
     /(?:sex|gender):?\s*([A-Za-z]+)/i,
     /\b(MALE|FEMALE)\b/i
@@ -332,7 +342,6 @@ const extractIDInfo = (text: string): IDInfo => {
     /citizen of ([A-Za-z\s\-]+)/i
   ]);
 
-  // Validation and warnings
   if (!idName) warnings.push("Name not found");
   if (!idNumber && !personalIdNumber) warnings.push("ID number not found");
   if (!idDOB) warnings.push("Date of birth not found");
@@ -419,14 +428,13 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
 
     console.log(`☁️ [${requestId}] Uploading to Cloudinary...`);
     const [selfieUpload, idUpload] = await Promise.all([
-      uploadToCloudinary(selfieBuffer, selfie.type),
-      uploadToCloudinary(idBuffer, id.type),
+      uploadToCloudinaryWithRetry(selfieBuffer, selfie.type),
+      uploadToCloudinaryWithRetry(idBuffer, id.type),
     ]);
 
     console.log(`🔤 [${requestId}] Performing OCR on ID...`);
     const ocrText = await performOCRWithRetry(idBuffer);
 
-    // Enhanced document type detection
     const isLikelyID = ID_KEYWORDS.some(k => ocrText.toLowerCase().includes(k));
     if (!isLikelyID) {
       console.warn(`⚠️ [${requestId}] Document may not be a valid ID. OCR text lacks common ID keywords.`);
@@ -435,7 +443,6 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
     console.log(`🔍 [${requestId}] Extracting ID information...`);
     const extractedInfo = extractIDInfo(ocrText);
 
-    // More robust field validation
     const requiredFields = [
       extractedInfo.idName,
       extractedInfo.idNumber || extractedInfo.personalIdNumber,
