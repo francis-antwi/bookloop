@@ -42,7 +42,7 @@ const PhoneAuth: React.FC<PhoneAuthProps> = ({ phoneNumber, onVerified }) => {
       setConfirmationResult(result);
       toast.success('OTP sent!');
     } catch (error: any) {
-      toast.error(`Failed to send OTP:You failed Captcha Verification`);
+      toast.error(`Failed to send OTP: ${error.message}`);
     } finally {
       setSending(false);
     }
