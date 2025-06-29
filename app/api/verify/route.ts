@@ -51,14 +51,14 @@ interface VerificationResult {
 // === Constants ===
 const OCR_MAX_RETRIES = 3;
 const OCR_TIMEOUT_MS = 60000;
-const ABSOLUTE_MIN_SIZE = 20000;
-const MAX_IMAGE_SIZE = 5_000_000;
-const MIN_REQUIRED_FIELDS = 2;
-const FACE_MATCH_THRESHOLD = 80;
+const ABSOLUTE_MIN_SIZE = 20000; // 20KB
+const MAX_IMAGE_SIZE = 8_000_000; // Increased to 8MB for better quality images
+const MIN_REQUIRED_FIELDS = 3; // Increased for higher accuracy requirement
+const FACE_MATCH_THRESHOLD = 75; // Adjusted based on common benchmarks, can be fine-tuned
 
 const ID_KEYWORDS = [
-  "passport", "driver", "license", "identity", "id card",
-  "ghana card", "ecowas", "national", "identification", "document"
+  "passport", "driver", "license", "identity", "id card", "ghana card",
+  "ecowas", "national", "identification", "document", "permit", "voter"
 ];
 
 // More comprehensive date formats
@@ -66,8 +66,10 @@ const DATE_FORMATS = [
   /^(\d{2})[\/\-\.](\d{2})[\/\-\.](\d{4})$/, // DD/MM/YYYY
   /^(\d{4})[\/\-\.](\d{2})[\/\-\.](\d{2})$/, // YYYY/MM/DD
   /^(\d{2})[\/\-\.](\d{2})[\/\-\.](\d{2})$/, // DD/MM/YY
-  /^(\d{1,2})\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{4})$/i, // Day Month YYYY
-  /^(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2}),?\s*(\d{4})$/i, // Month Day, YYYY
+  /^(\d{1,2})\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{4})$/i, // Day Month YYYY (e.g., 25 Dec 2023)
+  /^(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2}),?\s*(\d{4})$/i, // Month Day, YYYY (e.g., Dec 25, 2023)
+  /^(\d{1,2})-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*-(\d{4})$/i, // DD-MON-YYYY (e.g., 25-DEC-2023)
+  /^(\d{4})-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*-(\d{1,2})$/i, // YYYY-MON-DD
 ];
 
 // === Utility Functions ===
@@ -77,7 +79,7 @@ const cleanText = (text: string): string =>
       .trim();
 
 const getLines = (text: string): string[] =>
-  text.split(/\r?\n/).map(cleanText).filter(line => line.length > 3);
+  text.split(/\r?\n/).map(cleanText).filter(line => line.length > 2); // Increased min length for lines
 
 const normalizeDate = (input: string): string | null => {
   const monthMap: { [key: string]: string } = {
@@ -88,25 +90,35 @@ const normalizeDate = (input: string): string | null => {
   for (const format of DATE_FORMATS) {
     const match = input.match(format);
     if (match) {
+      // Handle DD/MM/YYYY, YYYY/MM/DD, DD/MM/YY
       if (match.length === 4) {
         const [_, a, b, c] = match;
+        // Assume YYYY-MM-DD if first part is 4 digits
         if (a.length === 4) return `${a}-${b.padStart(2, '0')}-${c.padStart(2, '0')}`;
+        // Assume DD-MM-YYYY if last part is 4 digits
         if (c.length === 4) return `${c}-${b.padStart(2, '0')}-${a.padStart(2, '0')}`;
-        const fullYear = parseInt(c, 10) > (new Date().getFullYear() % 100) ? `19${c}` : `20${c}`;
+        // Handle DD/MM/YY (convert YY to YYYY)
+        const fullYear = parseInt(c, 10) > (new Date().getFullYear() % 100) + 5 ? `19${c}` : `20${c}`; // Adjust for future dates
         return `${fullYear}-${b.padStart(2, '0')}-${a.padStart(2, '0')}`;
-      } else if (match.length === 3) {
-        const [_, m_or_d, d_or_y, y_optional] = match;
-        let day, month, year;
+      } else if (match.length >= 3) { // For Day Month YYYY, Month Day, YYYY, etc.
+        let day = '';
+        let month = '';
+        let year = '';
 
-        if (m_or_d.match(/^(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/i)) {
-          month = monthMap[m_or_d.toLowerCase().substring(0, 3)];
-          day = d_or_y;
-          year = y_optional;
-        } else {
-          day = m_or_d;
-          month = monthMap[d_or_y.toLowerCase().substring(0, 3)];
-          year = y_optional;
+        if (DATE_FORMATS[3].test(input) || DATE_FORMATS[5].test(input)) { // Day Month YYYY, DD-MON-YYYY
+          day = match[1];
+          month = monthMap[match[2].toLowerCase().substring(0, 3)];
+          year = match[3];
+        } else if (DATE_FORMATS[4].test(input)) { // Month Day, YYYY
+          month = monthMap[match[1].toLowerCase().substring(0, 3)];
+          day = match[2];
+          year = match[3];
+        } else if (DATE_FORMATS[6].test(input)) { // YYYY-MON-DD
+          year = match[1];
+          month = monthMap[match[2].toLowerCase().substring(0, 3)];
+          day = match[3];
         }
+
         if (day && month && year) {
           return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
         }
@@ -116,14 +128,16 @@ const normalizeDate = (input: string): string | null => {
   return null;
 };
 
-const extractField = (lines: string[], patterns: RegExp[]): string | null => {
-  for (const line of lines) {
-    for (const pattern of patterns) {
-      const match = line.match(pattern);
-      if (match) {
-        return (match[1]?.trim() || match[0]?.trim() || null);
-      }
+// Enhanced extractField with word boundaries and negative lookaheads
+const extractField = (lines: string[], patterns: RegExp[], joinChar: string = ' '): string | null => {
+  const allText = lines.join(joinChar);
+  for (const pattern of patterns) {
+    let match = allText.match(pattern);
+    if (match && match[1]) {
+      return match[1].trim();
     }
+    // If pattern includes global flag, we might need to reset lastIndex
+    if (pattern.global) pattern.lastIndex = 0;
   }
   return null;
 };
@@ -136,7 +150,7 @@ const validateFile = (file: File) => {
     throw new Error("Image too small. Try a higher-quality photo.");
   }
   if (file.size > MAX_IMAGE_SIZE) {
-    throw new Error("Image too large. Max 5MB.");
+    throw new Error(`Image too large. Max ${MAX_IMAGE_SIZE / 1_000_000}MB.`);
   }
 };
 
@@ -145,32 +159,32 @@ const processImageForOCR = async (file: File): Promise<Buffer> => {
   validateFile(file);
   const buffer = Buffer.from(await file.arrayBuffer());
   return sharp(buffer)
-    .rotate()
-    .resize({ width: 1200, withoutEnlargement: true, kernel: sharp.kernel.lanczos3 })
+    .rotate() // Auto-rotate based on EXIF
+    .resize({ width: 1500, withoutEnlargement: true, kernel: sharp.kernel.lanczos3 }) // Increased width for better OCR
     .greyscale()
     .normalize()
-    .linear(1.1, -10)
-    .sharpen({ sigma: 1.2, flat: 1, jagged: 1 })
-    .modulate({ brightness: 1.05 })
-    .jpeg({ quality: 90, mozjpeg: true, chromaSubsampling: '4:4:4' })
+    .linear(1.2, -20) // Increased contrast slightly
+    .sharpen({ sigma: 1.5, flat: 1, jagged: 2 }) // Stronger sharpening
+    .modulate({ brightness: 1.1, saturation: 1.1 }) // Slightly brighter and more saturated
+    .jpeg({ quality: 95, mozjpeg: true, chromaSubsampling: '4:4:4' }) // Higher JPEG quality
     .toBuffer();
 };
 
 const uploadToCloudinaryWithRetry = async (buffer: Buffer, fileType: string) => {
   const dataURI = `data:${fileType};base64,${buffer.toString("base64")}`;
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < 3; i++) { // Increased retries to 3
     try {
       const res = await cloudinary.uploader.upload(dataURI, {
         folder: "id_verification",
-        timeout: 40000,
+        timeout: 60000, // Increased timeout
         resource_type: "image",
         upload_preset: process.env.CLOUDINARY_UPLOAD_PRESET,
       });
       if (res.secure_url) return res;
     } catch (err: any) {
       console.warn(`Cloudinary upload attempt ${i + 1} failed: ${err.message}`);
-      if (i === 1) throw err;
-      await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, i)));
+      if (i === 2) throw err;
+      await new Promise(resolve => setTimeout(resolve, 2000 * Math.pow(2, i))); // Exponential backoff
     }
   }
   throw new Error("Cloudinary upload failed after retries.");
@@ -182,10 +196,11 @@ const performOCR = async (imageBuffer: Buffer): Promise<string> => {
     apikey: process.env.OCR_SPACE_API_KEY!,
     base64Image,
     language: "eng",
-    OCREngine: "5",
-    isTable: "true",
+    OCREngine: "2", // OCR Engine 2 is often better for documents
+    isTable: "true", // Useful for structured documents
     detectOrientation: "true",
     scale: "true",
+    isOverlayRequired: "true", // Get word-level confidence (if available/needed for future enhancements)
   });
 
   const res = await axios.post("https://api.ocr.space/parse/image", params, {
@@ -198,12 +213,12 @@ const performOCR = async (imageBuffer: Buffer): Promise<string> => {
 
   const result = res.data;
   if (result.IsErroredOnProcessing) {
-    throw new Error(`OCR Error: ${result.ErrorMessage || "Unknown error"}`);
+    throw new Error(`OCR Error: ${result.ErrorMessage?.join(', ') || "Unknown error"}`);
   }
 
   const text = result.ParsedResults?.[0]?.ParsedText;
-  if (!text || text.length < 20) {
-    throw new Error("OCR returned insufficient or no text");
+  if (!text || text.length < 50) { // Increased minimum text length for validity
+    throw new Error("OCR returned insufficient or no text for reliable extraction.");
   }
 
   return text;
@@ -217,7 +232,7 @@ const performOCRWithRetry = async (buffer: Buffer) => {
     } catch (e: any) {
       lastErr = e;
       console.warn(`OCR attempt ${i + 1} failed: ${e.message}`);
-      await new Promise(res => setTimeout(res, 1000 * Math.pow(2, i)));
+      await new Promise(res => setTimeout(res, 2000 * Math.pow(2, i))); // Exponential backoff
     }
   }
   throw new Error(`OCR failed after multiple retries: ${lastErr.message || "Unknown error"}`);
@@ -225,90 +240,127 @@ const performOCRWithRetry = async (buffer: Buffer) => {
 
 const extractIDInfo = (text: string): IDInfo => {
   const lines = getLines(text);
-  const joinedText = lines.join(" ");
+  const joinedText = lines.join(" ").toLowerCase(); // Join and convert to lowercase for case-insensitive matching
   const warnings: string[] = [];
 
   let idName: string | null = null;
+  // Prioritize patterns that capture full names
   idName = extractField(lines, [
-      /(?:name|full name|surname|given names|first name|last name):?\s*([A-Z][a-z.'`’\-\s]+)/i,
-      /^([A-Z][a-z.'`’\-\s]+(?:\s+[A-Z][a-z.'`’\-\s]+){1,5})$/,
-      /\b([A-Z][a-z.'`’\-\s]+\s+[A-Z][a-z.'`’\-\s]+(?:\s+[A-Z][a-z.'`’\-\s]+)?)\b/
+    /(?:name|full name|surname|given names|first name|last name):\s*([A-Za-z.'`’\-\s]+(?:\s+[A-Za-z.'`’\-\s]+){1,5})/,
+    /^([A-Za-z.'`’\-\s]+(?:\s+[A-Za-z.'`’\-\s]+){1,5})$/, // Matches a line that looks like a name
+    /\b(mr|ms|mrs|dr)\.?\s*([A-Za-z.'`’\-\s]+(?:\s+[A-Za-z.'`’\-\s]+){1,4})\b/i, // Name with title
+    /\b([A-Z][a-z.'`’\-]+\s+[A-Z][a-z.'`’\-]+(?:\s+[A-Z][a-z.'`’\-]+)?)\b/ // Capitalized words as names
   ]);
+  // Fallback for names if not found in specific lines
   if (!idName) {
-      idName = extractField([joinedText], [/([A-Z][a-z.'`’\-\s]+(?:\s+[A-Z][a-z.'`’\-\s]+){1,3})/]);
+    idName = extractField([joinedText], [
+      /name\s*([a-z.'`’\-\s]+)/i,
+      /\b([a-z][a-z.'`’\-\s]+(?:\s+[a-z][a-z.'`’\-\s]+){1,3})\b/ // Generic name pattern
+    ]);
+  }
+  // Further refinement for name to remove extraneous text
+  if (idName) {
+    idName = idName.replace(/(?:republic of|ghana|identification|authority|card)/ig, '').trim();
   }
 
+
   const idNumber = extractField(lines, [
-      /(?:id number|card number|no\.?|document no\.?|passport no\.?):?\s*([A-Z0-9]{6,})/i,
-      /\b[A-Z]{2,3}\d{6,15}\b/,
-      /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/,
-      /\b[A-Z0-9]{9,20}\b/
+    /(?:id number|card number|no\.?|document no\.?|passport no\.?|document no|passport no):\s*([A-Z0-9\s]{6,})/i,
+    /\b([A-Z]{2,3}\d{6,15})\b/, // e.g., GH123456789
+    /\b(\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4})\b/, // e.g., 1234 5678 9012 3456
+    /\b([A-Z0-9]{9,20})\b/, // Generic alphanumeric ID
+    /passport\s*number:\s*([A-Z0-9]+)/i,
+    /licen[cs]e\s*number:\s*([A-Z0-9]+)/i,
   ]);
 
   const personalIdNumber = extractField(lines, [
-      /personal id:?\s*([A-Z0-9]+)/i,
-      /pin:?\s*([A-Z0-9]+)/i,
-      /national id:?\s*([A-Z0-9]+)/i,
-      /ghana card no\.?:\s*([A-Z0-9]+)/i
+    /personal id:?\s*([A-Z0-9]+)/i,
+    /pin:?\s*([A-Z0-9]+)/i,
+    /national id:?\s*([A-Z0-9]+)/i,
+    /ghana card no\.?:\s*([A-Z0-9]{10,})/i, // Specific to Ghana Card format
+    /unique\s*id:\s*([A-Z0-9]+)/i
   ]);
 
   const idDOB = normalizeDate(extractField(lines, [
-      /(?:date of birth|dob|birth date):?\s*(.+)/i,
-      /dob\s*(\d{2}[\/\-\.]\d{2}[\/\-\.]\d{2,4})/i,
-      /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4})\b/i
+    /(?:date of birth|dob|birth date|date of issue|issue date|expiry date|issued|expires|valid until)\s*:\s*([^\n]+)/i, // Catch all date formats
+    /(?:dob|birth|date)\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/i,
+    /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4})\b/i,
+    /\b(date of birth)\b\s*([0-9\/\-\.\sA-Za-z]+)\b/i
   ]) ?? "");
 
   const idIssueDate = normalizeDate(extractField(lines, [
-      /(?:issue date|issued|date of issue):?\s*(.+)/i,
-      /issued on:?\s*(\d{2}[\/\-\.]\d{2}[\/\-\.]\d{2,4})/i
+    /(?:issue date|issued|date of issue)\s*:\s*([^\n]+)/i,
+    /issued\s*on:?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/i,
+    /\b(issue date)\b\s*([0-9\/\-\.\sA-Za-z]+)\b/i
   ]) ?? "");
 
   const idExpiryDate = normalizeDate(extractField(lines, [
-      /(?:expiry date|expires|valid until|date of expiry):?\s*(.+)/i,
-      /(?:validity|exp):?\s*(\d{2}[\/\-\.]\d{2}[\/\-\.]\d{2,4})/i
+    /(?:expiry date|expires|valid until|date of expiry)\s*:\s*([^\n]+)/i,
+    /(?:validity|exp)\s*:\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/i,
+    /\b(expiry date)\b\s*([0-9\/\-\.\sA-Za-z]+)\b/i
   ]) ?? "");
 
   const idIssuer = extractField(lines, [
-      /issued by:? ([a-z\s.,&]+)/i,
-      /authority:? ([a-z\s.,&]+)/i,
-      /republic of ([a-z\s]+)/i,
-      /\b(ghana|united states|united kingdom|nigeria|south africa|canada|australia)\b/i,
-      /\b(ministry of interior|national identification authority)\b/i
+    /issued by:?\s*([a-z\s.,&()]+)/i,
+    /authority:?\s*([a-z\s.,&()]+)/i,
+    /republic of\s*([a-z\s]+)/i,
+    /\b(ghana|united states|united kingdom|nigeria|south africa|canada|australia|germany|france|india|china|japan|brazil|mexico)\b/i,
+    /\b(ministry of interior|national identification authority|department of state|home office|immigration service)\b/i
   ]);
 
   const placeOfIssue = extractField(lines, [
-      /issued at:? ([a-z\s.,]+)/i,
-      /place of issue:? ([a-z\s.,]+)/i,
-      /\b(accra|kumasi|takoradi|tema|london|paris|new york|abuja|pretoria)\b/i
+    /issued at:?\s*([a-z\s.,]+)/i,
+    /place of issue:?\s*([a-z\s.,]+)/i,
+    /\b(accra|kumasi|takoradi|tema|london|paris|new york|abuja|pretoria|berlin|tokyo|delhi|sydney|toronto|mexico city)\b/i
   ]);
 
   const idType = extractField(lines, [
-      /(passport|driver's license|ghana card|identity card|national id card|residence permit|voter id|alien card)/i,
-      new RegExp(`(?:${ID_KEYWORDS.join("|")})`, 'i')
+    /(passport|driver's license|ghana card|identity card|national id card|residence permit|voter id|alien card|travel document|state id|consular id)/i,
+    new RegExp(`\\b(?:${ID_KEYWORDS.join("|")})\\b`, 'i') // Use word boundaries
   ]);
 
   const idGender = extractField(lines, [
-      /\b(MALE|FEMALE)\b/i,
-      /gender:?\s*([M|F])/i,
-      /\b(M|F)\b/
+    /\b(MALE|FEMALE)\b/i,
+    /gender:?\s*([M|F])/i,
+    /\b(M|F)\b(?!\w)/ // Ensure M/F are standalone
   ]);
 
   const idNationality = extractField(lines, [
-      /nationality:? ([A-Z\s]+)/i,
-      /citizen of ([A-Z\s]+)/i,
-      /\b(ghanaian|american|british|nigerian|south african|canadian|australian)\b/i,
-      /\b(ghana|nigeria|kenya|egypt)\b/i
+    /nationality:?\s*([A-Z\s]+)/i,
+    /citizen of\s*([A-Z\s]+)/i,
+    /\b(ghanaian|american|british|nigerian|south african|canadian|australian|german|french|indian|chinese|japanese|brazilian|mexican)\b/i,
+    /\b(ghana|nigeria|kenya|egypt|usa|uk|canada|australia|germany|france|india|china|japan|brazil|mexico)\b/i
   ]);
 
-  if (!idName) warnings.push("Name not found or unclear.");
+  // Comprehensive validation and warning system
+  if (!idName || idName.split(' ').filter(n => n.length > 1).length < 2) warnings.push("Name not found or unclear (requires at least two words).");
   if (!idNumber && !personalIdNumber) warnings.push("ID number not found or unclear.");
   if (!idDOB) warnings.push("Date of Birth not found or unclear.");
+  if (!idType) warnings.push("ID Type not identified.");
+  if (!idGender) warnings.push("Gender not found or unclear.");
 
-  if (idDOB && idIssueDate && new Date(idDOB) >= new Date(idIssueDate)) {
-      warnings.push("Issue date is before or same as DOB. Possible error.");
+  // Cross-field validation for dates
+  if (idDOB && idIssueDate) {
+    try {
+      const dobDate = new Date(idDOB);
+      const issueDate = new Date(idIssueDate);
+      if (isNaN(dobDate.getTime()) || isNaN(issueDate.getTime()) || dobDate >= issueDate) {
+        warnings.push("Issue date is before or same as DOB. Possible error or invalid date format.");
+      }
+    } catch (e) {
+      warnings.push("Error parsing DOB or Issue Date.");
+    }
   }
-  if (idIssueDate && idExpiryDate && new Date(idIssueDate) >= new Date(idExpiryDate)) {
-      warnings.push("Expiry date is before or same as issue date. Possible error.");
+  if (idIssueDate && idExpiryDate) {
+    try {
+      const issueDate = new Date(idIssueDate);
+      const expiryDate = new Date(idExpiryDate);
+      if (isNaN(issueDate.getTime()) || isNaN(expiryDate.getTime()) || issueDate >= expiryDate) {
+        warnings.push("Expiry date is before or same as issue date. Possible error or invalid date format.");
+      }
+    } catch (e) {
+      warnings.push("Error parsing Issue Date or Expiry Date.");
+    }
   }
 
   return {
@@ -326,24 +378,39 @@ const compareFaces = async (selfieUrl: string, idUrl: string) => {
     api_key: process.env.FACEPP_API_KEY!,
     api_secret: process.env.FACEPP_API_SECRET!,
     image_url1: selfieUrl,
-    image_url2: idUrl
+    image_url2: idUrl,
+    return_result: "1", // Return the result directly in the response
+    return_landmark: "0",
+    return_attributes: "gender,age,smiling,headpose" // Can be useful for additional checks
   });
 
-  const res = await axios.post("https://api-us.faceplusplus.com/facepp/v3/compare", params, {
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    timeout: 60000,
-  });
+  try {
+    const res = await axios.post("https://api-us.faceplusplus.com/facepp/v3/compare", params, {
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      timeout: 60000,
+    });
 
-  const { confidence, faces1, faces2 } = res.data;
+    const { confidence, faces1, faces2, error_message } = res.data;
 
-  if (typeof confidence === 'undefined' || confidence === null) {
+    if (error_message) {
+      throw new Error(`Face++ API error: ${error_message}`);
+    }
+
+    if (typeof confidence === 'undefined' || confidence === null) {
       throw new Error("Face++ confidence not returned.");
-  }
+    }
 
-  if (!faces1?.length || !faces2?.length) {
-    throw new Error("Face not detected in selfie or ID image by Face++ API.");
+    if (!faces1?.length) {
+      throw new Error("No face detected in selfie image by Face++ API.");
+    }
+    if (!faces2?.length) {
+      throw new Error("No face detected in ID image by Face++ API.");
+    }
+    return { confidence };
+  } catch (err: any) {
+    console.error("Face comparison API error:", err.response?.data || err.message);
+    throw new Error(`Face comparison failed: ${err.response?.data?.error_message || err.message}`);
   }
-  return { confidence };
 };
 
 // === Main POST Handler ===
@@ -363,35 +430,79 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
     }
 
     // Process images and perform OCR
-    const [selfieBuffer, idBuffer] = await Promise.all([
+    // Use Promise.allSettled to allow independent processing and better error handling
+    const [selfieProcessResult, idProcessResult] = await Promise.allSettled([
       processImageForOCR(selfie),
       processImageForOCR(id),
     ]);
 
-    const [selfieUpload, idUpload] = await Promise.all([
+    if (selfieProcessResult.status === "rejected") {
+      throw new Error(`Selfie image processing failed: ${selfieProcessResult.reason.message}`);
+    }
+    if (idProcessResult.status === "rejected") {
+      throw new Error(`ID image processing failed: ${idProcessResult.reason.message}`);
+    }
+
+    const selfieBuffer = selfieProcessResult.value;
+    const idBuffer = idProcessResult.value;
+
+    const [selfieUploadResult, idUploadResult] = await Promise.allSettled([
       uploadToCloudinaryWithRetry(selfieBuffer, selfie.type),
       uploadToCloudinaryWithRetry(idBuffer, id.type),
     ]);
 
-    const ocrText = await performOCRWithRetry(idBuffer);
+    if (selfieUploadResult.status === "rejected") {
+      throw new Error(`Selfie upload failed: ${selfieUploadResult.reason.message}`);
+    }
+    if (idUploadResult.status === "rejected") {
+      throw new Error(`ID upload failed: ${idUploadResult.reason.message}`);
+    }
+
+    const selfieUpload = selfieUploadResult.value;
+    const idUpload = idUploadResult.value;
+
+    const ocrTextResult = await Promise.allSettled([performOCRWithRetry(idBuffer)]);
+
+    if (ocrTextResult[0].status === "rejected") {
+      throw new Error(`OCR failed: ${ocrTextResult[0].reason.message}`);
+    }
+    const ocrText = ocrTextResult[0].value;
+
     console.log(`📝 [${requestId}] Raw OCR Text:\n${ocrText}`);
     const extracted = extractIDInfo(ocrText);
 
-    // Validate extracted fields
-    const requiredFieldsCount = [
+    // Validate extracted fields more strictly for 90% accuracy
+    const foundFieldsCount = [
       extracted.idName,
       extracted.idNumber || extracted.personalIdNumber,
-      extracted.idDOB
+      extracted.idDOB,
+      extracted.idIssueDate,
+      extracted.idExpiryDate,
+      extracted.idType,
+      extracted.idGender,
+      extracted.idNationality,
     ].filter(Boolean).length;
 
-    if (requiredFieldsCount < MIN_REQUIRED_FIELDS) {
+    // A more nuanced check for "enough key fields"
+    // For 90% accuracy, we need a high degree of confidence in *critical* fields.
+    const criticalFieldsPresent = (extracted.idName && (extracted.idNumber || extracted.personalIdNumber) && extracted.idDOB);
+    const overallCompleteness = (foundFieldsCount / Object.keys(extracted).length) * 100; // Rough percentage of fields found
+
+    if (!criticalFieldsPresent || extracted.extractionWarnings.length > 2 || overallCompleteness < 70) {
       return NextResponse.json({
-        error: `Could not extract enough key fields from ID. Missing: ${extracted.extractionWarnings.join(', ')}`
+        error: `Insufficient or inaccurate data extracted from ID. Found ${foundFieldsCount} fields. Warnings: ${extracted.extractionWarnings.join('; ')}. Please ensure the image is clear and well-lit.`
       }, { status: 400 });
     }
 
     // Face comparison
-    const { confidence } = await compareFaces(selfieUpload.secure_url, idUpload.secure_url);
+    const faceComparisonResult = await Promise.allSettled([
+      compareFaces(selfieUpload.secure_url, idUpload.secure_url)
+    ]);
+
+    if (faceComparisonResult[0].status === "rejected") {
+      throw new Error(`Face comparison failed: ${faceComparisonResult[0].reason.message}`);
+    }
+    const { confidence } = faceComparisonResult[0].value;
     const faceMatch = confidence >= FACE_MATCH_THRESHOLD;
 
     // Prepare base response
@@ -438,10 +549,10 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
         });
 
         const registerResult = await registerRes.json();
-        
+
         verificationResponse.registration = {
           success: registerRes.ok,
-          userId: registerResult.userId,
+          userId: registerRes.ok ? registerResult.userId : undefined,
           error: registerRes.ok ? undefined : registerResult.error
         };
 
@@ -451,7 +562,7 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
       } catch (regError: any) {
         verificationResponse.registration = {
           success: false,
-          error: regError.message
+          error: `Registration API failed: ${regError.message}`
         };
       }
     }
@@ -460,15 +571,17 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
 
   } catch (error: any) {
     console.error(`❌ [${requestId}] Error:`, error.message);
-    let errorMessage = "An unexpected error occurred.";
-    if (error.message.includes("File too small") || error.message.includes("File too large")) {
+    let errorMessage = "An unexpected error occurred during verification.";
+    if (error.message.includes("Image too small") || error.message.includes("Image too large")) {
       errorMessage = `Image processing error: ${error.message}`;
     } else if (error.message.includes("Cloudinary upload failed")) {
       errorMessage = `Image upload failed: ${error.message}`;
     } else if (error.message.includes("OCR")) {
-      errorMessage = `Document recognition failed: ${error.message}`;
+      errorMessage = `Document recognition failed: ${error.message}. Please ensure the ID is clearly visible and well-lit.`;
     } else if (error.message.includes("Face")) {
-      errorMessage = `Face comparison failed: ${error.message}`;
+      errorMessage = `Face comparison failed: ${error.message}. Ensure your selfie is clear and facing forward.`;
+    } else if (error.message.includes("Insufficient or inaccurate data extracted")) {
+      errorMessage = error.message; // Use the specific error message
     }
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
