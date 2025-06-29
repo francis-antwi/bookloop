@@ -54,7 +54,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
     setIdFile(file);
   };
 
-const handleRegistration = async (verificationData: any) => {
+  const handleRegistration = async (verificationData: any) => {
   try {
     const payload = {
       email: session?.user?.email,
@@ -111,6 +111,98 @@ const handleRegistration = async (verificationData: any) => {
     throw error;
   }
 };
+
+  const submitVerification = async () => {
+    if (!selfieImage || !idFile) {
+      toast.error('Please complete all verification steps');
+      return;
+    }
+
+    setIsLoading(true);
+    setVerificationStatus(null);
+
+    try {
+      // 1. First perform verification
+      const verificationFormData = new FormData();
+      verificationFormData.append('selfieImage', new File([selfieImage], 'selfie.jpg', { type: 'image/jpeg' }));
+      verificationFormData.append('idImage', idFile);
+      verificationFormData.append('email', session?.user?.email || '');
+      verificationFormData.append('register', 'true');
+
+      const response = await axios.post('/api/verify', verificationFormData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 30000, // 30 second timeout
+      });
+
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Verification failed');
+      }
+
+      // 2. Update session with verification data
+      await update({
+        ...session?.user,
+        isVerified: true,
+        verificationData: {
+          selfieUrl: response.data.document.selfieUrl,
+          idImageUrl: response.data.document.imageUrl,
+          confidence: response.data.verification.confidence,
+          idName: response.data.document.idName,
+          idNumber: response.data.document.idNumber,
+          idDOB: response.data.document.idDOB,
+          idExpiryDate: response.data.document.idExpiryDate,
+          idIssuer: response.data.document.idIssuer,
+        }
+      });
+
+      // 3. Handle registration
+      let registrationSuccess = false;
+      if (response.data.registration?.success) {
+        registrationSuccess = true;
+      } else {
+        // Attempt direct registration if combined API failed
+        try {
+          registrationSuccess = await handleRegistration(response.data.document);
+        } catch (regError) {
+          console.error('Fallback registration failed:', regError);
+        }
+      }
+
+      if (registrationSuccess) {
+        toast.success('Verification and registration completed successfully!');
+        onComplete();
+      } else {
+        const errorMsg = response.data.registration?.error || 'Registration failed - please try again';
+        setVerificationStatus({
+          success: true,
+          confidence: response.data.verification.confidence,
+          error: errorMsg,
+          registrationError: true
+        });
+        toast.error(errorMsg);
+      }
+
+    } catch (error: any) {
+      const errorData = error.response?.data || {};
+      const errorMsg = errorData.error || error.message || 'Verification failed';
+      
+      console.error('Verification error:', {
+        error: errorMsg,
+        details: errorData.details,
+        stack: error.stack
+      });
+
+      setVerificationStatus({ 
+        success: false, 
+        error: errorMsg 
+      });
+      toast.error(errorMsg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-4">
       <div className="max-w-md mx-auto">
