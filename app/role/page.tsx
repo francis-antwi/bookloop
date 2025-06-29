@@ -1,133 +1,93 @@
-'use client';
+import { withAuth } from "next-auth/middleware";
+import { NextResponse } from "next/server";
 
-import { useState } from 'react';
-import { FiUserCheck, FiCheck, FiLoader } from 'react-icons/fi';
-import { useSession } from 'next-auth/react';
-import axios from 'axios';
-import toast from 'react-hot-toast';
+export default withAuth(
+  function middleware(req) {
+    const { pathname } = req.nextUrl;
+    const token = req.nextauth.token;
 
-interface RoleSelectorProps {
-  onRoleSelected: (role: string) => void;
-}
+    const publicPaths = [
+      "/", // Home page
+      "/auth", // Authentication routes (login, register)
+      "/auth/error", // Auth error page
+    ];
 
-const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
-  const { data: session } = useSession();
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedRole, setSelectedRole] = useState(null); 
+    const isPublicPath = publicPaths.some(
+      (path) => pathname === path || pathname.startsWith(`${path}/`)
+    );
 
-  const handleRoleSelect = async (role: string) => {
-    if (selectedRole === role) return;
+    const providerRestrictedPaths = [
+      "/my-listings",
+      "/approvals",
+      "/bookings",
+      "/favourites",
+      "/notifications",
+    ];
+    const isProviderRestrictedPath = providerRestrictedPaths.some(
+      (path) => pathname === path || pathname.startsWith(`${path}/`)
+    );
 
-    setIsLoading(true);
-
-    try {
-      const response = await axios.post('/api/role', { role }, { withCredentials: true });
-
-      if (response.status >= 200 && response.status < 300) {
-        setSelectedRole(role);
-        onRoleSelected?.(role);
-        toast.success('Role selected successfully');
-
-        window.location.href = role === 'PROVIDER' ? '/verify' : '/';
-      } else {
-        const message = response?.data?.message || 'Unexpected response';
-        toast.error(message);
+    // 1. Handle unauthenticated users
+    if (!token) {
+      if (isPublicPath || pathname === "/role" || pathname === "/verify") {
+        return NextResponse.next();
       }
-    } catch (err: any) {
-      const status = err?.response?.status;
-      const message = err?.response?.data?.message || err?.message || 'Failed to select role';
-
-      toast.error(message);
-
-      if (status === 403 && err?.response?.data?.error === 'Verification required') {
-        setTimeout(() => {
-          window.location.href = '/verify';
-        }, 1000);
-      }
-    } finally {
-      setIsLoading(false);
+      return NextResponse.redirect(new URL("/auth", req.url));
     }
-  };
 
-  const roles = [
-    {
-      value: 'CUSTOMER',
-      label: 'Customer',
-      desc: 'Looking for services',
-      gradient: 'from-blue-50 to-indigo-50',
-      border: 'border-blue-200',
-      selectedBorder: 'border-blue-500',
-      selectedBg: 'bg-gradient-to-r from-blue-50 to-indigo-100',
-      icon: '🛍️',
+    // From this point, user is authenticated
+
+    // 2. Enforce role selection if role is missing
+    if (!token.role && pathname !== "/role") {
+      return NextResponse.redirect(new URL("/role", req.url));
+    }
+
+    // 3. Handle role-specific restrictions
+    if (token.role) {
+      // Block non-ADMIN users from /admin paths
+      if (pathname.startsWith("/admin") && token.role !== "ADMIN") {
+        return NextResponse.redirect(new URL("/403", req.url));
+      }
+
+      // Prevent access to /role if already has a role
+      if (pathname === "/role") {
+        return NextResponse.redirect(new URL("/dashboard", req.url));
+      }
+
+      // Handle provider-specific verification
+      if (token.role === "PROVIDER") {
+        if (!token.isFaceVerified && isProviderRestrictedPath && pathname !== "/verify") {
+          return NextResponse.redirect(new URL("/verify", req.url));
+        }
+        if (token.isFaceVerified && pathname === "/verify") {
+          return NextResponse.redirect(new URL("/my-listings", req.url));
+        }
+      } else if (isProviderRestrictedPath) {
+        // Block non-providers from provider routes
+        return NextResponse.redirect(new URL("/403", req.url));
+      }
+    }
+
+    return NextResponse.next();
+  },
+  {
+    callbacks: {
+      authorized: () => true,
     },
-    {
-      value: 'PROVIDER',
-      label: 'Service Provider',
-      desc: 'Offering services',
-      gradient: 'from-emerald-50 to-teal-50',
-      border: 'border-emerald-200',
-      selectedBorder: 'border-emerald-500',
-      selectedBg: 'bg-gradient-to-r from-emerald-50 to-teal-100',
-      icon: '⚡',
-    },
-  ];
+  }
+);
 
-  return (
-    <div className="max-w-md mx-auto space-y-6 p-6">
-      <div className="text-center space-y-2">
-        <div className="inline-flex items-center justify-center w-12 h-12 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full mb-3">
-          <FiUserCheck className="text-white text-xl" />
-        </div>
-        <h2 className="text-2xl font-bold text-gray-900">Choose Your Role</h2>
-        <p className="text-gray-600 text-sm">Select how you'll be using our platform</p>
-      </div>
-
-      <div className="space-y-3">
-        {roles.map((role) => (
-          <button
-            key={role.value}
-            onClick={() => handleRoleSelect(role.value)}
-            disabled={isLoading}
-            className={`
-              relative w-full p-5 rounded-xl text-left transition-all duration-300 
-              transform hover:scale-[1.02] active:scale-[0.98]
-              border-2 shadow-sm hover:shadow-md
-              ${selectedRole === role.value
-                ? `${role.selectedBorder} ${role.selectedBg} shadow-lg`
-                : `${role.border} bg-white hover:${role.gradient}`
-              }
-              ${isLoading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}
-              group
-            `}
-          >
-            <div className="flex items-start justify-between">
-              <div className="flex items-start space-x-3">
-                <div className="text-2xl mt-1">{role.icon}</div>
-                <div>
-                  <div className="font-semibold text-gray-900 text-lg">{role.label}</div>
-                  <div className="text-gray-600 text-sm mt-1">{role.desc}</div>
-                </div>
-              </div>
-              <div className="flex items-center">
-                {isLoading && selectedRole === role.value ? (
-                  <FiLoader className="text-blue-500 animate-spin" />
-                ) : selectedRole === role.value ? (
-                  <div className="flex items-center justify-center w-6 h-6 bg-blue-500 rounded-full">
-                    <FiCheck className="text-white text-sm" />
-                  </div>
-                ) : (
-                  <div className="w-6 h-6 border-2 border-gray-300 rounded-full group-hover:border-gray-400 transition-colors" />
-                )}
-              </div>
-            </div>
-            {selectedRole === role.value && (
-              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-b-xl" />
-            )}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
+export const config = {
+  matcher: [
+    "/",
+    "/bookings/:path*",
+    "/favourites/:path*",
+    "/approvals/:path*",
+    "/my-listings/:path*",
+    "/notifications/:path*",
+    "/admin/:path*",
+    "/role",
+    "/verify",
+    "/auth/:path*",
+  ],
 };
-
-export default RoleSelector;

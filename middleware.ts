@@ -6,7 +6,7 @@ export default withAuth(
     const { pathname } = req.nextUrl;
     const token = req.nextauth.token;
 
-    // Define public routes that don't require any authentication or specific role/verification
+
     const publicPaths = [
       "/", // Home page
       "/auth", // Authentication routes (login, register)
@@ -14,7 +14,7 @@ export default withAuth(
       // Do NOT include /role or /verify here initially, as they have specific conditional access
     ];
 
-    // Check if the current path starts with any of the public paths
+   
     const isPublicPath = publicPaths.some(
       (path) => pathname === path || pathname.startsWith(`${path}/`)
     );
