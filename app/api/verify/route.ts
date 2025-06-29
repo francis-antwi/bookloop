@@ -181,7 +181,7 @@ const processImageForOCR = async (file: File, requestId: string): Promise<Buffer
 
   // Aggressive resizing/compression loop to meet OCR.space limit
   let quality = 85;
-  while (processedBuffer.length > OCR_SPACE_MAX_SIZE_BYTES && quality > 10) {
+  while (processedBuffer.length > OCR_SPACE_MAX_SIZE_BYTES && quality > 10) { // CORRECTED HERE
     quality -= 5; // Decrease quality by 5%
     console.log(`[${requestId}] Reducing JPEG quality to ${quality}% to fit OCR.space limit. Current size: ${(processedBuffer.length / 1024).toFixed(2)} KB at ${new Date().toISOString()}`);
     processedBuffer = await sharp(processedBuffer)
@@ -190,7 +190,7 @@ const processImageForOCR = async (file: File, requestId: string): Promise<Buffer
   }
 
   // If still too large, try reducing dimensions further
-  if (processedBuffer.length > OCR_SPACE_MAX_SIZE_BYTES) {
+  if (processedBuffer.length > OCR_SPACE_MAX_SIZE_BYTES) { // CORRECTED HERE
     console.warn(`[${requestId}] Still too large after quality reduction. Attempting further dimension reduction. Current size: ${(processedBuffer.length / 1024).toFixed(2)} KB at ${new Date().toISOString()}`);
     processedBuffer = await sharp(buffer) // Start from original buffer
       .rotate()
@@ -204,7 +204,7 @@ const processImageForOCR = async (file: File, requestId: string): Promise<Buffer
       .toBuffer();
 
     quality = 80;
-    while (processedBuffer.length > OCR_SPACE_MAX_BYTES && quality > 10) {
+    while (processedBuffer.length > OCR_SPACE_MAX_SIZE_BYTES && quality > 10) { // CORRECTED HERE
       quality -= 5;
       console.log(`[${requestId}] Further dimension reduction, new JPEG quality to ${quality}% to fit OCR.space limit. Current size: ${(processedBuffer.length / 1024).toFixed(2)} KB at ${new Date().toISOString()}`);
       processedBuffer = await sharp(processedBuffer)
@@ -214,7 +214,7 @@ const processImageForOCR = async (file: File, requestId: string): Promise<Buffer
   }
 
   // Final check before returning
-  if (processedBuffer.length > OCR_SPACE_MAX_BYTES) {
+  if (processedBuffer.length > OCR_SPACE_MAX_SIZE_BYTES) { // CORRECTED HERE
     throw new Error(`Processed image for OCR still exceeds OCR.space 1MB limit (${(processedBuffer.length / 1024).toFixed(2)} KB) even after aggressive compression.`);
   }
 
