@@ -75,30 +75,31 @@ const normalizeDate = (raw: string): string | null => {
 
 const uploadToCloudinary = async (file: File) => {
   const buffer = Buffer.from(await file.arrayBuffer());
-  return await cloudinary.uploader.upload_stream({
-    folder: "id_verification",
-    upload_preset: process.env.CLOUDINARY_UPLOAD_PRESET
-  }, (error: any, result: any) => {
-    if (error) throw new Error("Cloudinary upload failed");
-    return result;
-  }).end(buffer);
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream({
+      folder: "id_verification",
+      upload_preset: process.env.CLOUDINARY_UPLOAD_PRESET
+    }, (error: any, result: any) => {
+      if (error) reject("Cloudinary upload failed");
+      else resolve(result);
+    });
+    uploadStream.end(buffer);
+  });
 };
 
-const performOCRWithMindee = async (file: File): Promise<string> => {
-  const form = new FormData();
-  form.append("document", file);
+const performOCRWithFreeOcrApi = async (file: File): Promise<string> => {
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const base64Image = buffer.toString("base64");
 
-  const res = await axios.post("https://api.mindee.net/v1/products/mindee/idcard/v1/predict", form, {
-    headers: {
-      "Authorization": `Token ${process.env.MINDEE_API_KEY}`,
-      "Content-Type": "multipart/form-data"
-    }
+  const res = await axios.post("https://freeocrapi.cyclic.app/api/ocr", {
+    base64Image: `data:image/jpeg;base64,${base64Image}`
   });
 
-  const fields = res.data?.document?.inference?.prediction;
-  let text = Object.entries(fields).map(([key, val]: [string, any]) => `${key}: ${val?.value}`).join('\n');
-  if (!text) throw new Error("Mindee OCR returned no text");
-  return text;
+  if (!res.data || !res.data.text) {
+    throw new Error("Free OCR API returned no text");
+  }
+
+  return res.data.text;
 };
 
 const extractIDInfo = (text: string): IDInfo => {
@@ -167,7 +168,7 @@ export async function POST(req: Request) {
       uploadToCloudinary(idImage)
     ]);
 
-    const rawText = await performOCRWithMindee(idImage);
+    const rawText = await performOCRWithFreeOcrApi(idImage);
     const info = extractIDInfo(rawText);
 
     const requiredFields = [info.idName, info.idDOB, info.idNumber || info.personalIdNumber];
