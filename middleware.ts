@@ -56,10 +56,6 @@ export default withAuth(
     if (pathname.startsWith("/admin") && token.role !== "ADMIN") {
       return NextResponse.redirect(new URL("/403", req.url));
     }
-
-    if (token.role && pathname === "/role") {
-      return NextResponse.redirect(new URL("/dashboard", req.url));
-    }
     if (token.role === "PROVIDER" && token.isFaceVerified && pathname === "/verify") {
       return NextResponse.redirect(new URL("/my-listings", req.url));
     }
