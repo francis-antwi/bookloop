@@ -2,7 +2,6 @@ import bcrypt from "bcrypt";
 import prisma from "@/app/libs/prismadb";
 import { NextResponse } from "next/server";
 import { UserRole } from "@prisma/client";
-import { signJwt } from "@/lib/jwt"; // Add this helper to sign a JWT if not already present
 
 function parseDate(dateStr: string): Date | null {
   try {
@@ -276,31 +275,16 @@ export async function POST(request: Request) {
       return createdUser;
     });
 
-    // 🔐 Issue JWT and set cookie for auto-login
-    const token = signJwt({
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      isFaceVerified: !!user.isFaceVerified
-    });
-
-    const response = NextResponse.json({
-      success: true,
-      user,
-      token,
-      message: role === "PROVIDER"
-        ? "Provider account created and logged in"
-        : "Account created and logged in"
-    });
-
-    response.cookies.set("auth-token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 60 * 60 * 24 * 7,
-      path: "/"
-    });
-
-    return response;
+    return NextResponse.json(
+      {
+        success: true,
+        user,
+        message: role === "PROVIDER"
+          ? "Provider account created successfully"
+          : "Account created successfully"
+      },
+      { status: 201 }
+    );
 
   } catch (error: any) {
     const errorDetails = {
