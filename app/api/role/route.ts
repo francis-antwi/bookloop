@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
   }
 
   const email = session.user.email;
+
   let body: { role?: string } = {};
 
   try {
@@ -26,16 +27,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { role } = body;
+  const normalizedRole = body.role?.toUpperCase();
 
-  if (!role) {
+  if (!normalizedRole) {
     return NextResponse.json(
       { error: "Bad Request", message: "Role is required" },
       { status: 400 }
     );
   }
 
-  if (!["CUSTOMER", "PROVIDER"].includes(role)) {
+  if (!["CUSTOMER", "PROVIDER"].includes(normalizedRole)) {
     return NextResponse.json(
       { error: "Bad Request", message: "Invalid role provided" },
       { status: 400 }
@@ -46,6 +47,7 @@ export async function POST(req: NextRequest) {
     let user = await prisma.user.findUnique({ where: { email } });
 
     if (!user) {
+      // New user — safe to create
       user = await prisma.user.create({
         data: {
           email,
@@ -53,39 +55,41 @@ export async function POST(req: NextRequest) {
           image: session.user.image ?? "",
           isOtpVerified: true,
           isFaceVerified: false,
-          role: role as UserRole,
+          role: normalizedRole as UserRole,
         },
       });
 
       return NextResponse.json(
-        { success: true, message: "User created with role" },
+        { success: true, message: "User created with role", user },
         { status: 201 }
       );
     }
 
-    if (user.role === role) {
+    if (user.role === normalizedRole) {
       return NextResponse.json(
-        { success: true, message: "Role already set" },
+        { success: true, message: "Role already set", user },
         { status: 200 }
       );
     }
 
     if (
-      role === "PROVIDER" &&
+      normalizedRole === "PROVIDER" &&
       (!user.isFaceVerified || !user.selfieImage || !user.idImage)
     ) {
       return NextResponse.json(
         {
           error: "Verification required",
-          message: "You must complete ID and face verification to be a provider",
+          message:
+            "You must complete ID and face verification to be a provider",
         },
         { status: 403 }
       );
     }
 
+    // Update role
     await prisma.user.update({
       where: { email },
-      data: { role: role as UserRole },
+      data: { role: normalizedRole as UserRole },
     });
 
     return NextResponse.json(
@@ -93,6 +97,7 @@ export async function POST(req: NextRequest) {
       { status: 200 }
     );
   } catch (error: any) {
+    console.error("[ROLE_API_ERROR]", error);
     return NextResponse.json(
       {
         error: "Internal server error",
