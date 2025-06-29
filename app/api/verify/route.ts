@@ -1,7 +1,6 @@
 // app/api/verify/route.ts
 import { NextResponse } from "next/server";
 const cloudinary = require("cloudinary").v2;
-import Tesseract from "tesseract.js";
 import axios from "axios";
 
 // === Cloudinary Config ===
@@ -48,10 +47,7 @@ interface VerificationResult {
   };
 }
 
-const ABSOLUTE_MIN_SIZE = 10000;
-const MAX_IMAGE_SIZE = 5_000_000;
 const FACE_MATCH_THRESHOLD = 80;
-
 const ID_KEYWORDS = [
   "passport", "driver", "license", "identity", "id card",
   "ghana card", "ecowas", "national", "identification", "document"
@@ -77,28 +73,31 @@ const normalizeDate = (raw: string): string | null => {
   return null;
 };
 
-const validateFile = async (file: File) => {
-  const allowed = ["image/jpeg", "image/png"];
-  console.log(`📄 Validating file: ${file.name}, Type: ${file.type}, Size: ${file.size} bytes`);
-  if (!allowed.includes(file.type)) throw new Error("Only JPEG or PNG images allowed.");
-  if (file.size < ABSOLUTE_MIN_SIZE) throw new Error(`Image too small. File size: ${file.size} bytes`);
-  if (file.size > MAX_IMAGE_SIZE) throw new Error("Image too large. Max 5MB.");
-};
-
 const uploadToCloudinary = async (file: File) => {
-  const arrayBuffer = await file.arrayBuffer();
-  const base64 = Buffer.from(arrayBuffer).toString("base64");
-  const dataUri = `data:${file.type};base64,${base64}`;
-  return await cloudinary.uploader.upload(dataUri, {
+  const buffer = Buffer.from(await file.arrayBuffer());
+  return await cloudinary.uploader.upload_stream({
     folder: "id_verification",
     upload_preset: process.env.CLOUDINARY_UPLOAD_PRESET
-  });
+  }, (error: any, result: any) => {
+    if (error) throw new Error("Cloudinary upload failed");
+    return result;
+  }).end(buffer);
 };
 
-const performOCRWithTesseract = async (file: File): Promise<string> => {
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const { data: { text } } = await Tesseract.recognize(buffer, 'eng');
-  if (!text || text.length < 10) throw new Error("OCR failed or returned too little text.");
+const performOCRWithMindee = async (file: File): Promise<string> => {
+  const form = new FormData();
+  form.append("document", file);
+
+  const res = await axios.post("https://api.mindee.net/v1/products/mindee/idcard/v1/predict", form, {
+    headers: {
+      "Authorization": `Token ${process.env.MINDEE_API_KEY}`,
+      "Content-Type": "multipart/form-data"
+    }
+  });
+
+  const fields = res.data?.document?.inference?.prediction;
+  let text = Object.entries(fields).map(([key, val]: [string, any]) => `${key}: ${val?.value}`).join('\n');
+  if (!text) throw new Error("Mindee OCR returned no text");
   return text;
 };
 
@@ -163,14 +162,12 @@ export async function POST(req: Request) {
 
     if (!selfie || !idImage) throw new Error("Missing required files.");
 
-    await Promise.all([validateFile(selfie), validateFile(idImage)]);
-
     const [selfieUpload, idUpload] = await Promise.all([
       uploadToCloudinary(selfie),
       uploadToCloudinary(idImage)
     ]);
 
-    const rawText = await performOCRWithTesseract(idImage);
+    const rawText = await performOCRWithMindee(idImage);
     const info = extractIDInfo(rawText);
 
     const requiredFields = [info.idName, info.idDOB, info.idNumber || info.personalIdNumber];
