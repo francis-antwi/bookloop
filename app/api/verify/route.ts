@@ -39,7 +39,7 @@ interface VerificationResult {
     type: string;
     imageUrl: string;
     selfieUrl: string;
-    extractionComplete: boolean;
+    extractionComplete: boolean; // Indicates if ALL expected fields were extracted without warnings
   };
   registration?: {
     success: boolean;
@@ -54,8 +54,11 @@ const OCR_TIMEOUT_MS = 60000;
 const ABSOLUTE_MIN_SIZE = 20000; // 20KB
 const MAX_IMAGE_SIZE = 8_000_000; // Increased to 8MB for better quality images (your app's internal limit)
 const OCR_SPACE_MAX_SIZE_BYTES = 1024 * 1024; // 1024 KB = 1 MB (OCR.space limit)
-const MIN_REQUIRED_FIELDS = 3; // Increased for higher accuracy requirement
-const FACE_MATCH_THRESHOLD = 75; // Adjusted based on common benchmarks, can be fine-tuned
+
+// For "100% accurate" extraction:
+const MIN_CRITICAL_FIELDS_FOR_BASIC_EXTRACTION = 3; // Name, ID Number/Personal ID, DOB
+const MAX_OCR_WARNINGS_FOR_SUCCESS = 0; // ZERO warnings for "success"
+const FACE_MATCH_THRESHOLD = 85; // Increased threshold for higher accuracy, fine-tune this!
 
 const ID_KEYWORDS = [
   "passport", "driver", "license", "identity", "id card", "ghana card",
@@ -75,12 +78,12 @@ const DATE_FORMATS = [
 
 // === Utility Functions ===
 const cleanText = (text: string): string =>
-  text.replace(/[^\x00-\x7F\r\n]/g, " ")
-      .replace(/\s+/g, " ")
+  text.replace(/[^\x00-\x7F\r\n]/g, " ") // Remove non-ASCII characters
+      .replace(/\s+/g, " ") // Replace multiple spaces with a single space
       .trim();
 
 const getLines = (text: string): string[] =>
-  text.split(/\r?\n/).map(cleanText).filter(line => line.length > 2); // Increased min length for lines
+  text.split(/\r?\n/).map(cleanText).filter(line => line.length > 2); // Increased min length for lines to avoid noise
 
 const normalizeDate = (input: string): string | null => {
   const monthMap: { [key: string]: string } = {
@@ -97,9 +100,11 @@ const normalizeDate = (input: string): string | null => {
         // Assume YYYY-MM-DD if first part is 4 digits
         if (a.length === 4) return `${a}-${b.padStart(2, '0')}-${c.padStart(2, '0')}`;
         // Assume DD-MM-YYYY if last part is 4 digits
+        const currentYear = new Date().getFullYear();
         if (c.length === 4) return `${c}-${b.padStart(2, '0')}-${a.padStart(2, '0')}`;
-        // Handle DD/MM/YY (convert YY to YYYY)
-        const fullYear = parseInt(c, 10) > (new Date().getFullYear() % 100) + 5 ? `19${c}` : `20${c}`; // Adjust for future dates
+        // Handle DD/MM/YY (convert YY to YYYY based on current year for reasonable range)
+        const yearInt = parseInt(c, 10);
+        const fullYear = yearInt > (currentYear % 100) + 5 ? `19${c}` : `20${c}`; // Add 5 years buffer for future expiry
         return `${fullYear}-${b.padStart(2, '0')}-${a.padStart(2, '0')}`;
       } else if (match.length >= 3) { // For Day Month YYYY, Month Day, YYYY, etc.
         let day, month, year;
@@ -143,7 +148,7 @@ const extractField = (lines: string[], patterns: RegExp[], joinChar: string = ' 
 
 const validateFile = (file: File) => {
   if (!file.type.match(/image\/(jpeg|png|jpg)/)) {
-    throw new Error("Only JPEG/PNG images are allowed");
+    throw new Error("Only JPEG/PNG images are allowed.");
   }
   if (file.size < ABSOLUTE_MIN_SIZE) {
     throw new Error("Image too small. Try a higher-quality photo.");
@@ -219,7 +224,7 @@ const uploadToCloudinaryWithRetry = async (buffer: Buffer, fileType: string) => 
     try {
       const res = await cloudinary.uploader.upload(dataURI, {
         folder: "id_verification",
-        timeout: 60000, // Increased timeout
+        timeout: 60000, // Increased timeout to 60 seconds
         resource_type: "image",
         upload_preset: process.env.CLOUDINARY_UPLOAD_PRESET,
       });
@@ -240,9 +245,9 @@ const performOCR = async (imageBuffer: Buffer): Promise<string> => {
     base64Image,
     language: "eng",
     OCREngine: "2", // OCR Engine 2 is often better for documents
-    isTable: "true", // Useful for structured documents
+    isTable: "true", // Useful for structured documents, might help with layout
     detectOrientation: "true",
-    scale: "true",
+    scale: "true", // Scales image to improve OCR accuracy
     isOverlayRequired: "true", // Get word-level confidence (if available/needed for future enhancements)
   });
 
@@ -260,7 +265,7 @@ const performOCR = async (imageBuffer: Buffer): Promise<string> => {
   }
 
   const text = result.ParsedResults?.[0]?.ParsedText;
-  if (!text || text.length < 50) { // Increased minimum text length for validity
+  if (!text || text.length < 50) { // Increased minimum text length for validity to filter very poor OCR
     throw new Error("OCR returned insufficient or no text for reliable extraction.");
   }
 
@@ -281,20 +286,21 @@ const performOCRWithRetry = async (buffer: Buffer) => {
   throw new Error(`OCR failed after multiple retries: ${lastErr.message || "Unknown error"}`);
 };
 
+// Refined extractIDInfo for stricter extraction and more comprehensive warnings
 const extractIDInfo = (text: string): IDInfo => {
   const lines = getLines(text);
-  const joinedText = lines.join(" ").toLowerCase(); // Join and convert to lowercase for case-insensitive matching
+  const joinedText = lines.join(" ").toLowerCase();
   const warnings: string[] = [];
+  const foundFields: { [key: string]: string | null } = {}; // Track what we found for accuracy check
 
-  let idName: string | null = null;
-  // Prioritize patterns that capture full names
-  idName = extractField(lines, [
+  // Name
+  let idName: string | null = extractField(lines, [
     /(?:name|full name|surname|given names|first name|last name):\s*([A-Za-z.'`’\-\s]+(?:\s+[A-Za-z.'`’\-\s]+){1,5})/,
     /^([A-Za-z.'`’\-\s]+(?:\s+[A-Za-z.'`’\-\s]+){1,5})$/, // Matches a line that looks like a name
     /\b(mr|ms|mrs|dr)\.?\s*([A-Za-z.'`’\-\s]+(?:\s+[A-Za-z.'`’\-\s]+){1,4})\b/i, // Name with title
     /\b([A-Z][a-z.'`’\-]+\s+[A-Z][a-z.'`’\-]+(?:\s+[A-Z][a-z.'`’\-]+)?)\b/ // Capitalized words as names
   ]);
-  // Fallback for names if not found in specific lines
+  // Fallback for names if not found in specific lines, try more generic patterns
   if (!idName) {
     idName = extractField([joinedText], [
       /name\s*([a-z.'`’\-\s]+)/i,
@@ -303,108 +309,197 @@ const extractIDInfo = (text: string): IDInfo => {
   }
   // Further refinement for name to remove extraneous text
   if (idName) {
-    idName = idName.replace(/(?:republic of|ghana|identification|authority|card)/ig, '').trim();
+    idName = idName.replace(/(?:republic of|ghana|identification|authority|card|document)/ig, '').trim();
+    // Validate that the name is reasonable (e.g., at least two meaningful words)
+    if (idName.split(' ').filter(n => n.length > 1).length < 2) {
+        warnings.push("Name extracted but appears incomplete or invalid (requires at least two words).");
+        idName = null; // Invalidate if not robust enough for 100% accuracy
+    } else {
+        foundFields.idName = idName;
+    }
+  } else {
+      warnings.push("Name not found.");
   }
 
 
-  const idNumber = extractField(lines, [
+  // ID Number & Personal ID Number
+  let idNumber = extractField(lines, [
     /(?:id number|card number|no\.?|document no\.?|passport no\.?|document no|passport no):\s*([A-Z0-9\s]{6,})/i,
     /\b([A-Z]{2,3}\d{6,15})\b/, // e.g., GH123456789
-    /\b(\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4})\b/, // e.g., 1234 5678 9012 3456
+    /\b(\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4})\b/, // e.g., 1234 5678 9012 3456 (for some card types)
     /\b([A-Z0-9]{9,20})\b/, // Generic alphanumeric ID
     /passport\s*number:\s*([A-Z0-9]+)/i,
     /licen[cs]e\s*number:\s*([A-Z0-9]+)/i,
   ]);
-
-  const personalIdNumber = extractField(lines, [
+  let personalIdNumber = extractField(lines, [
     /personal id:?\s*([A-Z0-9]+)/i,
     /pin:?\s*([A-Z0-9]+)/i,
     /national id:?\s*([A-Z0-9]+)/i,
-    /ghana card no\.?:\s*([A-Z0-9]{10,})/i, // Specific to Ghana Card format
+    /ghana card no\.?:\s*([A-Z0-9]{10,})/i, // Specific to Ghana Card format (e.g., GHA-xxxxxxxxxx)
     /unique\s*id:\s*([A-Z0-9]+)/i
   ]);
 
-  const idDOB = normalizeDate(extractField(lines, [
-    /(?:date of birth|dob|birth date|date of issue|issue date|expiry date|issued|expires|valid until)\s*:\s*([^\n]+)/i, // Catch all date formats
-    /(?:dob|birth|date)\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/i,
-    /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4})\b/i,
-    /\b(date of birth)\b\s*([0-9\/\-\.\sA-Za-z]+)\b/i
-  ]) ?? "");
+  if (idNumber) foundFields.idNumber = idNumber;
+  if (personalIdNumber) foundFields.personalIdNumber = personalIdNumber;
+  if (!idNumber && !personalIdNumber) warnings.push("ID number not found.");
 
-  const idIssueDate = normalizeDate(extractField(lines, [
-    /(?:issue date|issued|date of issue)\s*:\s*([^\n]+)/i,
+
+  // Date of Birth (DOB)
+  let idDOB = normalizeDate(extractField(lines, [
+    /(?:date of birth|dob|birth date|birth):\s*([^\n]+)/i, // Catch all common DOB phrases
+    /(?:dob|birth|date)\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/i, // Numeric variations
+    /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4})\b/i, // Day Month YYYY text
+    /\b(date of birth)\b\s*([0-9\/\-\.\sA-Za-z]+)\b/i // Generic phrase match
+  ]) ?? "");
+  if (idDOB) {
+      if (isNaN(new Date(idDOB).getTime())) {
+          warnings.push("Date of Birth extracted but invalid format or parsing failed.");
+          idDOB = null; // Invalidate
+      } else {
+          foundFields.idDOB = idDOB;
+      }
+  } else {
+      warnings.push("Date of Birth not found.");
+  }
+
+
+  // Issue Date
+  let idIssueDate = normalizeDate(extractField(lines, [
+    /(?:issue date|issued|date of issue|date of first issue|date of first registration)\s*:\s*([^\n]+)/i,
     /issued\s*on:?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/i,
     /\b(issue date)\b\s*([0-9\/\-\.\sA-Za-z]+)\b/i
   ]) ?? "");
+  if (idIssueDate) {
+      if (isNaN(new Date(idIssueDate).getTime())) {
+          warnings.push("Issue Date extracted but invalid format or parsing failed.");
+          idIssueDate = null; // Invalidate
+      } else {
+          foundFields.idIssueDate = idIssueDate;
+      }
+  } else {
+      warnings.push("Issue Date not found.");
+  }
 
-  const idExpiryDate = normalizeDate(extractField(lines, [
-    /(?:expiry date|expires|valid until|date of expiry)\s*:\s*([^\n]+)/i,
+
+  // Expiry Date
+  let idExpiryDate = normalizeDate(extractField(lines, [
+    /(?:expiry date|expires|valid until|date of expiry|valid thru)\s*:\s*([^\n]+)/i,
     /(?:validity|exp)\s*:\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/i,
     /\b(expiry date)\b\s*([0-9\/\-\.\sA-Za-z]+)\b/i
   ]) ?? "");
+  if (idExpiryDate) {
+      if (isNaN(new Date(idExpiryDate).getTime())) {
+          warnings.push("Expiry Date extracted but invalid format or parsing failed.");
+          idExpiryDate = null; // Invalidate
+      } else {
+          foundFields.idExpiryDate = idExpiryDate;
+      }
+  } else {
+      warnings.push("Expiry Date not found.");
+  }
 
+  // ID Type
+  const idType = extractField(lines, [
+    /(passport|driver's license|ghana card|identity card|national id card|residence permit|voter id|alien card|travel document|state id|consular id)/i,
+    new RegExp(`\\b(?:${ID_KEYWORDS.join("|")})\\b`, 'i') // General keywords
+  ]);
+  if (idType) foundFields.idType = idType; else warnings.push("ID Type not identified.");
+
+
+  // Gender
+  const idGender = extractField(lines, [
+    /\b(MALE|FEMALE)\b/i,
+    /gender:?\s*([M|F])/i,
+    /\b(M|F)\b(?!\w)/ // Ensure M/F are standalone words
+  ]);
+  if (idGender) foundFields.idGender = idGender; else warnings.push("Gender not found.");
+
+  // Nationality
+  const idNationality = extractField(lines, [
+    /nationality:?\s*([A-Z\s]+)/i,
+    /citizen of\s*([A-Z\s]+)/i,
+    /\b(ghanaian|american|british|nigerian|south african|canadian|australian|german|french|indian|chinese|japanese|brazilian|mexican)\b/i, // Common nationalities
+    /\b(ghana|nigeria|kenya|egypt|usa|uk|canada|australia|germany|france|india|china|japan|brazil|mexico)\b/i // Countries
+  ]);
+  if (idNationality) foundFields.idNationality = idNationality; else warnings.push("Nationality not found.");
+
+
+  // Issuer (can be derived from nationality or specific terms)
   const idIssuer = extractField(lines, [
     /issued by:?\s*([a-z\s.,&()]+)/i,
     /authority:?\s*([a-z\s.,&()]+)/i,
     /republic of\s*([a-z\s]+)/i,
-    /\b(ghana|united states|united kingdom|nigeria|south africa|canada|australia|germany|france|india|china|japan|brazil|mexico)\b/i,
-    /\b(ministry of interior|national identification authority|department of state|home office|immigration service)\b/i
+    /\b(ministry of interior|national identification authority|department of state|home office|immigration service|passport office)\b/i
   ]);
+  if (idIssuer) foundFields.idIssuer = idIssuer; else warnings.push("Issuer not found.");
 
+  // Place of Issue
   const placeOfIssue = extractField(lines, [
     /issued at:?\s*([a-z\s.,]+)/i,
     /place of issue:?\s*([a-z\s.,]+)/i,
-    /\b(accra|kumasi|takoradi|tema|london|paris|new york|abuja|pretoria|berlin|tokyo|delhi|sydney|toronto|mexico city)\b/i
+    /\b(accra|kumasi|takoradi|tema|london|paris|new york|abuja|pretoria|berlin|tokyo|delhi|sydney|toronto|mexico city)\b/i // Common cities
   ]);
+  if (placeOfIssue) foundFields.placeOfIssue = placeOfIssue; else warnings.push("Place of Issue not found.");
 
-  const idType = extractField(lines, [
-    /(passport|driver's license|ghana card|identity card|national id card|residence permit|voter id|alien card|travel document|state id|consular id)/i,
-    new RegExp(`\\b(?:${ID_KEYWORDS.join("|")})\\b`, 'i') // Use word boundaries
-  ]);
 
-  const idGender = extractField(lines, [
-    /\b(MALE|FEMALE)\b/i,
-    /gender:?\s*([M|F])/i,
-    /\b(M|F)\b(?!\w)/ // Ensure M/F are standalone
-  ]);
+  // Cross-field validation for dates - stricter for 100% accuracy
+  const currentYear = new Date().getFullYear();
+  if (idDOB) {
+      const dobDate = new Date(idDOB);
+      if (dobDate.getFullYear() > currentYear - 5) { // DOB cannot be in the last 5 years (for adult IDs)
+          warnings.push("DOB appears to be too recent or in the future. Check format/value.");
+          idDOB = null; // Invalidate for 100% accuracy if suspicious
+      }
+  }
 
-  const idNationality = extractField(lines, [
-    /nationality:?\s*([A-Z\s]+)/i,
-    /citizen of\s*([A-Z\s]+)/i,
-    /\b(ghanaian|american|british|nigerian|south african|canadian|australian|german|french|indian|chinese|japanese|brazilian|mexican)\b/i,
-    /\b(ghana|nigeria|kenya|egypt|usa|uk|canada|australia|germany|france|india|china|japan|brazil|mexico)\b/i
-  ]);
+  if (idIssueDate) {
+      const issueDate = new Date(idIssueDate);
+      if (issueDate.getFullYear() > currentYear + 1) { // Issue date cannot be too far in the future
+          warnings.push("Issue date appears to be in the future. Check format/value.");
+          idIssueDate = null; // Invalidate
+      }
+  }
 
-  // Comprehensive validation and warning system
-  if (!idName || idName.split(' ').filter(n => n.length > 1).length < 2) warnings.push("Name not found or unclear (requires at least two words).");
-  if (!idNumber && !personalIdNumber) warnings.push("ID number not found or unclear.");
-  if (!idDOB) warnings.push("Date of Birth not found or unclear.");
-  if (!idType) warnings.push("ID Type not identified.");
-  if (!idGender) warnings.push("Gender not found or unclear.");
+  if (idExpiryDate) {
+      const expiryDate = new Date(idExpiryDate);
+      if (expiryDate.getFullYear() < currentYear - 1) { // Expiry date cannot be in the past (1 year grace for old IDs)
+          warnings.push("Expiry date appears to be in the past. ID might be expired.");
+          // Don't invalidate, but definitely warn. For 100% success, this would fail.
+      }
+  }
 
-  // Cross-field validation for dates
+
   if (idDOB && idIssueDate) {
     try {
       const dobDate = new Date(idDOB);
       const issueDate = new Date(idIssueDate);
       if (isNaN(dobDate.getTime()) || isNaN(issueDate.getTime()) || dobDate >= issueDate) {
-        warnings.push("Issue date is before or same as DOB. Possible error or invalid date format.");
+        warnings.push("Issue date is before or same as DOB. Possible error or invalid date logic.");
       }
-    } catch (e) {
-      warnings.push("Error parsing DOB or Issue Date.");
-    }
+    } catch (e) { /* already handled by normalizeDate failing */ }
   }
   if (idIssueDate && idExpiryDate) {
     try {
       const issueDate = new Date(idIssueDate);
       const expiryDate = new Date(idExpiryDate);
       if (isNaN(issueDate.getTime()) || isNaN(expiryDate.getTime()) || issueDate >= expiryDate) {
-        warnings.push("Expiry date is before or same as issue date. Possible error or invalid date format.");
+        warnings.push("Expiry date is before or same as issue date. Possible error or invalid date logic.");
       }
-    } catch (e) {
-      warnings.push("Error parsing Issue Date or Expiry Date.");
-    }
-    }
+    } catch (e) { /* already handled by normalizeDate failing */ }
+  }
+
+  // Count actually found *critical* fields (name, id number, dob) based on their `foundFields` presence
+  const criticalFieldsFoundCount = [
+    foundFields.idName,
+    foundFields.idNumber || foundFields.personalIdNumber,
+    foundFields.idDOB
+  ].filter(Boolean).length;
+
+  // Add a warning if critical fields are insufficient for basic extraction
+  if (criticalFieldsFoundCount < MIN_CRITICAL_FIELDS_FOR_BASIC_EXTRACTION) {
+      warnings.push("Insufficient critical ID fields extracted for basic verification (Name, ID Number, DOB required).");
+  }
+
 
   return {
     idName, idNumber, personalIdNumber,
@@ -424,13 +519,13 @@ const compareFaces = async (selfieUrl: string, idUrl: string) => {
     image_url2: idUrl,
     return_result: "1", // Return the result directly in the response
     return_landmark: "0",
-    return_attributes: "gender,age,smiling,headpose" // Can be useful for additional checks
+    return_attributes: "gender,age,smiling,headpose" // Can be useful for additional checks but adds latency
   });
 
   try {
     const res = await axios.post("https://api-us.faceplusplus.com/facepp/v3/compare", params, {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      timeout: 60000,
+      timeout: 60000, // 60-second timeout
     });
 
     const { confidence, faces1, faces2, error_message } = res.data;
@@ -468,71 +563,56 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
     const email = formData.get("email")?.toString();
     const shouldRegister = formData.get("register") === "true";
 
+    // --- 1. Initial Validation ---
     if (!selfie || !id) {
-      return NextResponse.json({ error: "Both selfie and ID image are required" }, { status: 400 });
+      return NextResponse.json({ error: "Both selfie and ID image are required." }, { status: 400 });
     }
 
-    // Process images and perform OCR
+    // --- 2. Image Processing & Uploads (Parallel) ---
     const [selfieProcessResult, idProcessResult] = await Promise.allSettled([
       processImageForOCR(selfie),
       processImageForOCR(id),
     ]);
 
     if (selfieProcessResult.status === "rejected") {
-      throw new Error(`Selfie image processing failed: ${selfieProcessResult.reason.message}`);
+      return NextResponse.json({ error: `Selfie image processing failed: ${selfieProcessResult.reason.message}` }, { status: 400 });
     }
     if (idProcessResult.status === "rejected") {
-      throw new Error(`ID image processing failed: ${idProcessResult.reason.message}`);
+      return NextResponse.json({ error: `ID image processing failed: ${idProcessResult.reason.message}` }, { status: 400 });
     }
 
     const selfieBuffer = selfieProcessResult.value;
     const idBuffer = idProcessResult.value;
 
+    // Upload to Cloudinary concurrently
     const [selfieUploadResult, idUploadResult] = await Promise.allSettled([
       uploadToCloudinaryWithRetry(selfieBuffer, selfie.type),
       uploadToCloudinaryWithRetry(idBuffer, id.type),
     ]);
 
     if (selfieUploadResult.status === "rejected") {
-      throw new Error(`Selfie upload failed: ${selfieUploadResult.reason.message}`);
+      return NextResponse.json({ error: `Selfie image upload failed: ${selfieUploadResult.reason.message}` }, { status: 500 });
     }
     if (idUploadResult.status === "rejected") {
-      throw new Error(`ID upload failed: ${idUploadResult.reason.message}`);
+      return NextResponse.json({ error: `ID image upload failed: ${idUploadResult.reason.message}` }, { status: 500 });
     }
 
     const selfieUpload = selfieUploadResult.value;
     const idUpload = idUploadResult.value;
 
+    // --- 3. Perform OCR ---
     const ocrTextResult = await Promise.allSettled([performOCRWithRetry(idBuffer)]);
 
     if (ocrTextResult[0].status === "rejected") {
-      throw new Error(`OCR failed: ${ocrTextResult[0].reason.message}`);
+      // If OCR completely fails, this is a hard error as we can't extract any data.
+      return NextResponse.json({ error: `Document recognition failed: ${ocrTextResult[0].reason.message}. Please ensure the ID is clearly visible and well-lit.` }, { status: 422 }); // 422 Unprocessable Entity
     }
     const ocrText = ocrTextResult[0].value;
 
     console.log(`📝 [${requestId}] Raw OCR Text:\n${ocrText}`);
-    const extracted = extractIDInfo(ocrText);
+    const extracted = extractIDInfo(ocrText); // Extract data and gather warnings
 
-    // Validate extracted fields more strictly for 90% accuracy
-    const foundFieldsCount = [
-      extracted.idName,
-      extracted.idNumber || extracted.personalIdNumber,
-      extracted.idDOB,
-      extracted.idIssueDate,
-      extracted.idExpiryDate,
-      extracted.idType,
-      extracted.idGender,
-      extracted.idNationality,
-    ].filter(Boolean).length;
-
-    // A more nuanced check for "enough key fields"
-    const criticalFieldsPresent = (extracted.idName && (extracted.idNumber || extracted.personalIdNumber) && extracted.idDOB);
-    const overallCompleteness = (foundFieldsCount / Object.keys(extracted).length) * 100; // Rough percentage of fields found
-
-    // Removed the "early exit" error response for insufficient data.
-    // Instead, we will set success to false and include warnings in the response.
-
-    // Face comparison
+    // --- 4. Face Comparison ---
     const faceComparisonResult = await Promise.allSettled([
       compareFaces(selfieUpload.secure_url, idUpload.secure_url)
     ]);
@@ -544,20 +624,25 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
     if (faceComparisonResult[0].status === "rejected") {
       faceComparisonError = `Face comparison failed: ${faceComparisonResult[0].reason.message}`;
       console.error(`❌ [${requestId}] ${faceComparisonError}`);
-      // Don't throw, continue to build the response with this error detail
+      // This error will be added to warnings and make overall success false
     } else {
       confidence = faceComparisonResult[0].value.confidence;
       faceMatch = confidence >= FACE_MATCH_THRESHOLD;
+      if (!faceMatch) {
+          faceComparisonError = `Face match confidence (${confidence.toFixed(2)}%) is below threshold (${FACE_MATCH_THRESHOLD}%).`;
+      }
     }
 
-    // Determine overall success based on face match and critical OCR fields.
-    // Even if OCR has warnings, if face match is good, we might still consider it 'successful' for verification purposes,
-    // but the 'extractionComplete' flag will reflect the warnings.
-    const success = faceMatch && criticalFieldsPresent && extracted.extractionWarnings.length <= 2; // Adjusted logic for 'success'
+    // --- 5. Determine Overall "100% Accurate" Success ---
+    // For "100% accurate" success, all conditions must be met:
+    // 1. Face match is true and above the set threshold.
+    // 2. There are ZERO extraction warnings from OCR.
+    // 3. No direct face comparison API error occurred (though a low confidence match is now a 'warning').
+    const overallVerificationSuccess = faceMatch && (extracted.extractionWarnings.length <= MAX_OCR_WARNINGS_FOR_SUCCESS) && !faceComparisonError;
 
-    // Prepare base response
+    // Prepare the final response object
     const verificationResponse: VerificationResult = {
-      success: success, // Reflect overall success based on new logic
+      success: overallVerificationSuccess, // Reflects the strict "100% accurate" criteria
       verification: {
         faceMatch,
         confidence: Math.round(confidence),
@@ -568,43 +653,44 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
         type: extracted.idType || "Unknown ID Type",
         imageUrl: idUpload.secure_url,
         selfieUrl: selfieUpload.secure_url,
-        // extractionComplete is true only if no or minimal warnings
-        extractionComplete: extracted.extractionWarnings.length === 0, // This should reflect actual extraction success
+        // extractionComplete is true only if there are absolutely no warnings from OCR
+        extractionComplete: extracted.extractionWarnings.length === 0,
       }
     };
 
-    // If face comparison failed, add it as an extraction warning or a separate flag for the frontend.
+    // If face comparison had an issue (even just low confidence), ensure it's reflected in the document warnings
     if (faceComparisonError) {
-        verificationResponse.document.extractionWarnings.push(faceComparisonError);
-        verificationResponse.success = false; // Mark overall success as false if face comparison failed
+        // Only add if not already implicitly added by low confidence
+        if (!verificationResponse.document.extractionWarnings.includes(faceComparisonError)) {
+             verificationResponse.document.extractionWarnings.push(faceComparisonError);
+        }
     }
 
-    // --- LOG VERIFICATION DETAILS HERE ---
+    // --- 6. Log Verification Details (for debugging and monitoring) ---
     console.log(`✅ [${requestId}] Verification Details:`);
-    console.log(`  - Overall Success: ${verificationResponse.success}`);
-    console.log(`  - Face Match: ${verificationResponse.verification.faceMatch}`);
-    console.log(`  - Confidence: ${verificationResponse.verification.confidence}% (Threshold: ${verificationResponse.verification.threshold}%)`);
-    console.log(`  - Document Extraction Complete: ${verificationResponse.document.extractionComplete}`);
-    console.log(`  - Critical Fields Present: ${criticalFieldsPresent}`);
-    console.log(`  - Overall Completeness: ${overallCompleteness.toFixed(2)}%`);
-
+    console.log(`  - Overall Success (100% Accurate?): ${verificationResponse.success}`);
+    console.log(`  - Face Match: ${verificationResponse.verification.faceMatch} (Confidence: ${verificationResponse.verification.confidence}%)`);
+    console.log(`  - Document Data Extracted Completely (No OCR Warnings): ${verificationResponse.document.extractionComplete}`);
+    console.log(`  - Extracted Fields Status:`);
+    console.log(`    - Name: ${verificationResponse.document.idName || 'NOT FOUND'}`);
+    console.log(`    - ID Number: ${verificationResponse.document.idNumber || verificationResponse.document.personalIdNumber || 'NOT FOUND'}`);
+    console.log(`    - DOB: ${verificationResponse.document.idDOB || 'NOT FOUND'}`);
+    console.log(`    - Issue Date: ${verificationResponse.document.idIssueDate || 'NOT FOUND'}`);
+    console.log(`    - Expiry Date: ${verificationResponse.document.idExpiryDate || 'NOT FOUND'}`);
+    console.log(`    - ID Type: ${verificationResponse.document.idType || 'NOT FOUND'}`);
+    console.log(`    - Gender: ${verificationResponse.document.idGender || 'NOT FOUND'}`);
+    console.log(`    - Nationality: ${verificationResponse.document.idNationality || 'NOT FOUND'}`);
     if (verificationResponse.document.extractionWarnings.length > 0) {
-      console.log(`    - Extraction Warnings: ${verificationResponse.document.extractionWarnings.join('; ')}`);
+      console.log(`    - Extraction Warnings (${verificationResponse.document.extractionWarnings.length}):`);
+      verificationResponse.document.extractionWarnings.forEach((warn, i) => console.log(`      ${i + 1}. ${warn}`));
     }
-    console.log(`  - Extracted Name: ${verificationResponse.document.idName}`);
-    console.log(`  - Extracted ID Number: ${verificationResponse.document.idNumber || verificationResponse.document.personalIdNumber}`);
-    console.log(`  - Extracted DOB: ${verificationResponse.document.idDOB}`);
-    console.log(`  - Extracted ID Type: ${verificationResponse.document.idType}`);
-    console.log(`  - Extracted Gender: ${verificationResponse.document.idGender}`);
-    console.log(`  - Extracted Nationality: ${verificationResponse.document.idNationality}`);
     console.log(`  - ID Image URL: ${verificationResponse.document.imageUrl}`);
     console.log(`  - Selfie Image URL: ${verificationResponse.document.selfieUrl}`);
 
 
-    // Optional registration flow
+    // --- 7. Optional Registration Flow (only if 100% accurate) ---
     if (shouldRegister && email) {
-      // Only attempt registration if overall verification is successful
-      if (verificationResponse.success) {
+      if (overallVerificationSuccess) { // Only proceed with registration if verification is truly successful
         try {
           const registerRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/register`, {
             method: "POST",
@@ -624,7 +710,7 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
               imageUrl: idUpload.secure_url,
               selfieUrl: selfieUpload.secure_url,
               role: "PROVIDER",
-              verified: true, // This should only be true if `success` is true
+              verified: true, // This should only be true if overallVerificationSuccess is true
               rawText: extracted.rawText
             })
           });
@@ -641,15 +727,7 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
             console.error(`Registration failed:`, registerResult.error);
           }
 
-          // Log registration details
-          console.log(`Registration attempt for ${email}:`);
-          console.log(`  - Success: ${verificationResponse.registration.success}`);
-          if (verificationResponse.registration.userId) {
-            console.log(`  - User ID: ${verificationResponse.registration.userId}`);
-          }
-          if (verificationResponse.registration.error) {
-            console.log(`  - Error: ${verificationResponse.registration.error}`);
-          }
+          console.log(`Registration attempt for ${email}: Success: ${verificationResponse.registration.success}, User ID: ${verificationResponse.registration.userId || 'N/A'}, Error: ${verificationResponse.registration.error || 'N/A'}`);
 
         } catch (regError: any) {
           verificationResponse.registration = {
@@ -659,31 +737,36 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
           console.error(`Error during registration API call:`, regError.message);
         }
       } else {
-        // If overall verification is not successful, do not attempt registration
+        // Registration skipped because verification was not 100% successful.
         verificationResponse.registration = {
           success: false,
-          error: "Registration skipped due to failed verification criteria (e.g., face mismatch or insufficient ID data)."
+          error: "Registration skipped because verification did not meet 100% accuracy criteria (e.g., incomplete ID data or face mismatch)."
         };
-        console.log(`Registration skipped for ${email} due to verification not being successful.`);
+        console.log(`Registration skipped for ${email} because verification was not 100% successful.`);
       }
     }
 
     return NextResponse.json(verificationResponse);
 
   } catch (error: any) {
-    console.error(`❌ [${requestId}] Error:`, error.message);
+    console.error(`❌ [${requestId}] Critical Error in Verification Process:`, error.message);
     let errorMessage = "An unexpected error occurred during verification.";
+
+    // Provide more specific error messages to the client
     if (error.message.includes("Image too small") || error.message.includes("Image too large")) {
       errorMessage = `Image processing error: ${error.message}`;
     } else if (error.message.includes("Cloudinary upload failed")) {
       errorMessage = `Image upload failed: ${error.message}`;
-    } else if (error.message.includes("OCR")) {
-      errorMessage = `Document recognition failed: ${error.message}. Please ensure the ID is clearly visible and well-lit.`;
-    } else if (error.message.includes("Face")) {
-      errorMessage = `Face comparison failed: ${error.message}. Ensure your selfie is clear and facing forward.`;
     } else if (error.message.includes("Processed image for OCR still exceeds")) {
-      errorMessage = `Image processing error: ${error.message} Please try a different image or reduce its quality before upload.`;
+      errorMessage = `Image optimization failed: ${error.message} Please try a different image or reduce its quality before upload.`;
+    } else if (error.message.includes("OCR Error:") || error.message.includes("OCR returned insufficient")) {
+      errorMessage = `Document recognition failed: ${error.message}. Please ensure the ID is clearly visible and well-lit, with no glare or obstructions.`;
+    } else if (error.message.includes("Face comparison failed:") || error.message.includes("No face detected")) {
+      errorMessage = `Face comparison failed: ${error.message}. Ensure your selfie is clear, well-lit, and facing forward.`;
+    } else if (error.message.includes("Both selfie and ID image are required")) {
+        errorMessage = error.message; // Use the specific message from early validation
     }
+    // For any other unexpected errors, return a generic message
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
