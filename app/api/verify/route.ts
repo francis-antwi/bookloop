@@ -307,7 +307,6 @@ const extractIDInfo = (text: string): IDInfo => {
   const warnings: string[] = [];
   const foundFields: Record<string, string | null> = {};
 
-  // Name extraction
   let idName = extractField(lines, [
     /(?:name|full name|surname|given names):\s*([A-Za-z.'`'-\s]+(?:\s+[A-Za-z.'`'-\s]+){1,5})/,
     /^([A-Za-z.'`'-\s]+(?:\s+[A-Za-z.'`'-\s]+){1,5})$/,
@@ -326,7 +325,6 @@ const extractIDInfo = (text: string): IDInfo => {
     warnings.push("Name not found");
   }
 
-  // ID Number extraction
   let idNumber = extractField(lines, [
     /(?:id number|card number|no\.?):\s*([A-Z0-9\s]{6,})/i,
     /\b([A-Z]{2,3}\d{6,15})\b/,
@@ -343,7 +341,6 @@ const extractIDInfo = (text: string): IDInfo => {
   if (personalIdNumber) foundFields.personalIdNumber = personalIdNumber;
   if (!idNumber && !personalIdNumber) warnings.push("ID number not found");
 
-  // Date of Birth extraction
   let idDOB = normalizeDate(extractField(lines, [
     /(?:date of birth|dob|birth date):\s*([^\n]+)/i,
     /(?:dob|birth)\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/i
@@ -360,7 +357,6 @@ const extractIDInfo = (text: string): IDInfo => {
     warnings.push("Date of Birth not found");
   }
 
-  // Issue Date extraction
   let idIssueDate = normalizeDate(extractField(lines, [
     /(?:issue date|issued):\s*([^\n]+)/i,
     /issued\s*on:?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/i
@@ -377,7 +373,6 @@ const extractIDInfo = (text: string): IDInfo => {
     warnings.push("Issue Date not found");
   }
 
-  // Expiry Date extraction
   let idExpiryDate = normalizeDate(extractField(lines, [
     /(?:expiry date|expires):\s*([^\n]+)/i,
     /valid\s*until:?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/i
@@ -394,42 +389,41 @@ const extractIDInfo = (text: string): IDInfo => {
     warnings.push("Expiry Date not found");
   }
 
-  // ID Type extraction
   const idType = extractField(lines, [
     /(passport|driver's license|ghana card|identity card)/i,
-    new RegExp(`\\b(?:${ID_KEYWORDS.join("|")}\\b`, 'i')
+    new RegExp(`\\b(?:${ID_KEYWORDS.join("|")})\\b`, 'i') // ✅ FIXED HERE
   ]);
-  if (idType) foundFields.idType = idType; else warnings.push("ID Type not identified");
+  if (idType) foundFields.idType = idType;
+  else warnings.push("ID Type not identified");
 
-  // Gender extraction
   const idGender = extractField(lines, [
     /\b(MALE|FEMALE)\b/i,
     /gender:?\s*([M|F])/i
   ]);
-  if (idGender) foundFields.idGender = idGender; else warnings.push("Gender not found");
+  if (idGender) foundFields.idGender = idGender;
+  else warnings.push("Gender not found");
 
-  // Nationality extraction
   const idNationality = extractField(lines, [
     /nationality:?\s*([A-Z\s]+)/i,
     /\b(ghanaian|american|british|nigerian)\b/i
   ]);
-  if (idNationality) foundFields.idNationality = idNationality; else warnings.push("Nationality not found");
+  if (idNationality) foundFields.idNationality = idNationality;
+  else warnings.push("Nationality not found");
 
-  // Issuer extraction
   const idIssuer = extractField(lines, [
     /issued by:?\s*([a-z\s.,&()]+)/i,
     /\b(ministry of interior|national identification authority)\b/i
   ]);
-  if (idIssuer) foundFields.idIssuer = idIssuer; else warnings.push("Issuer not found");
+  if (idIssuer) foundFields.idIssuer = idIssuer;
+  else warnings.push("Issuer not found");
 
-  // Place of Issue extraction
   const placeOfIssue = extractField(lines, [
     /issued at:?\s*([a-z\s.,]+)/i,
     /\b(accra|kumasi|takoradi|tema)\b/i
   ]);
-  if (placeOfIssue) foundFields.placeOfIssue = placeOfIssue; else warnings.push("Place of Issue not found");
+  if (placeOfIssue) foundFields.placeOfIssue = placeOfIssue;
+  else warnings.push("Place of Issue not found");
 
-  // Date validation
   const currentYear = new Date().getFullYear();
   if (idDOB) {
     const dobDate = new Date(idDOB);
@@ -448,7 +442,6 @@ const extractIDInfo = (text: string): IDInfo => {
     warnings.push("Expiry date in past");
   }
 
-  // Critical fields check
   const criticalFieldsFound = [
     foundFields.idName,
     foundFields.idNumber || foundFields.personalIdNumber,
@@ -468,6 +461,7 @@ const extractIDInfo = (text: string): IDInfo => {
     extractionWarnings: warnings
   };
 };
+
 
 const compareFaces = async (selfieUrl: string, idUrl: string, requestId: string) => {
   const params = new URLSearchParams({
