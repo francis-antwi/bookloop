@@ -168,19 +168,43 @@ const extractIDInfo = (text: string): IDInfo => {
   const lines = getLines(text);
   const warnings: string[] = [];
 
-  const name = lines.map(l => l.match(/name[:\s]([a-zA-Z\s]{3,})/i)?.[1]?.trim()).find(Boolean) || null;
-  const idNumber = lines.map(l => l.match(/id\s*no[:]?\s*([A-Z0-9]{6,})/i)?.[1]?.trim()).find(Boolean) || null;
+  // 🔍 Debug lines from OCR
+  console.log("🧾 OCR Lines:");
+  lines.forEach(line => console.log("•", line));
+
+  // 📛 Name: look for 'name', 'surname', or full capitalized names
+  const name = lines.find(line =>
+    /name|surname/i.test(line) || /^[A-Z\s]{8,}$/.test(line)
+  ) || null;
+
+  // 🆔 ID Number: match any 6+ character alphanumeric word
+  const idNumber = lines.map(l =>
+    l.match(/\b([A-Z0-9]{6,})\b/)?.[1]
+  ).find(Boolean) || null;
+
+  // 📅 Dates: DOB, Issue, Expiry
   const dates = lines
-    .flatMap((line, idx) => [...line.matchAll(/\b\d{2,4}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}\b/g)].map(m => ({ date: m[0], line, idx })))
+    .flatMap((line, idx) =>
+      [...line.matchAll(/\b\d{2,4}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}\b/g)]
+        .map(m => ({ date: m[0], line, idx }))
+    )
     .sort((a, b) => a.idx - b.idx);
 
   const idDOB = normalizeDate(dates[0]?.date || "");
   const idIssueDate = normalizeDate(dates[1]?.date || "");
   const idExpiryDate = normalizeDate(dates.at(-1)?.date || "");
 
-  const idIssuer = lines.map(l => l.match(/issued by (.+)/i)?.[1]?.trim()).find(Boolean) || null;
-  const placeOfIssue = lines.map(l => l.match(/issued at (.+)/i)?.[1]?.trim()).find(Boolean) || null;
+  // 🏛 Issuer: any line mentioning 'republic' or 'authority'
+  const idIssuer = lines.find(l =>
+    /republic|authority/i.test(l)
+  ) || null;
 
+  // 📍 Place of issue: look for city names
+  const placeOfIssue = lines.find(l =>
+    /issue.*(accra|kumasi|tamale|cape coast|takoradi)/i.test(l)
+  ) || null;
+
+  // 🧪 Warn for missing fields
   if (!name) warnings.push("Name not found");
   if (!idNumber) warnings.push("ID number not found");
   if (!idDOB) warnings.push("DOB not found");
