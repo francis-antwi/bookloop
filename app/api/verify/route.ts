@@ -48,30 +48,6 @@ interface VerificationResult {
 }
 
 const FACE_MATCH_THRESHOLD = 80;
-const ID_KEYWORDS = [
-  "passport", "driver", "license", "identity", "id card",
-  "ghana card", "ecowas", "national", "identification", "document"
-];
-
-const getLines = (text: string): string[] =>
-  text.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 3);
-
-const extractField = (lines: string[], patterns: RegExp[]): string | null => {
-  for (const line of lines) {
-    for (const pattern of patterns) {
-      const match = line.match(pattern);
-      if (match) return match[1]?.trim() || match[0].trim();
-    }
-  }
-  return null;
-};
-
-const normalizeDate = (raw: string): string | null => {
-  const cleaned = raw.replace(/[.,]/g, '').trim();
-  const d = new Date(cleaned);
-  if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
-  return null;
-};
 
 const uploadToCloudinary = async (file: File) => {
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -87,24 +63,39 @@ const uploadToCloudinary = async (file: File) => {
   });
 };
 
-const performOCRWithFreeOcrApi = async (file: File): Promise<string> => {
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const base64Image = buffer.toString("base64");
+const performOCRWithRapidAPI = async (file: File): Promise<string> => {
+  const formData = new FormData();
+  formData.append("image", file);
 
-  const res = await axios.post("https://freeocrapi.cyclic.app/api/ocr", {
-    base64Image: `data:image/jpeg;base64,${base64Image}`
-  });
+  const response = await axios.post(
+    'https://ocr43.p.rapidapi.com/v1/result',
+    formData,
+    {
+      headers: {
+        'X-RapidAPI-Key': process.env.RAPIDAPI_KEY!,
+        'X-RapidAPI-Host': 'ocr43.p.rapidapi.com',
+        'Content-Type': 'multipart/form-data'
+      }
+    }
+  );
 
-  if (!res.data || !res.data.text) {
-    throw new Error("Free OCR API returned no text");
+  const lines: string[] = response.data?.results?.[0]?.entities?.flatMap((entity: any) =>
+    entity.objects?.flatMap((obj: any) =>
+      obj.entities?.map((e: any) => e.text)
+    )
+  ).filter(Boolean) || [];
+
+  const text = lines.join("\n");
+
+  if (!text || text.length < 10) {
+    throw new Error("OCR failed to extract sufficient text.");
   }
 
-  return res.data.text;
+  return text;
 };
 
 const extractIDInfo = (text: string): IDInfo => {
-  const lines = getLines(text);
-  const joined = lines.join(" ");
+  const lines = text.split(/\n/).map(l => l.trim()).filter(Boolean);
   const warn: string[] = [];
 
   const log = (key: string, val: string | null) => {
@@ -113,25 +104,34 @@ const extractIDInfo = (text: string): IDInfo => {
     return val;
   };
 
-  const namePatterns = [
-    /name[:\-\s]*([A-Z][a-zA-Z'`\-\s]{2,})/i,
-    /surname[:\-\s]*([A-Z][a-zA-Z'`\-\s]{2,})/i,
-    /given names?[:\-\s]*([A-Z][a-zA-Z'`\-\s]{2,})/i,
-    /^([A-Z][a-z]{2,}(\s+[A-Z][a-z]{2,}){1,3})$/
-  ];
+  const normalizeDate = (raw: string): string | null => {
+    const cleaned = raw.replace(/[.,]/g, '').trim();
+    const d = new Date(cleaned);
+    return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
+  };
+
+  const extractField = (patterns: RegExp[]): string | null => {
+    for (const line of lines) {
+      for (const pattern of patterns) {
+        const match = line.match(pattern);
+        if (match) return match[1]?.trim() || match[0].trim();
+      }
+    }
+    return null;
+  };
 
   return {
-    idName: log("idName", extractField(lines, namePatterns)),
-    idNumber: log("idNumber", extractField(lines, [/id(?:\s*no|number)?[:\-\s]*([A-Z0-9\-]+)/i, /card number[:\s]*([A-Z0-9]+)/i])),
-    personalIdNumber: log("personalIdNumber", extractField(lines, [/ghana card no[:\-\s]*([A-Z0-9]+)/i])),
-    idDOB: log("idDOB", normalizeDate(extractField(lines, [/birth(?:\s*date)?[:\-\s]*([\d\w\s\/\-\.]+)/i]) || "")),
-    idIssueDate: log("idIssueDate", normalizeDate(extractField(lines, [/issue(?:d)?(?:\s*date)?[:\-\s]*([\d\w\s\/\-\.]+)/i]) || "")),
-    idExpiryDate: log("idExpiryDate", normalizeDate(extractField(lines, [/expiry(?:\s*date)?[:\-\s]*([\d\w\s\/\-\.]+)/i]) || "")),
-    idIssuer: log("idIssuer", extractField(lines, [/issued by[:\-\s]*([A-Za-z\s]+)/i])),
-    placeOfIssue: log("placeOfIssue", extractField(lines, [/place of issue[:\-\s]*([A-Za-z\s]+)/i])),
-    idType: log("idType", extractField([joined], [new RegExp(ID_KEYWORDS.join("|"), "i")])),
-    idGender: log("idGender", extractField(lines, [/gender[:\-\s]*([MF]|Male|Female)/i])),
-    idNationality: log("idNationality", extractField(lines, [/nationality[:\-\s]*([A-Za-z]+)/i])),
+    idName: log("idName", extractField([/name[:\-\s]*([A-Z][a-zA-Z\s]+)/i])),
+    idNumber: log("idNumber", extractField([/id(?:\s*no|number)?[:\-\s]*([A-Z0-9\-]+)/i])),
+    personalIdNumber: log("personalIdNumber", extractField([/ghana card no[:\-\s]*([A-Z0-9]+)/i])),
+    idDOB: log("idDOB", normalizeDate(extractField([/birth(?:\s*date)?[:\-\s]*([\d\w\s\/\-\.]+)/i]) || "")),
+    idIssueDate: log("idIssueDate", normalizeDate(extractField([/issue(?:d)?(?:\s*date)?[:\-\s]*([\d\w\s\/\-\.]+)/i]) || "")),
+    idExpiryDate: log("idExpiryDate", normalizeDate(extractField([/expiry(?:\s*date)?[:\-\s]*([\d\w\s\/\-\.]+)/i]) || "")),
+    idIssuer: log("idIssuer", extractField([/issued by[:\-\s]*([A-Za-z\s]+)/i])),
+    placeOfIssue: log("placeOfIssue", extractField([/place of issue[:\-\s]*([A-Za-z\s]+)/i])),
+    idType: log("idType", extractField([/passport|driver|license|identity|ghana card|ecowas|national/i])),
+    idGender: log("idGender", extractField([/gender[:\-\s]*([MF]|Male|Female)/i])),
+    idNationality: log("idNationality", extractField([/nationality[:\-\s]*([A-Za-z]+)/i])),
     rawText: text,
     extractionWarnings: warn
   };
@@ -168,7 +168,7 @@ export async function POST(req: Request) {
       uploadToCloudinary(idImage)
     ]);
 
-    const rawText = await performOCRWithFreeOcrApi(idImage);
+    const rawText = await performOCRWithRapidAPI(idImage);
     const info = extractIDInfo(rawText);
 
     const requiredFields = [info.idName, info.idDOB, info.idNumber || info.personalIdNumber];
