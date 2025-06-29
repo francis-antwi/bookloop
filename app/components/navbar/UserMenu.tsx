@@ -143,7 +143,7 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
     : [
         { onClick: loginModal.onOpen, label: "Login" },
         { onClick: registerModal.onOpen, label: "Sign Up" },
-        { onClick: () => router.push("/contact"), label: "Contact Us" },
+      
       ];
 
   return (
