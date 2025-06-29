@@ -243,31 +243,32 @@ const LoginModal = () => {
 
                         {/* Google sign-in button */}
                         <button
-                            onClick={() => {
-                                setIsLoading(true);
-                                signIn('google').catch(() => {
-                                    setIsLoading(false);
-                                    toast.error('Google sign-in failed. Please try again.');
-                                });
-                            }}
-                            disabled={isLoading}
-                            className="
-                                w-full py-3 px-6 rounded-xl font-semibold
-                                bg-white border-2 border-gray-200
-                                text-gray-700 hover:text-gray-900
-                                hover:border-gray-300 hover:bg-gray-50
-                                transform transition-all duration-200
-                                hover:scale-[1.02] active:scale-[0.98]
-                                disabled:opacity-50 disabled:cursor-not-allowed
-                                disabled:hover:scale-100
-                                focus:outline-none focus:ring-2 focus:ring-gray-500/20 focus:ring-offset-2
-                                shadow-sm hover:shadow-md
-                                flex items-center justify-center gap-3
-                            "
-                        >
-                            <FcGoogle size={20} />
-                            Continue with Google
-                        </button>
+  onClick={() => {
+    setIsLoading(true);
+    signIn("google", { callbackUrl: "/role" })
+      .catch(() => {
+        setIsLoading(false);
+        toast.error("Google sign-in failed. Please try again.");
+      });
+  }}
+  disabled={isLoading}
+  className="
+    w-full py-3 px-6 rounded-xl font-semibold
+    bg-white border-2 border-gray-200
+    text-gray-700 hover:text-gray-900
+    hover:border-gray-300 hover:bg-gray-50
+    transform transition-all duration-200
+    hover:scale-[1.02] active:scale-[0.98]
+    disabled:opacity-50 disabled:cursor-not-allowed
+    disabled:hover:scale-100
+    focus:outline-none focus:ring-2 focus:ring-gray-500/20 focus:ring-offset-2
+    shadow-sm hover:shadow-md
+    flex items-center justify-center gap-3
+  "
+>
+  <FcGoogle size={20} />
+  Continue with Google
+</button>
 
                         {/* Sign up link */}
                         <div className="mt-6 text-center">
