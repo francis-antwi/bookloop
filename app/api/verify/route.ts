@@ -331,7 +331,7 @@ const compareFaces = async (selfieUrl: string, idUrl: string) => {
 
   const res = await axios.post("https://api-us.faceplusplus.com/facepp/v3/compare", params, {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    timeout: 20000,
+    timeout: 60000,
   });
 
   const { confidence, faces1, faces2 } = res.data;
