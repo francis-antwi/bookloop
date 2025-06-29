@@ -93,7 +93,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Phone already registered" }, { status: 409 });
     }
 
-    // === OTP verification for non-Google accounts ===
     if (!isGoogleAuth && otpCode && contactPhone) {
       const otpVerification = await prisma.oTPVerification.findFirst({
         where: {
@@ -111,7 +110,6 @@ export async function POST(request: Request) {
       await prisma.oTPVerification.delete({ where: { id: otpVerification.id } });
     }
 
-    // === PROVIDER-Specific Validation ===
     let parsedDOB = idDOB ? parseDate(idDOB) : null;
     let parsedExpiry = idExpiryDate ? parseDate(idExpiryDate) : null;
     let parsedIssue = idIssueDate ? parseDate(idIssueDate) : null;
@@ -139,84 +137,50 @@ export async function POST(request: Request) {
 
     const hashedPassword = password ? await bcrypt.hash(password, 12) : null;
 
-    let user;
-
     if (isGoogleAuth && googleUserEmail) {
-      user = await prisma.user.update({
-        where: { email: googleUserEmail },
-        data: {
-          name,
-          contactPhone: contactPhone || null,
-          role,
-          isOtpVerified: false,
-          isFaceVerified: role === "PROVIDER",
-          verified: role === "PROVIDER" ? true : !!verified,
-          selfieImage: selfieImage || selfieUrl || null,
-          idImage: idImage || imageUrl || null,
-          faceConfidence: faceConfidence || null,
-          idName: idName || null,
-          idNumber: idNumber || personalIdNumber || null,
-          idDOB: parsedDOB,
-          idExpiryDate: parsedExpiry,
-          idIssueDate: parsedIssue,
-          idIssuer: idIssuer || null,
-          personalIdNumber: personalIdNumber || null,
-          nationality: nationality || null,
-          gender: gender || null,
-          placeOfIssue: placeOfIssue || null,
-          idType: idType || null,
-          rawText: rawText || null
-        },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-          contactPhone: true,
-          isFaceVerified: true,
-          verified: true,
-          createdAt: true
-        }
-      });
-    } else {
-      user = await prisma.user.create({
-        data: {
-          email: email || null,
-          name,
-          contactPhone: contactPhone || null,
-          hashedPassword,
-          role,
-          isOtpVerified: !isGoogleAuth,
-          isFaceVerified: role === "PROVIDER",
-          verified: role === "PROVIDER" ? true : !!verified,
-          selfieImage: selfieImage || selfieUrl || null,
-          idImage: idImage || imageUrl || null,
-          faceConfidence: faceConfidence || null,
-          idName: idName || null,
-          idNumber: idNumber || personalIdNumber || null,
-          idDOB: parsedDOB,
-          idExpiryDate: parsedExpiry,
-          idIssueDate: parsedIssue,
-          idIssuer: idIssuer || null,
-          personalIdNumber: personalIdNumber || null,
-          nationality: nationality || null,
-          gender: gender || null,
-          placeOfIssue: placeOfIssue || null,
-          idType: idType || null,
-          rawText: rawText || null
-        },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-          contactPhone: true,
-          isFaceVerified: true,
-          verified: true,
-          createdAt: true
-        }
-      });
+      const existingGoogleUser = await prisma.user.findUnique({ where: { email: googleUserEmail } });
+      if (existingGoogleUser) {
+        return NextResponse.json({ error: "Google user already exists" }, { status: 409 });
+      }
     }
+
+    const user = await prisma.user.create({
+      data: {
+        email: email || googleUserEmail,
+        name,
+        contactPhone: contactPhone || null,
+        hashedPassword,
+        role,
+        isOtpVerified: !isGoogleAuth,
+        isFaceVerified: role === "PROVIDER",
+        verified: role === "PROVIDER" ? true : !!verified,
+        selfieImage: selfieImage || selfieUrl || null,
+        idImage: idImage || imageUrl || null,
+        faceConfidence: faceConfidence || null,
+        idName: idName || null,
+        idNumber: idNumber || personalIdNumber || null,
+        idDOB: parsedDOB,
+        idExpiryDate: parsedExpiry,
+        idIssueDate: parsedIssue,
+        idIssuer: idIssuer || null,
+        personalIdNumber: personalIdNumber || null,
+        nationality: nationality || null,
+        gender: gender || null,
+        placeOfIssue: placeOfIssue || null,
+        idType: idType || null,
+        rawText: rawText || null
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        contactPhone: true,
+        isFaceVerified: true,
+        verified: true,
+        createdAt: true
+      }
+    });
 
     return NextResponse.json({
       success: true,
