@@ -4,20 +4,30 @@ import { NextResponse } from "next/server";
 import { UserRole } from "@prisma/client";
 
 function parseDate(dateStr: string): Date | null {
-  const parts = dateStr.split(/[\/\-\.]/).map(p => p.trim());
-  if (parts.length === 3) {
-    let [day, month, year] = parts;
-    if (year.length === 2) year = parseInt(year) > 30 ? `19${year}` : `20${year}`;
-    const iso = `${year}-${month}-${day}`;
-    const date = new Date(iso);
-    return isNaN(date.getTime()) ? null : date;
+  try {
+    const parts = dateStr.split(/[\/\-\.]/).map(p => p.trim());
+    if (parts.length === 3) {
+      let [day, month, year] = parts;
+      if (year.length === 2) year = parseInt(year) > 30 ? `19${year}` : `20${year}`;
+      const iso = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      const date = new Date(iso);
+      return isNaN(date.getTime()) ? null : date;
+    }
+    return null;
+  } catch (error) {
+    console.error('Date parsing error:', { dateStr, error });
+    return null;
   }
-  return null;
 }
 
 export async function POST(request: Request) {
+  const startTime = Date.now();
+  let errorContext: any = {};
+
   try {
     const body = await request.json();
+    errorContext.requestBody = body; // Log initial request
+
     const {
       email,
       name,
@@ -38,14 +48,15 @@ export async function POST(request: Request) {
     } = body;
 
     // Validate required fields
-    const requiredFields = { email, name, password, role, contactPhone};
+    const requiredFields = { email, name, password, role, contactPhone };
     const missingFields = Object.entries(requiredFields)
       .filter(([_, value]) => !value)
       .map(([key]) => key);
 
     if (missingFields.length > 0) {
+      errorContext.missingFields = missingFields;
       return NextResponse.json(
-        { error: `Missing required fields: ${missingFields.join(", ")}` },
+        { error: `Missing required fields: ${missingFields.join(", ")}`, details: missingFields },
         { status: 400 }
       );
     }
@@ -59,6 +70,12 @@ export async function POST(request: Request) {
         expiresAt: { gt: new Date() }
       }
     });
+
+    errorContext.otpVerificationAttempt = {
+      phoneNumber: contactPhone,
+      codeProvided: otpCode,
+      foundRecord: !!otpVerification
+    };
 
     if (!otpVerification) {
       return NextResponse.json(
@@ -78,45 +95,65 @@ export async function POST(request: Request) {
       prisma.user.findUnique({ where: { contactPhone } })
     ]);
 
+    errorContext.existingUsersCheck = {
+      emailExists: !!existingEmail,
+      phoneExists: !!existingPhone
+    };
+
     if (existingEmail) {
       return NextResponse.json(
-        { error: "This email is already registered" },
+        { 
+          error: "This email is already registered",
+          details: { registeredEmail: existingEmail.email }
+        },
         { status: 409 }
       );
     }
 
     if (existingPhone) {
       return NextResponse.json(
-        { error: "This phone number is already registered" },
+        { 
+          error: "This phone number is already registered",
+          details: { registeredPhone: existingPhone.contactPhone }
+        },
         { status: 409 }
       );
     }
 
     // Validate role
     if (!Object.values(UserRole).includes(role)) {
+      errorContext.invalidRole = role;
       return NextResponse.json(
-        { error: "Invalid user role selected" },
+        { 
+          error: "Invalid user role selected",
+          details: { validRoles: Object.values(UserRole) }
+        },
         { status: 400 }
       );
     }
 
     // Validate email format
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errorContext.invalidEmail = email;
       return NextResponse.json(
-        { error: "Please enter a valid email address" },
+        { error: "Please enter a valid email address", details: { email } },
         { status: 400 }
       );
     }
 
     // Validate password length
     if (password.length < 8) {
+      errorContext.passwordLength = password.length;
       return NextResponse.json(
-        { error: "Password must be at least 8 characters" },
+        { 
+          error: "Password must be at least 8 characters",
+          details: { length: password.length }
+        },
         { status: 400 }
       );
     }
 
-    // If PROVIDER, validate extra fields
+    // Provider-specific validation
     let parsedDOB: Date | null = null;
     let parsedExpiry: Date | null = null;
     let parsedIssueDate: Date | null = null;
@@ -138,11 +175,19 @@ export async function POST(request: Request) {
         idNumber
       }).filter(([_, val]) => !val);
 
+      errorContext.providerValidation = {
+        missingFields: missingProvider.map(([key]) => key),
+        faceConfidenceValue: faceConfidence
+      };
+
       if (missingProvider.length > 0) {
         return NextResponse.json(
           {
             error: "Incomplete provider information",
-            missingFields: missingProvider.map(([key]) => providerRequired[key])
+            details: {
+              missingFields: missingProvider.map(([key]) => providerRequired[key]),
+              requiredFields: Object.keys(providerRequired)
+            }
           },
           { status: 400 }
         );
@@ -150,48 +195,78 @@ export async function POST(request: Request) {
 
       if (typeof faceConfidence !== "number" || faceConfidence < 0) {
         return NextResponse.json(
-          { error: "Invalid face verification confidence score" },
+          { 
+            error: "Invalid face verification confidence score",
+            details: { score: faceConfidence }
+          },
           { status: 400 }
         );
       }
 
+      // Date parsing and validation
       parsedDOB = idDOB ? parseDate(idDOB) : null;
       parsedExpiry = idExpiryDate ? parseDate(idExpiryDate) : null;
       parsedIssueDate = idIssueDate ? parseDate(idIssueDate) : null;
 
+      errorContext.dateValidation = {
+        idDOB: { input: idDOB, parsed: parsedDOB?.toISOString() },
+        idExpiryDate: { input: idExpiryDate, parsed: parsedExpiry?.toISOString() },
+        idIssueDate: { input: idIssueDate, parsed: parsedIssueDate?.toISOString() }
+      };
+
       if (idDOB && !parsedDOB) {
         return NextResponse.json(
-          { error: "Invalid date of birth format (use DD/MM/YYYY)" },
+          { 
+            error: "Invalid date of birth format (use DD/MM/YYYY)",
+            details: { formatExample: "31/12/1990" }
+          },
           { status: 400 }
         );
       }
 
-      if (parsedDOB && (
-        parsedDOB.getFullYear() < 1900 || parsedDOB > new Date()
-      )) {
+      if (parsedDOB && (parsedDOB.getFullYear() < 1900 || parsedDOB > new Date())) {
         return NextResponse.json(
-          { error: "Invalid date of birth" },
+          { 
+            error: "Invalid date of birth",
+            details: { 
+              date: parsedDOB.toISOString(),
+              minYear: 1900,
+              maxDate: new Date().toISOString() 
+            }
+          },
           { status: 400 }
         );
       }
 
       if (idExpiryDate && !parsedExpiry) {
         return NextResponse.json(
-          { error: "Invalid ID expiry date format (use DD/MM/YYYY)" },
+          { 
+            error: "Invalid ID expiry date format (use DD/MM/YYYY)",
+            details: { formatExample: "31/12/2030" }
+          },
           { status: 400 }
         );
       }
 
       if (parsedExpiry && parsedExpiry < new Date()) {
         return NextResponse.json(
-          { error: "ID document has expired" },
+          { 
+            error: "ID document has expired",
+            details: { 
+              expiryDate: parsedExpiry.toISOString(),
+              currentDate: new Date().toISOString() 
+            }
+          },
           { status: 400 }
         );
       }
 
       if (idIssueDate && !parsedIssueDate) {
         return NextResponse.json(
-          { error: "Invalid ID issue date format (use DD/MM/YYYY)" },
+          { 
+            error: "Invalid ID issue date format (use DD/MM/YYYY)",
+            details: { formatExample: "31/12/2020" }
+          },
           { status: 400 }
         );
       }
@@ -201,28 +276,32 @@ export async function POST(request: Request) {
 
     // Create user transactionally
     const user = await prisma.$transaction(async (tx) => {
+      const userData = {
+        email,
+        name,
+        contactPhone,
+        hashedPassword,
+        role,
+        isOtpVerified: true,
+        ...(role === "PROVIDER" && {
+          isFaceVerified: true,
+          selfieImage,
+          idImage,
+          faceConfidence,
+          idName,
+          idNumber,
+          idDOB: parsedDOB,
+          idExpiryDate: parsedExpiry,
+          idIssueDate: parsedIssueDate,
+          idIssuer,
+          personalIdNumber
+        })
+      };
+
+      errorContext.userCreationAttempt = userData;
+
       const createdUser = await tx.user.create({
-        data: {
-          email,
-          name,
-          contactPhone,
-          hashedPassword,
-          role,
-          isOtpVerified: true,
-          ...(role === "PROVIDER" && {
-            isFaceVerified: true,
-            selfieImage,
-            idImage,
-            faceConfidence,
-            idName,
-            idNumber,
-            idDOB: parsedDOB,
-            idExpiryDate: parsedExpiry,
-            idIssueDate: parsedIssueDate,
-            idIssuer,
-            personalIdNumber
-          })
-        },
+        data: userData,
         select: {
           id: true,
           email: true,
@@ -251,13 +330,20 @@ export async function POST(request: Request) {
     );
 
   } catch (error: any) {
-    console.error("Registration error:", error);
+    const errorDetails = {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      ...errorContext,
+      durationMs: Date.now() - startTime
+    };
+
+    console.error("REGISTRATION_FAILURE", JSON.stringify(errorDetails, null, 2));
+
     return NextResponse.json(
       {
         error: "Registration failed",
-        details: process.env.NODE_ENV === "development"
-          ? error.message
-          : "Please try again later"
+        details: process.env.NODE_ENV === "development" ? errorDetails : null
       },
       { status: 500 }
     );
