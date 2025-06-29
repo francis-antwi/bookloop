@@ -14,26 +14,28 @@ function parseDate(dateStr: string): Date | null {
       return isNaN(date.getTime()) ? null : date;
     }
     return null;
-  } catch (error) {
-    console.error('Date parsing error:', { dateStr, error });
+  } catch {
     return null;
   }
 }
 
 export async function POST(request: Request) {
   const startTime = Date.now();
-  let errorContext: any = {};
+  const errorContext: any = {};
 
   try {
     const body = await request.json();
-    errorContext.requestBody = body;
+    console.log("📦 Incoming registration payload:", JSON.stringify(body, null, 2));
+    errorContext.requestBody = body;  
+  
 
     const {
       email,
       name,
       contactPhone,
       password,
-      role,
+      role = "CUSTOMER",
+      otpCode,
       selfieImage,
       idImage,
       faceConfidence,
@@ -44,265 +46,135 @@ export async function POST(request: Request) {
       idIssuer,
       idIssueDate,
       personalIdNumber,
-      otpCode
+      imageUrl,
+      selfieUrl,
+      nationality,
+      gender,
+      placeOfIssue,
+      idType,
+      rawText,
+      verified
     } = body;
 
-    const requiredFields = { email, name, password, role, contactPhone };
-    const missingFields = Object.entries(requiredFields)
-      .filter(([_, value]) => !value)
-      .map(([key]) => key);
-
-    if (missingFields.length > 0) {
-      errorContext.missingFields = missingFields;
-      return NextResponse.json(
-        { error: `Missing required fields: ${missingFields.join(", ")}`, details: missingFields },
-        { status: 400 }
-      );
+    if (!email || !name) {
+      return NextResponse.json({ error: "Missing required fields: email, name" }, { status: 400 });
     }
 
-    const otpVerification = await prisma.oTPVerification.findFirst({
-      where: {
-        phoneNumber: contactPhone,
-        code: otpCode,
-        verified: true,
-        expiresAt: { gt: new Date() }
-      }
-    });
-
-    errorContext.otpVerificationAttempt = {
-      phoneNumber: contactPhone,
-      codeProvided: otpCode,
-      foundRecord: !!otpVerification
-    };
-
-    if (!otpVerification) {
-      return NextResponse.json(
-        {
-          error: "OTP verification failed",
-          details: otpCode
-            ? "The OTP is invalid or has expired"
-            : "No OTP code provided"
-        },
-        { status: 403 }
-      );
+    if (!Object.values(UserRole).includes(role)) {
+      return NextResponse.json({ error: "Invalid user role" }, { status: 400 });
     }
 
     const [existingEmail, existingPhone] = await Promise.all([
       prisma.user.findUnique({ where: { email } }),
-      prisma.user.findUnique({ where: { contactPhone } })
+      contactPhone ? prisma.user.findUnique({ where: { contactPhone } }) : Promise.resolve(null)
     ]);
 
-    errorContext.existingUsersCheck = {
-      emailExists: !!existingEmail,
-      phoneExists: !!existingPhone
-    };
-
     if (existingEmail) {
-      return NextResponse.json(
-        { error: "This email is already registered", details: { registeredEmail: existingEmail.email } },
-        { status: 409 }
-      );
+      return NextResponse.json({ error: "Email already registered" }, { status: 409 });
     }
 
     if (existingPhone) {
-      return NextResponse.json(
-        { error: "This phone number is already registered", details: { registeredPhone: existingPhone.contactPhone } },
-        { status: 409 }
-      );
+      return NextResponse.json({ error: "Phone already registered" }, { status: 409 });
     }
 
-    if (!Object.values(UserRole).includes(role)) {
-      errorContext.invalidRole = role;
-      return NextResponse.json(
-        { error: "Invalid user role selected", details: { validRoles: Object.values(UserRole) } },
-        { status: 400 }
-      );
-    }
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      errorContext.invalidEmail = email;
-      return NextResponse.json(
-        { error: "Please enter a valid email address", details: { email } },
-        { status: 400 }
-      );
-    }
-
-    if (password.length < 8) {
-      errorContext.passwordLength = password.length;
-      return NextResponse.json(
-        { error: "Password must be at least 8 characters", details: { length: password.length } },
-        { status: 400 }
-      );
-    }
-
-    let parsedDOB: Date | null = null;
-    let parsedExpiry: Date | null = null;
-    let parsedIssueDate: Date | null = null;
-
-    if (role === "PROVIDER") {
-      const providerRequired = {
-        selfieImage: "Selfie image is required",
-        idImage: "ID image is required",
-        faceConfidence: "Face verification score is required",
-        idName: "Full name from ID is required",
-        idNumber: "ID number is required"
-      };
-
-      const missingProvider = Object.entries({
-        selfieImage,
-        idImage,
-        faceConfidence,
-        idName,
-        idNumber
-      }).filter(([_, val]) => !val);
-
-      errorContext.providerValidation = {
-        missingFields: missingProvider.map(([key]) => key),
-        faceConfidenceValue: faceConfidence
-      };
-
-      if (missingProvider.length > 0) {
-        return NextResponse.json(
-          {
-            error: "Incomplete provider information",
-            details: {
-              missingFields: missingProvider.map(([key]) => providerRequired[key]),
-              requiredFields: Object.keys(providerRequired)
-            }
-          },
-          { status: 400 }
-        );
-      }
-
-      if (typeof faceConfidence !== "number" || faceConfidence < 0) {
-        return NextResponse.json(
-          { error: "Invalid face verification confidence score", details: { score: faceConfidence } },
-          { status: 400 }
-        );
-      }
-
-      parsedDOB = idDOB ? parseDate(idDOB) : null;
-      parsedExpiry = idExpiryDate ? parseDate(idExpiryDate) : null;
-      parsedIssueDate = idIssueDate ? parseDate(idIssueDate) : null;
-
-      errorContext.dateValidation = {
-        idDOB: { input: idDOB, parsed: parsedDOB?.toISOString() },
-        idExpiryDate: { input: idExpiryDate, parsed: parsedExpiry?.toISOString() },
-        idIssueDate: { input: idIssueDate, parsed: parsedIssueDate?.toISOString() }
-      };
-
-      if (idDOB && !parsedDOB) {
-        return NextResponse.json(
-          { error: "Invalid date of birth format (use DD/MM/YYYY)", details: { formatExample: "31/12/1990" } },
-          { status: 400 }
-        );
-      }
-
-      if (parsedDOB && (parsedDOB.getFullYear() < 1900 || parsedDOB > new Date())) {
-        return NextResponse.json(
-          {
-            error: "Invalid date of birth",
-            details: { date: parsedDOB.toISOString(), minYear: 1900, maxDate: new Date().toISOString() }
-          },
-          { status: 400 }
-        );
-      }
-
-      if (idExpiryDate && !parsedExpiry) {
-        return NextResponse.json(
-          { error: "Invalid ID expiry date format (use DD/MM/YYYY)", details: { formatExample: "31/12/2030" } },
-          { status: 400 }
-        );
-      }
-
-      if (parsedExpiry && parsedExpiry < new Date()) {
-        return NextResponse.json(
-          { error: "ID document has expired", details: { expiryDate: parsedExpiry.toISOString(), currentDate: new Date().toISOString() } },
-          { status: 400 }
-        );
-      }
-
-      if (idIssueDate && !parsedIssueDate) {
-        return NextResponse.json(
-          { error: "Invalid ID issue date format (use DD/MM/YYYY)", details: { formatExample: "31/12/2020" } },
-          { status: 400 }
-        );
-      }
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 12);
-
-    const user = await prisma.$transaction(async (tx) => {
-      const userData = {
-        email,
-        name,
-        contactPhone,
-        hashedPassword,
-        role,
-        isOtpVerified: true,
-        ...(role === "PROVIDER" && {
-          isFaceVerified: true,
-          selfieImage,
-          idImage,
-          faceConfidence,
-          idName,
-          idNumber,
-          idDOB: parsedDOB,
-          idExpiryDate: parsedExpiry,
-          idIssueDate: parsedIssueDate,
-          idIssuer,
-          personalIdNumber
-        })
-      };
-
-      errorContext.userCreationAttempt = userData;
-
-      const createdUser = await tx.user.create({
-        data: userData,
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-          contactPhone: true,
-          isFaceVerified: true,
-          createdAt: true
+    // === OTP verification for non-Google accounts ===
+    if (otpCode && contactPhone) {
+      const otpVerification = await prisma.oTPVerification.findFirst({
+        where: {
+          phoneNumber: contactPhone,
+          code: otpCode,
+          verified: true,
+          expiresAt: { gt: new Date() }
         }
       });
 
-      await tx.oTPVerification.delete({ where: { id: otpVerification.id } });
+      if (!otpVerification) {
+        return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 403 });
+      }
 
-      return createdUser;
+      await prisma.oTPVerification.delete({ where: { id: otpVerification.id } });
+    }
+
+    // === PROVIDER-Specific Validation ===
+    let parsedDOB = idDOB ? parseDate(idDOB) : null;
+    let parsedExpiry = idExpiryDate ? parseDate(idExpiryDate) : null;
+    let parsedIssue = idIssueDate ? parseDate(idIssueDate) : null;
+
+    if (role === "PROVIDER") {
+      const missing = [];
+      if (!selfieImage && !selfieUrl) missing.push("selfieImage");
+      if (!idImage && !imageUrl) missing.push("idImage");
+      if (!faceConfidence) missing.push("faceConfidence");
+      if (!idName) missing.push("idName");
+      if (!idNumber && !personalIdNumber) missing.push("idNumber or personalIdNumber");
+
+      if (missing.length) {
+        return NextResponse.json({ error: "Missing provider verification data", missing }, { status: 400 });
+      }
+
+      if (parsedExpiry && parsedExpiry < new Date()) {
+        return NextResponse.json({ error: "ID document has expired" }, { status: 400 });
+      }
+
+      if (parsedDOB && parsedDOB > new Date()) {
+        return NextResponse.json({ error: "Invalid date of birth" }, { status: 400 });
+      }
+    }
+
+    const hashedPassword = password ? await bcrypt.hash(password, 12) : null;
+
+    const user = await prisma.user.create({
+      data: {
+        email,
+        name,
+        contactPhone: contactPhone || null,
+        hashedPassword,
+        role,
+        isOtpVerified: !!otpCode,
+        isFaceVerified: role === "PROVIDER",
+        verified: role === "PROVIDER" ? true : !!verified,
+        selfieImage: selfieImage || selfieUrl || null,
+        idImage: idImage || imageUrl || null,
+        faceConfidence: faceConfidence || null,
+        idName: idName || null,
+        idNumber: idNumber || personalIdNumber || null,
+        idDOB: parsedDOB,
+        idExpiryDate: parsedExpiry,
+        idIssueDate: parsedIssue,
+        idIssuer: idIssuer || null,
+        personalIdNumber: personalIdNumber || null,
+        nationality: nationality || null,
+        gender: gender || null,
+        placeOfIssue: placeOfIssue || null,
+        idType: idType || null,
+        rawText: rawText || null
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        contactPhone: true,
+        isFaceVerified: true,
+        verified: true,
+        createdAt: true
+      }
     });
 
-    return NextResponse.json(
-      {
-        success: true,
-        user,
-        message: role === "PROVIDER"
-          ? "Provider account created successfully"
-          : "Account created successfully"
-      },
-      { status: 201 }
-    );
+    return NextResponse.json({
+      success: true,
+      user,
+      message: `${role} account created successfully`
+    }, { status: 201 });
 
   } catch (error: any) {
-    const errorDetails = {
-      message: error.message,
+    console.error("REGISTRATION ERROR", {
+      error: error.message,
+      context: errorContext,
       stack: error.stack,
-      name: error.name,
-      ...errorContext,
-      durationMs: Date.now() - startTime
-    };
+      tookMs: Date.now() - startTime
+    });
 
-    console.error("REGISTRATION_FAILURE", JSON.stringify(errorDetails, null, 2));
-
-    return NextResponse.json(
-      {
-        error: "Registration failed",
-        details: process.env.NODE_ENV === "development" ? errorDetails : null
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Registration failed" }, { status: 500 });
   }
 }
