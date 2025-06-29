@@ -7,7 +7,9 @@ export default withAuth(
     const token = req.nextauth.token;
 
     const publicPaths = ["/", "/role", "/verify", "/auth", "/auth/error"];
-    const isPublic = publicPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+    const isPublic = publicPaths.some(
+      (path) => pathname === path || pathname.startsWith(`${path}/`)
+    );
 
     // ✅ Allow unauthenticated access to public routes
     if (!token && isPublic) {
@@ -19,17 +21,24 @@ export default withAuth(
       return NextResponse.redirect(new URL("/role", req.url));
     }
 
-    // ⛔ Block unverified PROVIDERs from provider-only areas, allow home page `/`
+    // ⛔ Block unverified PROVIDERs from provider-only areas
+    const providerRestrictedPaths = [
+      "/my-listings",
+      "/approvals",
+      "/bookings",
+      "/favourites",
+      "/notifications",
+      "/admin",
+    ];
+    const isTryingProviderPath = providerRestrictedPaths.some((path) =>
+      pathname.startsWith(path)
+    );
+
     if (
       token?.role === "PROVIDER" &&
       !token?.isFaceVerified &&
       !isPublic &&
-      (pathname.startsWith("/my-listings") ||
-        pathname.startsWith("/approvals") ||
-        pathname.startsWith("/admin") ||
-        pathname.startsWith("/bookings") ||
-        pathname.startsWith("/favourites") ||
-        pathname.startsWith("/notifications"))
+      isTryingProviderPath
     ) {
       return NextResponse.redirect(new URL("/verify", req.url));
     }
@@ -48,17 +57,18 @@ export default withAuth(
   }
 );
 
+// ✅ Ensure sub-paths are matched (e.g., /verify/step)
 export const config = {
   matcher: [
-    "/", // ✅ Explicitly match `/`
+    "/",
+    "/role",
+    "/verify/:path*",      // ✅ includes /verify and its children
+    "/auth/:path*",        // ✅ includes /auth/error, /auth/callback/*
     "/bookings/:path*",
     "/favourites/:path*",
     "/approvals/:path*",
     "/my-listings/:path*",
     "/notifications/:path*",
     "/admin/:path*",
-    "/role",
-    "/verify",
-    "/auth/:path*",
   ],
 };
