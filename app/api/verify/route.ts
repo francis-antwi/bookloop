@@ -101,9 +101,7 @@ const normalizeDate = (input: string): string | null => {
         const fullYear = parseInt(c, 10) > (new Date().getFullYear() % 100) + 5 ? `19${c}` : `20${c}`; // Adjust for future dates
         return `${fullYear}-${b.padStart(2, '0')}-${a.padStart(2, '0')}`;
       } else if (match.length >= 3) { // For Day Month YYYY, Month Day, YYYY, etc.
-        let day = '';
-        let month = '';
-        let year = '';
+        let day, month, year;
 
         if (DATE_FORMATS[3].test(input) || DATE_FORMATS[5].test(input)) { // Day Month YYYY, DD-MON-YYYY
           day = match[1];
@@ -522,6 +520,24 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
       }
     };
 
+    // --- LOG VERIFICATION DETAILS HERE ---
+    console.log(`✅ [${requestId}] Verification Details:`);
+    console.log(`  - Success: ${verificationResponse.success}`);
+    console.log(`  - Face Match: ${verificationResponse.verification.faceMatch}`);
+    console.log(`  - Confidence: ${verificationResponse.verification.confidence}% (Threshold: ${verificationResponse.verification.threshold}%)`);
+    console.log(`  - Document Extraction Status: ${verificationResponse.document.extractionComplete ? 'Complete' : 'Warnings Present'}`);
+    if (verificationResponse.document.extractionWarnings.length > 0) {
+      console.log(`    - Extraction Warnings: ${verificationResponse.document.extractionWarnings.join(', ')}`);
+    }
+    console.log(`  - Extracted Name: ${verificationResponse.document.idName}`);
+    console.log(`  - Extracted ID Number: ${verificationResponse.document.idNumber || verificationResponse.document.personalIdNumber}`);
+    console.log(`  - Extracted DOB: ${verificationResponse.document.idDOB}`);
+    console.log(`  - Extracted ID Type: ${verificationResponse.document.idType}`);
+    console.log(`  - Extracted Gender: ${verificationResponse.document.idGender}`);
+    console.log(`  - Extracted Nationality: ${verificationResponse.document.idNationality}`);
+    console.log(`  - ID Image URL: ${verificationResponse.document.imageUrl}`);
+    console.log(`  - Selfie Image URL: ${verificationResponse.document.selfieUrl}`);
+
     // Optional registration flow
     if (shouldRegister && email) {
       try {
@@ -559,11 +575,23 @@ export async function POST(req: Request): Promise<NextResponse<VerificationResul
         if (!registerRes.ok) {
           console.error(`Registration failed:`, registerResult.error);
         }
+
+        // Log registration details
+        console.log(`Registration attempt for ${email}:`);
+        console.log(`  - Success: ${verificationResponse.registration.success}`);
+        if (verificationResponse.registration.userId) {
+          console.log(`  - User ID: ${verificationResponse.registration.userId}`);
+        }
+        if (verificationResponse.registration.error) {
+          console.log(`  - Error: ${verificationResponse.registration.error}`);
+        }
+
       } catch (regError: any) {
         verificationResponse.registration = {
           success: false,
           error: `Registration API failed: ${regError.message}`
         };
+        console.error(`Error during registration API call:`, regError.message);
       }
     }
 
