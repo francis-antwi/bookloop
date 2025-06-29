@@ -56,7 +56,7 @@ export const authOptions: AuthOptions = {
   pages: {
     signIn: "/",
     signOut: "/auth/signout",
-    error: "/auth/errory",
+    error: "/auth/error",
     verifyRequest: "/auth/verify-request",
     newUser: "/role", // handled manually via callback
   },
