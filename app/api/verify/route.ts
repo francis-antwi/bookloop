@@ -1,28 +1,55 @@
 import { NextResponse } from "next/server";
-import { v2 as cloudinary } from "cloudinary";
-import bcrypt from "bcrypt";
-import prisma from "@/app/libs/prismadb";
-import { UserRole } from "@prisma/client";
-import sharp from "sharp";
+import { v2 as cloudinary } from "cloudinary"; // ✅ FIXED
 import axios from "axios";
+import sharp from "sharp";
 
-// Cloudinary Config
+// ========== Cloudinary Config ==========
 cloudinary.config({
   cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!,
   api_key: process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY!,
   api_secret: process.env.CLOUDINARY_API_SECRET!,
 });
 
-// Constants
+// ========== Types ==========
+interface IDInfo {
+  idName: string | null;
+  idNumber: string | null;
+  personalIdNumber: string | null;
+  idDOB: string | null;
+  idIssueDate: string | null;
+  idExpiryDate: string | null;
+  idIssuer: string | null;
+  placeOfIssue: string | null;
+  rawText: string;
+  extractionWarnings: string[];
+}
+
+interface VerificationResult {
+  success: boolean;
+  verification: {
+    faceMatch: boolean;
+    confidence: number;
+    threshold: number;
+  };
+  document: {
+    type: string;
+    imageUrl: string;
+    selfieUrl: string;
+    extractionComplete: boolean;
+  } & IDInfo;
+}
+
+// ========== Constants ==========
 const OCR_MAX_RETRIES = 3;
 const OCR_TIMEOUT_MS = 60000;
 const ABSOLUTE_MIN_SIZE = 20000;
 const RECOMMENDED_MIN_SIZE = 50000;
 const MAX_IMAGE_SIZE = 5_000_000;
+const MIN_REQUIRED_FIELDS = 1;
 const FACE_MATCH_THRESHOLD = 80;
 const ID_KEYWORDS = ["passport", "driver", "license", "identity", "id card", "ghana card", "ecowas"];
 
-// Utility Functions
+// ========== Utilities ==========
 const cleanText = (text: string): string =>
   text
     .replace(/[^\x00-\x7F\r\n]/g, " ")
@@ -45,6 +72,22 @@ const normalizeDate = (dateStr: string): string | null => {
   } catch {
     return null;
   }
+};
+
+const logFieldSummary = (idInfo: IDInfo) => {
+  console.log("📋 Final Field Extraction Summary:");
+  const table = [
+    ["Name", idInfo.idName],
+    ["ID Number", idInfo.idNumber],
+    ["DOB", idInfo.idDOB],
+    ["Issue Date", idInfo.idIssueDate],
+    ["Expiry Date", idInfo.idExpiryDate],
+    ["Issuer", idInfo.idIssuer],
+    ["Place of Issue", idInfo.placeOfIssue],
+  ];
+  table.forEach(([label, value]) => {
+    console.log(`${label.padEnd(15)}: ${value || "NOT FOUND"}`);
+  });
 };
 
 const processImageForOCR = async (file: File): Promise<Buffer> => {
@@ -73,7 +116,7 @@ const uploadToCloudinary = async (buffer: Buffer, fileType: string) => {
     });
     return result;
   } catch (error) {
-    console.error("Cloudinary upload error:", error);
+    console.error("❌ Cloudinary upload error:", error);
     throw new Error("Cloudinary upload failed");
   }
 };
@@ -121,18 +164,25 @@ const performOCRWithRetry = async (imageBuffer: Buffer): Promise<string> => {
   throw lastError;
 };
 
-const extractIDInfo = (text: string) => {
+const extractIDInfo = (text: string): IDInfo => {
   const lines = getLines(text);
   const warnings: string[] = [];
 
+  // 🔍 Debug lines from OCR
+  console.log("🧾 OCR Lines:");
+  lines.forEach(line => console.log("•", line));
+
+  // 📛 Name: look for 'name', 'surname', or full capitalized names
   const name = lines.find(line =>
     /name|surname/i.test(line) || /^[A-Z\s]{8,}$/.test(line)
   ) || null;
 
+  // 🆔 ID Number: match any 6+ character alphanumeric word
   const idNumber = lines.map(l =>
     l.match(/\b([A-Z0-9]{6,})\b/)?.[1]
   ).find(Boolean) || null;
 
+  // 📅 Dates: DOB, Issue, Expiry
   const dates = lines
     .flatMap((line, idx) =>
       [...line.matchAll(/\b\d{2,4}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}\b/g)]
@@ -144,21 +194,24 @@ const extractIDInfo = (text: string) => {
   const idIssueDate = normalizeDate(dates[1]?.date || "");
   const idExpiryDate = normalizeDate(dates.at(-1)?.date || "");
 
+  // 🏛 Issuer: any line mentioning 'republic' or 'authority'
   const idIssuer = lines.find(l =>
     /republic|authority/i.test(l)
   ) || null;
 
+  // 📍 Place of issue: look for city names
   const placeOfIssue = lines.find(l =>
     /issue.*(accra|kumasi|tamale|cape coast|takoradi)/i.test(l)
   ) || null;
 
+  // 🧪 Warn for missing fields
   if (!name) warnings.push("Name not found");
   if (!idNumber) warnings.push("ID number not found");
   if (!idDOB) warnings.push("DOB not found");
   if (!idIssuer) warnings.push("Issuer not found");
   if (!placeOfIssue) warnings.push("Place of issue not found");
 
-  return {
+  const info: IDInfo = {
     idName: name,
     idNumber,
     personalIdNumber: null,
@@ -170,6 +223,9 @@ const extractIDInfo = (text: string) => {
     rawText: text,
     extractionWarnings: warnings,
   };
+
+  logFieldSummary(info);
+  return info;
 };
 
 const compareFaces = async (selfieUrl: string, idUrl: string): Promise<{ confidence: number }> => {
@@ -190,238 +246,63 @@ const compareFaces = async (selfieUrl: string, idUrl: string): Promise<{ confide
   return { confidence };
 };
 
-export async function POST(request: Request) {
+// ========== Main API ==========
+export async function POST(req: Request): Promise<NextResponse<VerificationResult | { error: string }>> {
+  const startTime = Date.now();
+  const requestId = Math.random().toString(36).slice(2, 8);
+
   try {
-    const formData = await request.formData();
-    const body = Object.fromEntries(formData.entries());
-    
-    const {
-      email,
-      name,
-      contactPhone,
-      password,
-      role,
-      selfieImage,
-      idImage,
-      idName,
-      idNumber,
-      idDOB,
-      idExpiryDate,
-      idIssuer,
-      idIssueDate,
-      personalIdNumber,
-      otpCode
-    } = body;
+    const formData = await req.formData();
+    const selfie = formData.get("selfieImage") as File;
+    const id = formData.get("idImage") as File;
 
-    // Validate required fields
-    const requiredFields = {};
-    const missingFields = Object.entries(requiredFields)
-      .filter(([_, value]) => !value)
-      .map(([key]) => key);
-
-    if (missingFields.length >= 0) {
-      return NextResponse.json(
-        { error: `Missing required fields: ${missingFields.join(", ")}` },
-        { status: 400 }
-      );
+    if (!selfie || !id) {
+      return NextResponse.json({ error: "Missing selfie or ID image." }, { status: 400 });
     }
 
-    // Validate OTP via Prisma
-    const otpVerification = await prisma.oTPVerification.findFirst({
-      where: {
-        phoneNumber: contactPhone.toString(),
-        code: otpCode.toString(),
-        verified: true,
-        expiresAt: { gt: new Date() }
-      }
-    });
-
-    if (!otpVerification) {
-      return NextResponse.json(
-        {
-          error: "OTP verification failed",
-          details: otpCode
-            ? "The OTP is invalid or has expired"
-            : "No OTP code provided"
-        },
-        { status: 403 }
-      );
-    }
-
-    // Check for existing users
-    const [existingEmail, existingPhone] = await Promise.all([
-      prisma.user.findUnique({ where: { email: email.toString() } }),
-      prisma.user.findUnique({ where: { contactPhone: contactPhone.toString() } })
+    const [selfieBuffer, idBuffer] = await Promise.all([
+      processImageForOCR(selfie),
+      processImageForOCR(id),
     ]);
 
-    if (existingEmail) {
-      return NextResponse.json(
-        { error: "This email is already registered" },
-        { status: 409 }
-      );
+    const [selfieUpload, idUpload] = await Promise.all([
+      uploadToCloudinary(selfieBuffer, selfie.type),
+      uploadToCloudinary(idBuffer, id.type),
+    ]);
+
+    const ocrText = await performOCRWithRetry(idBuffer);
+
+    if (!ID_KEYWORDS.some(k => ocrText.toLowerCase().includes(k))) {
+      console.warn(`⚠️ [${requestId}] OCR output may not be an ID.`);
     }
 
-    if (existingPhone) {
-      return NextResponse.json(
-        { error: "This phone number is already registered" },
-        { status: 409 }
-      );
+    const extractedInfo = extractIDInfo(ocrText);
+
+    const minFields = [extractedInfo.idName, extractedInfo.idNumber, extractedInfo.idDOB].filter(Boolean).length;
+    if (minFields < MIN_REQUIRED_FIELDS) {
+      return NextResponse.json({ error: "Insufficient ID info extracted." }, { status: 400 });
     }
 
-    // Validate role
-    if (!Object.values(UserRole).includes(role as UserRole)) {
-      return NextResponse.json(
-        { error: "Invalid user role selected" },
-        { status: 400 }
-      );
-    }
+    const { confidence } = await compareFaces(selfieUpload.secure_url, idUpload.secure_url);
+    const faceMatch = confidence >= FACE_MATCH_THRESHOLD;
 
-    // Validate email format
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.toString())) {
-      return NextResponse.json(
-        { error: "Please enter a valid email address" },
-        { status: 400 }
-      );
-    }
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log(`✅ [${requestId}] Verification done in ${duration}s`);
 
-    // Validate password length
-    if (password.toString().length < 8) {
-      return NextResponse.json(
-        { error: "Password must be at least 8 characters" },
-        { status: 400 }
-      );
-    }
-
-    let faceConfidence = 0;
-    let selfieImageUrl = "";
-    let idImageUrl = "";
-    let extractedInfo = {
-      idName: null,
-      idNumber: null,
-      personalIdNumber: null,
-      idDOB: null,
-      idIssueDate: null,
-      idExpiryDate: null,
-      idIssuer: null,
-      placeOfIssue: null,
-      rawText: "",
-      extractionWarnings: []
-    };
-
-    // If PROVIDER, validate extra fields and process images
-    if (role === "PROVIDER") {
-      const selfieFile = formData.get("selfieImage") as File;
-      const idFile = formData.get("idImage") as File;
-
-      if (!selfieFile || !idFile) {
-        return NextResponse.json(
-          { error: "Both selfie and ID images are required for providers" },
-          { status: 400 }
-        );
-      }
-
-      // Process images
-      const [selfieBuffer, idBuffer] = await Promise.all([
-        processImageForOCR(selfieFile),
-        processImageForOCR(idFile),
-      ]);
-
-      // Upload to Cloudinary
-      const [selfieUpload, idUpload] = await Promise.all([
-        uploadToCloudinary(selfileBuffer, selfieFile.type),
-        uploadToCloudinary(idBuffer, idFile.type),
-      ]);
-
-      selfieImageUrl = selfieUpload.secure_url;
-      idImageUrl = idUpload.secure_url;
-
-      // Perform OCR on ID image
-      const ocrText = await performOCRWithRetry(idBuffer);
-      extractedInfo = extractIDInfo(ocrText);
-
-      // Verify face match
-      const faceResult = await compareFaces(selfieImageUrl, idImageUrl);
-      faceConfidence = faceResult.confidence;
-
-      if (faceConfidence < FACE_MATCH_THRESHOLD) {
-        return NextResponse.json(
-          { error: "Face verification failed. The selfie doesn't match the ID photo." },
-          { status: 400 }
-        );
-      }
-
-      // Validate extracted ID info
-      if (!extractedInfo.idName || !extractedInfo.idNumber || !extractedInfo.idDOB) {
-        return NextResponse.json(
-          { error: "Could not extract sufficient information from the ID document" },
-          { status: 400 }
-        );
-      }
-    }
-
-    const hashedPassword = await bcrypt.hash(password.toString(), 12);
-
-    // Create user transactionally
-    const user = await prisma.$transaction(async (tx) => {
-      const createdUser = await tx.user.create({
-        data: {
-          email: email.toString(),
-          name: name.toString(),
-          contactPhone: contactPhone.toString(),
-          hashedPassword,
-          role: role as UserRole,
-          isOtpVerified: true,
-          ...(role === "PROVIDER" && {
-            isFaceVerified: true,
-            selfieImage: selfieImageUrl,
-            idImage: idImageUrl,
-            faceConfidence,
-            idName: extractedInfo.idName,
-            idNumber: extractedInfo.idNumber,
-            idDOB: extractedInfo.idDOB,
-            idExpiryDate: extractedInfo.idExpiryDate,
-            idIssueDate: extractedInfo.idIssueDate,
-            idIssuer: extractedInfo.idIssuer,
-            personalIdNumber: personalIdNumber?.toString()
-          })
-        },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-          contactPhone: true,
-          isFaceVerified: true,
-          createdAt: true
-        }
-      });
-
-      await tx.oTPVerification.delete({ where: { id: otpVerification.id } });
-
-      return createdUser;
+    return NextResponse.json({
+      success: true,
+      verification: { faceMatch, confidence, threshold: FACE_MATCH_THRESHOLD },
+      document: {
+        type: "ID",
+        imageUrl: idUpload.secure_url,
+        selfieUrl: selfieUpload.secure_url,
+        extractionComplete: extractedInfo.extractionWarnings.length === 0,
+        ...extractedInfo,
+      },
     });
 
-    return NextResponse.json(
-      {
-        success: true,
-        user,
-        message: role === "PROVIDER"
-          ? "Provider account created successfully"
-          : "Account created successfully"
-      },
-      { status: 201 }
-    );
-
   } catch (error: any) {
-    console.error("Registration error:", error);
-    return NextResponse.json(
-      {
-        error: "Registration failed",
-        details: process.env.NODE_ENV === "development"
-          ? error.message
-          : "Please try again later"
-      },
-      { status: 500 }
-    );
+    console.error(`❌ [${requestId}] Error:`, error);
+    return NextResponse.json({ error: error.message || "Unknown error" }, { status: 500 });
   }
 }
