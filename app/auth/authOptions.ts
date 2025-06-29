@@ -6,13 +6,11 @@ import bcrypt from "bcrypt";
 import { UserRole } from "@prisma/client";
 
 export const authOptions: AuthOptions = {
-  // ❌ DO NOT use PrismaAdapter to avoid auto user creation
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
-
     CredentialsProvider({
       name: "credentials",
       credentials: {
@@ -54,11 +52,9 @@ export const authOptions: AuthOptions = {
   ],
 
   pages: {
-    signIn: "/",
-    signOut: "/auth/signout",
-    error: "/auth/error",
-    verifyRequest: "/auth/verify-request",
-    newUser: "/role", // handled manually via callback
+    signIn: "/", // Home/login page
+    error: "/auth/error", // Custom error page
+    newUser: "/role", // Google users go here for manual onboarding
   },
 
   session: {
@@ -96,10 +92,11 @@ export const authOptions: AuthOptions = {
         });
 
         if (!existingUser) {
-          // 🚨 Block login and redirect to /role
-          throw new Error("redirect-role");
+          // ✅ Allow login — onboarding continues on /role
+          return true;
         }
 
+        // ✅ User exists, now check OTP and face verification
         if (!existingUser.isOtpVerified) {
           throw new Error("Phone verification required.");
         }
@@ -111,7 +108,7 @@ export const authOptions: AuthOptions = {
           throw new Error("Face verification required.");
         }
 
-        return true; // ✅ Login allowed
+        return true;
       }
 
       return true;

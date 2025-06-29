@@ -11,7 +11,6 @@ export default function AuthErrorRedirectPage() {
   useEffect(() => {
     if (!error) return;
 
-    // ✅ Support multiple role redirect cases
     const roleErrors = ["ROLE_SELECTION_REQUIRED", "redirect-role"];
     const verifyErrors = ["PROVIDER_VERIFICATION_REQUIRED", "redirect-verify"];
 
@@ -22,7 +21,11 @@ export default function AuthErrorRedirectPage() {
     } else {
       router.replace("/"); // fallback
     }
-  }, [error, router]);
+  }, [error]); // ✅ only re-run if error changes
 
-  return <p>Redirecting...</p>;
+  return (
+    <div className="flex min-h-screen items-center justify-center text-lg">
+      Redirecting...
+    </div>
+  );
 }
