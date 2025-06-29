@@ -162,6 +162,7 @@ const RegisterModal = () => {
       try {
         await axios.post('/api/register', {
           ...data,
+           otp: data.otp, // Include the verified OTP
           isPhoneVerified: true,
           isFaceVerified: false, // Customers don't need face verification
         });
@@ -409,10 +410,14 @@ const RegisterModal = () => {
                   <p className="font-medium text-blue-800">{watchedValues.contactPhone}</p>
                 </div>
 
-                <PhoneAuth 
-                  phoneNumber={watchedValues.contactPhone}
-                  onVerified={handlePhoneVerified}
-                />
+               <PhoneAuth 
+  phoneNumber={watchedValues.contactPhone}
+  onVerified={(phoneNumber, otp) => {
+    setIsPhoneVerified(true);
+    setValue('otp', otp); // Store OTP in form state
+    toast.success('Phone verified!');
+  }}
+/>
 
                 {isPhoneVerified && (
                   <div className="flex items-center gap-2 text-green-600 bg-green-50 p-2 sm:p-3 rounded-xl text-sm">

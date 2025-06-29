@@ -8,7 +8,7 @@ import { formatGhanaPhone } from '../api/utils/formatGhanaPhone';
 
 interface PhoneAuthProps {
   phoneNumber: string;
-  onVerified: () => void;
+  onVerified: (phoneNumber: string, otp: string) => void; // Updated interface
 }
 
 const PhoneAuth: React.FC<PhoneAuthProps> = ({ phoneNumber, onVerified }) => {
@@ -17,56 +17,32 @@ const PhoneAuth: React.FC<PhoneAuthProps> = ({ phoneNumber, onVerified }) => {
   const [verifying, setVerifying] = useState(false);
   const [sending, setSending] = useState(false);
 
-  // 🔐 Setup reCAPTCHA once on mount
   useEffect(() => {
     if (!window.recaptchaVerifier) {
       window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
         size: 'invisible',
         callback: (response: any) => {
-          console.log('✅ reCAPTCHA solved:', response);
-        },
-        'expired-callback': () => {
-          console.warn('⚠️ reCAPTCHA expired. Re-initializing.');
+          console.log('reCAPTCHA solved:', response);
         },
       });
-
-      // 🧼 Render the reCAPTCHA widget (required)
-      window.recaptchaVerifier.render().catch((err: any) => {
-        console.error("Failed to render reCAPTCHA:", err);
-      });
+      window.recaptchaVerifier.render().catch(console.error);
     }
   }, []);
 
   const sendOtp = async () => {
     const formatted = formatGhanaPhone(phoneNumber);
-
     if (!formatted) {
-      toast.error("Invalid Ghanaian phone number.");
+      toast.error("Invalid Ghanaian phone number");
       return;
     }
 
     setSending(true);
     try {
-      const appVerifier = window.recaptchaVerifier;
-
-      if (!appVerifier) {
-        throw new Error('reCAPTCHA not initialized');
-      }
-
-      const result = await signInWithPhoneNumber(auth, formatted, appVerifier);
+      const result = await signInWithPhoneNumber(auth, formatted, window.recaptchaVerifier);
       setConfirmationResult(result);
       toast.success('OTP sent!');
     } catch (error: any) {
-      console.error('OTP Error:', error);
-      if (error.code === 'auth/invalid-app-credential') {
-        toast.error("Invalid app credential. Check Firebase setup.");
-      } else if (error.code === 'auth/operation-not-allowed') {
-        toast.error("Phone auth not enabled for your Firebase project.");
-      } else if (error.code === 'auth/billing-not-enabled') {
-        toast.error("Enable billing in Firebase to send OTP.");
-      } else {
-        toast.error('Failed to send OTP.');
-      }
+      toast.error(`Failed to send OTP: ${error.message}`);
     } finally {
       setSending(false);
     }
@@ -77,10 +53,9 @@ const PhoneAuth: React.FC<PhoneAuthProps> = ({ phoneNumber, onVerified }) => {
     setVerifying(true);
     try {
       await confirmationResult.confirm(otp);
+      onVerified(phoneNumber, otp); // Now passing both phone and OTP
       toast.success('Phone verified!');
-      onVerified(); // Notify parent
     } catch (error: any) {
-      console.error(error);
       toast.error('Invalid OTP');
     } finally {
       setVerifying(false);
@@ -116,7 +91,6 @@ const PhoneAuth: React.FC<PhoneAuthProps> = ({ phoneNumber, onVerified }) => {
         </div>
       )}
 
-      {/* 🔐 Invisible reCAPTCHA container */}
       <div id="recaptcha-container" />
     </div>
   );
