@@ -3,47 +3,65 @@
 import { useState } from 'react';
 import { FiUserCheck, FiCheck, FiLoader } from 'react-icons/fi';
 import { useSession } from 'next-auth/react';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios'; // Import AxiosError for better type safety
 import toast from 'react-hot-toast';
 
 interface RoleSelectorProps {
-  onRoleSelected: (role: string) => void;
+  onRoleSelected?: (role: string) => void; // Made optional as it's used with ?.
 }
 
 const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
   const { data: session } = useSession();
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedRole, setSelectedRole] = useState(null); 
+
+  // Initialize selectedRole based on the current session's user role, if available.
+  // This helps if the component is re-rendered or accessed when a role is already set.
+  const [selectedRole, setSelectedRole] = useState<string | null>(session?.user?.role || null);
 
   const handleRoleSelect = async (role: string) => {
+    // Prevent re-selecting the same role if it's already active/selected
     if (selectedRole === role) return;
 
     setIsLoading(true);
 
     try {
+      // Set the selected role immediately for UI feedback
+      setSelectedRole(role); // Moved this here for immediate visual feedback
+
       const response = await axios.post('/api/role', { role }, { withCredentials: true });
 
       if (response.status >= 200 && response.status < 300) {
-        setSelectedRole(role);
-        onRoleSelected?.(role);
+        // No need to setSelectedRole here again as it's done above
+        onRoleSelected?.(role); // Call the optional callback
+
         toast.success('Role selected successfully');
 
+        // Redirect based on the selected role
+        // A full page reload (window.location.href) is often good after role selection
+        // to ensure middleware re-evaluates correctly with the new session data.
         window.location.href = role === 'PROVIDER' ? '/verify' : '/';
       } else {
-        const message = response?.data?.message || 'Unexpected response';
+        // Handle non-2xx responses from the server
+        const message = response?.data?.message || 'Unexpected response from server';
         toast.error(message);
       }
-    } catch (err: any) {
-      const status = err?.response?.status;
-      const message = err?.response?.data?.message || err?.message || 'Failed to select role';
+    } catch (err) { // `err` is implicitly `unknown` here
+      const axiosError = err as AxiosError; // Explicitly cast to AxiosError for type safety
+
+      // Extract error details
+      const status = axiosError.response?.status;
+      const message = (axiosError.response?.data as { message?: string })?.message || axiosError.message || 'Failed to select role';
 
       toast.error(message);
 
-      if (status === 403 && err?.response?.data?.error === 'Verification required') {
+      // Specific handling for verification required error (if your API sends it)
+      if (status === 403 && (axiosError.response?.data as { error?: string })?.error === 'Verification required') {
         setTimeout(() => {
           window.location.href = '/verify';
-        }, 1000);
+        }, 1000); // Redirect after a short delay
       }
+      // If the selection failed, revert the visual selection
+      setSelectedRole(session?.user?.role || null);
     } finally {
       setIsLoading(false);
     }
@@ -87,9 +105,9 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
           <button
             key={role.value}
             onClick={() => handleRoleSelect(role.value)}
-            disabled={isLoading}
+            disabled={isLoading} // Disable all buttons when loading
             className={`
-              relative w-full p-5 rounded-xl text-left transition-all duration-300 
+              relative w-full p-5 rounded-xl text-left transition-all duration-300
               transform hover:scale-[1.02] active:scale-[0.98]
               border-2 shadow-sm hover:shadow-md
               ${selectedRole === role.value
@@ -120,6 +138,7 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
                 )}
               </div>
             </div>
+            {/* Conditional bottom border for visual feedback on selection */}
             {selectedRole === role.value && (
               <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-b-xl" />
             )}
