@@ -36,7 +36,7 @@ export async function createUserIfNeeded(data: RegistrationData) {
     idDOB: data.idDOB || null,
     idExpiryDate: data.idExpiryDate || null,
     idIssuer: data.idIssuer || null,
-    isVerified: true,
+    verified: true,
   };
 
 

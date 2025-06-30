@@ -200,11 +200,13 @@ export async function POST(request: Request) {
       }
     });
 
-    return NextResponse.json({
-      success: true,
-      user,
-      message: `${role} account created successfully`
-    }, { status: 201 });
+return NextResponse.json({
+  success: true,
+  user,
+  shouldAutoLogin: isGoogleAuth && role === "PROVIDER" && user.verified,
+  message: `${role} account created successfully`,
+}, { status: 201 });
+
 
   } catch (error: any) {
     console.error("REGISTRATION ERROR", {

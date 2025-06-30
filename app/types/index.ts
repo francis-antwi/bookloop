@@ -34,7 +34,7 @@ export type SafeUser = Omit<
   idIssueDate: string | null;
   idIssuer: string | null;
   idType: string | null;
-
+  verified:boolean;
   nationality: string | null;     // ✅ newly added
   gender: string | null;          // ✅ newly added
   placeOfIssue: string | null;    // ✅ newly added

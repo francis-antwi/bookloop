@@ -215,9 +215,9 @@ const RegisterModal = () => {
       const verifyRes = await axios.post<VerificationResponse>('/api/verify', formData);
       const { verification, document, selfie } = verifyRes.data;
       const confidence = verification.confidence || 0;
-      const isVerified = verification.faceMatch && confidence >= verification.threshold;
+      const verified = verification.faceMatch && confidence >= verification.threshold;
 
-      if (isVerified) {
+      if (verified) {
         // Register user if verification succeeds
         await axios.post('/api/register', {
           ...data,

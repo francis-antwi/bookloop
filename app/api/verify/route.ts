@@ -75,7 +75,7 @@ export async function POST(req: Request) {
     gender: extractedData.gender,
     placeOfIssue: extractedData.placeOfIssue,
     rawText: extractedData.rawText,
-    isVerified: true,
+    verified: true,
   });
 
   return NextResponse.json({

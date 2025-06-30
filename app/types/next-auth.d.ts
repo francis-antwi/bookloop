@@ -84,5 +84,10 @@ declare module "next-auth/jwt" {
     // ✅ NEW: Additional ID fields
     personalIdNumber?: string | null;
     idIssueDate?: string | null;
+    verified:boolean;
+    nationality: string | null;     // ✅ newly added
+    gender: string | null;          // ✅ newly added
+    placeOfIssue: string | null;    // ✅ newly added
+    rawText: string | null;    
   }
 }
