@@ -1,86 +1,49 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
-import { FiUserCheck, FiCheck, FiLoader } from "react-icons/fi";
-import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import axios, { AxiosError } from "axios";
-import toast from "react-hot-toast";
+import { useState } from 'react';
+import { FiUserCheck, FiCheck, FiLoader } from 'react-icons/fi';
+import { useSession } from 'next-auth/react';
+import axios from 'axios';
+import toast from 'react-hot-toast';
 
 interface RoleSelectorProps {
-  onRoleSelected?: (role: string) => void;
+  onRoleSelected: (role: string) => void;
 }
 
 const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
-  const { data: session, status } = useSession();
-  const router = useRouter();
-
+  const { data: session } = useSession();
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<string | null>(session?.user?.role || null);
-
-  // Redirect users who already have a role
-  useEffect(() => {
-    if (status === "loading") return;
-
-    const role = session?.user?.role;
-    const isVerified = (session?.user as any)?.isFaceVerified;
-
-    if (role === "CUSTOMER") {
-      router.replace("/");
-    } else if (role === "PROVIDER") {
-      if (isVerified) {
-        router.replace("/my-listings");
-      } else {
-        router.replace("/verify");
-      }
-    }
-  }, [session, status, router]);
-
-  // Prevent UI from showing during redirect
-  const role = session?.user?.role;
-  const isVerified = (session?.user as any)?.isFaceVerified;
-
-  if (status === "loading" || (role === "CUSTOMER") || (role === "PROVIDER" && isVerified !== undefined)) {
-    return null;
-  }
+  const [selectedRole, setSelectedRole] = useState(null); 
 
   const handleRoleSelect = async (role: string) => {
     if (selectedRole === role) return;
 
     setIsLoading(true);
-    setSelectedRole(role);
 
     try {
-      const response = await axios.post("/api/role", { role }, { withCredentials: true });
+      const response = await axios.post('/api/role', { role }, { withCredentials: true });
 
       if (response.status >= 200 && response.status < 300) {
+        setSelectedRole(role);
         onRoleSelected?.(role);
-        toast.success("Role selected successfully");
+        toast.success('Role selected successfully');
 
-        window.location.href = role === "PROVIDER" ? "/verify" : "/";
+        window.location.href = role === 'PROVIDER' ? '/verify' : '/';
       } else {
-        toast.error(response?.data?.message || "Unexpected response from server");
+        const message = response?.data?.message || 'Unexpected response';
+        toast.error(message);
       }
-    } catch (err) {
-      const axiosError = err as AxiosError;
-      const status = axiosError.response?.status;
-      const message =
-        (axiosError.response?.data as { message?: string })?.message ||
-        axiosError.message ||
-        "Failed to select role";
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const message = err?.response?.data?.message || err?.message || 'Failed to select role';
 
       toast.error(message);
 
-      if (
-        status === 403 &&
-        (axiosError.response?.data as { error?: string })?.error === "Verification required"
-      ) {
+      if (status === 403 && err?.response?.data?.error === 'Verification required') {
         setTimeout(() => {
-          window.location.href = "/verify";
+          window.location.href = '/verify';
         }, 1000);
       }
-
-      setSelectedRole(session?.user?.role || null);
     } finally {
       setIsLoading(false);
     }
@@ -88,24 +51,24 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
 
   const roles = [
     {
-      value: "CUSTOMER",
-      label: "Customer",
-      desc: "Looking for services",
-      gradient: "from-blue-50 to-indigo-50",
-      border: "border-blue-200",
-      selectedBorder: "border-blue-500",
-      selectedBg: "bg-gradient-to-r from-blue-50 to-indigo-100",
-      icon: "🛍️",
+      value: 'CUSTOMER',
+      label: 'Customer',
+      desc: 'Looking for services',
+      gradient: 'from-blue-50 to-indigo-50',
+      border: 'border-blue-200',
+      selectedBorder: 'border-blue-500',
+      selectedBg: 'bg-gradient-to-r from-blue-50 to-indigo-100',
+      icon: '🛍️',
     },
     {
-      value: "PROVIDER",
-      label: "Service Provider",
-      desc: "Offering services",
-      gradient: "from-emerald-50 to-teal-50",
-      border: "border-emerald-200",
-      selectedBorder: "border-emerald-500",
-      selectedBg: "bg-gradient-to-r from-emerald-50 to-teal-100",
-      icon: "⚡",
+      value: 'PROVIDER',
+      label: 'Service Provider',
+      desc: 'Offering services',
+      gradient: 'from-emerald-50 to-teal-50',
+      border: 'border-emerald-200',
+      selectedBorder: 'border-emerald-500',
+      selectedBg: 'bg-gradient-to-r from-emerald-50 to-teal-100',
+      icon: '⚡',
     },
   ];
 
@@ -126,14 +89,14 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
             onClick={() => handleRoleSelect(role.value)}
             disabled={isLoading}
             className={`
-              relative w-full p-5 rounded-xl text-left transition-all duration-300
+              relative w-full p-5 rounded-xl text-left transition-all duration-300 
               transform hover:scale-[1.02] active:scale-[0.98]
               border-2 shadow-sm hover:shadow-md
               ${selectedRole === role.value
                 ? `${role.selectedBorder} ${role.selectedBg} shadow-lg`
                 : `${role.border} bg-white hover:${role.gradient}`
               }
-              ${isLoading ? "opacity-70 cursor-not-allowed" : "cursor-pointer"}
+              ${isLoading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}
               group
             `}
           >
