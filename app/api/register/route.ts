@@ -144,6 +144,10 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Invalid date of birth" }, { status: 400 });
       }
 
+      if (parsedIssue && parsedIssue > new Date()) {
+        console.warn("⚠️ ID issue date is in the future:", parsedIssue);
+      }
+
       if (isGoogleAuth && !extractionComplete) {
         return NextResponse.json({
           success: false,
@@ -185,7 +189,7 @@ export async function POST(request: Request) {
         nationality: nationality || null,
         gender: gender || null,
         placeOfIssue: placeOfIssue || null,
-        idType: idType || null,
+        idType: idType?.toLowerCase() || null,
         rawText: rawText || null
       },
       select: {
@@ -199,6 +203,8 @@ export async function POST(request: Request) {
         createdAt: true
       }
     });
+
+    console.log("✅ User registered:", { id: user.id, email: user.email, role: user.role });
 
     return NextResponse.json({
       success: true,
