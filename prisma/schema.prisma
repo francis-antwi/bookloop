@@ -65,6 +65,7 @@ model User {
 
   // OTP Status (not used for verification)
   isOtpVerified    Boolean    @default(false)
+  verified            Boolean  @default(false)
 
   // Relations
   accounts         Account[]
