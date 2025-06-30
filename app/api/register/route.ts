@@ -241,11 +241,8 @@ export async function POST(request: Request) {
         name: isGoogleAuth ? googleUserName || name : name, // Use Google name if available
         contactPhone: contactPhone || null,
         hashedPassword,
-        // --- FIX APPLIED HERE ---
-        // Mark Google users as OTP verified automatically.
-        // For non-Google users, this depends on the OTP verification flow above.
+        role, // <--- ADDED THIS LINE: Ensure the role is passed to Prisma
         isOtpVerified: isGoogleAuth || (!isGoogleAuth && !!otpCode),
-        // --- END FIX ---
         isFaceVerified: role === "PROVIDER", // Face verified if role is PROVIDER
         // 'verified' status: true for PROVIDERs if all checks pass, otherwise based on 'verified' from body
         verified: role === "PROVIDER" ? true : !!verified,
