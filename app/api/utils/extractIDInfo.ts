@@ -27,16 +27,29 @@ export function extractIDInfo(data: any) {
   const idIssueDate = getDate(extractMatch(/Date of Issuance.*?(\d{2}\/\d{2}\/\d{4})/i) ?? "");
   const idExpiryDate = getDate(extractMatch(/Date of Expiry.*?(\d{2}\/\d{2}\/\d{4})/i) ?? "");
 
-  const idNumber = extractMatch(/Document Number.*?([A-Z0-9]+)/i)
-    ?? extractMatch(/([A-Z]{2}[0-9]{7,})/); // fallback if not labeled
+  const idNumber =
+    extractMatch(/Document Number.*?([A-Z0-9]+)/i) ??
+    extractMatch(/([A-Z]{2}[0-9]{7,})/); // fallback
 
-  const idIssuer = extractMatch(/Place of Issuance.*?([A-Z]+)/i)
-    ?? extractMatch(/ACCRA|KUMASI|TAKORADI|TAMALE/i);
+  const idIssuer =
+    extractMatch(/Place of Issuance.*?([A-Z]+)/i) ??
+    extractMatch(/ACCRA|KUMASI|TAKORADI|TAMALE/i);
 
   const personalIdNumber = extractMatch(/(GHA-\d{12})/);
 
   const gender = extractMatch(/Sex\/Sexe\s+([MF])\b/i);
   const nationality = extractMatch(/Nationality\/Nationalité\s+([A-Z]+)/i);
+
+  // ✅ Infer ID Type from rawText
+  const lowerText = rawText.toLowerCase();
+  let idType: string | null = null;
+  if (lowerText.includes("ghana card") || lowerText.includes("identity card")) {
+    idType = "ghana_card";
+  } else if (lowerText.includes("passport")) {
+    idType = "passport";
+  } else if (lowerText.includes("driver") || lowerText.includes("license")) {
+    idType = "driver_license";
+  }
 
   return {
     idName: idName || null,
@@ -48,6 +61,7 @@ export function extractIDInfo(data: any) {
     personalIdNumber: personalIdNumber || null,
     gender: gender || null,
     nationality: nationality || null,
+    idType: idType || null,          // ✅ Add idType to output
     rawText,
   };
 }
