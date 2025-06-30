@@ -106,8 +106,6 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
 
       const registerRes = await axios.post('/api/register', registrationData);
       const registerData = registerRes.data;
-
-     const registerData = registerRes.data;
 console.log("✅ Registration response:", registerData);
 
 if (!registerData.success) {
@@ -124,9 +122,6 @@ if (registerData.shouldAutoLogin) {
 }
 
 toast.error("Verification complete, but auto-login failed. Please log in manually.");
-
-      await signIn('email', { email: registrationData.email, redirect: false });
-      onComplete?.();
 
     } catch (error: any) {
       const errorData = error.response?.data;
