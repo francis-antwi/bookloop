@@ -56,7 +56,7 @@ export function extractIDInfo(data: any) {
     idNumber: idNumber || null,
     idDOB: idDOB || null,
     idIssueDate: idIssueDate || null,
-    idExpiryDate: idExpiryDate || null,zz
+    idExpiryDate: idExpiryDate || null,
     idIssuer: idIssuer || null,
     personalIdNumber: personalIdNumber || null,
     gender: gender || null,
