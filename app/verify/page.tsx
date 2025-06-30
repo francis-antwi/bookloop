@@ -109,12 +109,21 @@ const submitVerification = async () => {
 };
 
 
-    // 4. Register PROVIDER (Google users only if needed)
     try {
-      await axios.post('/api/register', registrationData);
-    } catch (regError) {
-      console.log('Registration completed with warnings:', regError.response?.data);
-    }
+  await axios.post('/api/register', registrationData);
+} catch (regError) {
+  const regErrorData = regError.response?.data;
+
+  console.error('❌ Registration failed:', regErrorData?.error || regError.message);
+
+  if (regErrorData?.missing) {
+    console.warn('🔍 Missing fields:', regErrorData.missing);
+  }
+
+  if (regErrorData?.payload) {
+    console.debug('📦 Payload that caused issue:', regErrorData.payload);
+}
+
 
     // 5. Update session
     await update({
@@ -126,15 +135,28 @@ const submitVerification = async () => {
     toast.success('Verification complete!');
     onComplete();
 
-  } catch (error: any) {
-    const errorMsg = error.response?.data?.error || error.message || 'Verification failed';
-    console.error('Verification error:', errorMsg);
-    setVerificationStatus({ success: false, error: errorMsg });
-    toast.error(errorMsg);
-  } finally {
-    setIsLoading(false);
+  } } catch (error: any) {
+  const errorData = error.response?.data;
+  const errorMsg = errorData?.error || error.message || 'Verification failed';
+
+  console.error('❌ Verification error:', errorMsg);
+
+  // Log missing fields if available
+  if (errorData?.missing) {
+    console.warn('🔍 Missing verification fields:', errorData.missing);
   }
-};
+
+  // Log payload that failed (e.g. during /api/register triggered by /api/verify)
+  if (errorData?.payload) {
+    console.debug('📦 Payload that caused the error:', errorData.payload);
+  }
+
+  setVerificationStatus({ success: false, error: errorMsg });
+  toast.error(errorMsg);
+} finally {
+  setIsLoading(false);
+}
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-4">
