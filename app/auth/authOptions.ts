@@ -105,78 +105,69 @@ export const authOptions: AuthOptions = {
     },
 
     async jwt({ token, user, trigger, session }) {
-  if (user) {
-    const dbUser = await prisma.user.findUnique({
-      where: { email: user.email ?? "" },
-    });
+      if (user) {
+        const dbUser = await prisma.user.findUnique({
+          where: { email: user.email ?? "" },
+        });
 
-    if (!dbUser) {
-      token.notRegistered = true;
+        if (!dbUser) {
+          token.notRegistered = true;
+          return token;
+        }
+
+        token = {
+          ...token,
+          id: dbUser.id,
+          name: dbUser.name,
+          email: dbUser.email,
+          image: dbUser.image,
+          role: dbUser.role,
+          isOtpVerified: dbUser.isOtpVerified ?? true,
+          otpCode: dbUser.otpCode ?? null,
+          otpExpiresAt: dbUser.otpExpiresAt?.toISOString() ?? null,
+          isFaceVerified: dbUser.isFaceVerified ?? false,
+          selfieImage: dbUser.selfieImage ?? null,
+          idImage: dbUser.idImage ?? null,
+          faceConfidence: dbUser.faceConfidence ?? null,
+          idName: dbUser.idName ?? null,
+          idNumber: dbUser.idNumber ?? null,
+          idDOB: dbUser.idDOB?.toISOString() ?? null,
+          idExpiryDate: dbUser.idExpiryDate?.toISOString() ?? null,
+          idIssuer: dbUser.idIssuer ?? null,
+          personalIdNumber: dbUser.personalIdNumber ?? null,
+          idIssueDate: dbUser.idIssueDate?.toISOString() ?? null,
+        };
+      }
+
+      // When session.update() is called from the client
+      if (trigger === "update" && session) {
+        token.role = session.role ?? token.role;
+        token.isFaceVerified = session.isFaceVerified ?? token.isFaceVerified;
+
+        if (session.verificationData) {
+          token.selfieImage = session.verificationData.selfieImage ?? token.selfieImage;
+          token.idImage = session.verificationData.idImage ?? token.idImage;
+          token.faceConfidence = session.verificationData.faceConfidence ?? token.faceConfidence;
+          token.idName = session.verificationData.idName ?? token.idName;
+          token.idNumber = session.verificationData.idNumber ?? token.idNumber;
+          token.idDOB = session.verificationData.idDOB ?? token.idDOB;
+          token.idExpiryDate = session.verificationData.idExpiryDate ?? token.idExpiryDate;
+          token.idIssuer = session.verificationData.idIssuer ?? token.idIssuer;
+          token.personalIdNumber = session.verificationData.personalIdNumber ?? token.personalIdNumber;
+          token.idIssueDate = session.verificationData.idIssueDate ?? token.idIssueDate;
+        }
+
+        // Optionally sync role update in DB
+        if (session.role) {
+          await prisma.user.update({
+            where: { email: token.email ?? "" },
+            data: { role: session.role },
+          });
+        }
+      }
+
       return token;
-    }
-
-    token = {
-      ...token,
-      id: dbUser.id,
-      name: dbUser.name,
-      email: dbUser.email,
-      image: dbUser.image,
-      role: dbUser.role,
-      isOtpVerified: dbUser.isOtpVerified ?? true,
-      otpCode: dbUser.otpCode ?? null,
-      otpExpiresAt: dbUser.otpExpiresAt?.toISOString() ?? null,
-      isFaceVerified: dbUser.isFaceVerified ?? false,
-      selfieImage: dbUser.selfieImage ?? null,
-      idImage: dbUser.idImage ?? null,
-      faceConfidence: dbUser.faceConfidence ?? null,
-      idName: dbUser.idName ?? null,
-      idNumber: dbUser.idNumber ?? null,
-      idDOB: dbUser.idDOB?.toISOString() ?? null,
-      idExpiryDate: dbUser.idExpiryDate?.toISOString() ?? null,
-      idIssuer: dbUser.idIssuer ?? null,
-      personalIdNumber: dbUser.personalIdNumber ?? null,
-      idIssueDate: dbUser.idIssueDate?.toISOString() ?? null,
-      idType: dbUser.idType ?? null,
-      nationality: dbUser.nationality ?? null,
-      gender: dbUser.gender ?? null,
-      placeOfIssue: dbUser.placeOfIssue ?? null,
-      rawText: dbUser.rawText ?? null,
-    };
-  }
-
-  if (trigger === "update" && session) {
-    token.role = session.role ?? token.role;
-    token.isFaceVerified = session.isFaceVerified ?? token.isFaceVerified;
-
-    if (session.verificationData) {
-      token.selfieImage = session.verificationData.selfieImage ?? token.selfieImage;
-      token.idImage = session.verificationData.idImage ?? token.idImage;
-      token.faceConfidence = session.verificationData.faceConfidence ?? token.faceConfidence;
-      token.idName = session.verificationData.idName ?? token.idName;
-      token.idNumber = session.verificationData.idNumber ?? token.idNumber;
-      token.idDOB = session.verificationData.idDOB ?? token.idDOB;
-      token.idExpiryDate = session.verificationData.idExpiryDate ?? token.idExpiryDate;
-      token.idIssuer = session.verificationData.idIssuer ?? token.idIssuer;
-      token.personalIdNumber = session.verificationData.personalIdNumber ?? token.personalIdNumber;
-      token.idIssueDate = session.verificationData.idIssueDate ?? token.idIssueDate;
-      token.idType = session.verificationData.idType ?? token.idType;
-      token.nationality = session.verificationData.nationality ?? token.nationality;
-      token.gender = session.verificationData.gender ?? token.gender;
-      token.placeOfIssue = session.verificationData.placeOfIssue ?? token.placeOfIssue;
-      token.rawText = session.verificationData.rawText ?? token.rawText;
-    }
-
-    if (session.role) {
-      await prisma.user.update({
-        where: { email: token.email ?? "" },
-        data: { role: session.role },
-      });
-    }
-  }
-
-  return token;
-},
-
+    },
 
     async session({ session, token }) {
       if (session.user) {
