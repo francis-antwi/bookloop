@@ -75,12 +75,14 @@ export default withAuth(
 
 export const config = {
   matcher: [
+    // Removed "/" from here to exclude it from middleware protection
     "/bookings/:path*",
     "/favourites/:path*",
     "/approvals/:path*",
     "/my-listings/:path*",
     "/notifications/:path*",
     "/admin/:path*",
+    "/role",
     "/auth/:path*",
   ],
 };

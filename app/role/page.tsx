@@ -1,85 +1,66 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
-import { FiUserCheck, FiCheck, FiLoader } from "react-icons/fi";
-import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import axios, { AxiosError } from "axios";
-import toast from "react-hot-toast";
+import { useState } from 'react';
+import { FiUserCheck, FiCheck, FiLoader } from 'react-icons/fi';
+import { useSession } from 'next-auth/react';
+import axios, { AxiosError } from 'axios'; // Import AxiosError for better type safety
+import toast from 'react-hot-toast';
 
 interface RoleSelectorProps {
-  onRoleSelected?: (role: string) => void;
+  onRoleSelected?: (role: string) => void; // Made optional as it's used with ?.
 }
 
 const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
-  const { data: session, status } = useSession();
-  const router = useRouter();
-
+  const { data: session } = useSession();
   const [isLoading, setIsLoading] = useState(false);
+
+  // Initialize selectedRole based on the current session's user role, if available.
+  // This helps if the component is re-rendered or accessed when a role is already set.
   const [selectedRole, setSelectedRole] = useState<string | null>(session?.user?.role || null);
 
-  // Redirect users who already have a role
-  useEffect(() => {
-    if (status === "loading") return;
-
-    const role = session?.user?.role;
-    const isVerified = (session?.user as any)?.isFaceVerified;
-
-    if (role === "CUSTOMER") {
-      router.replace("/");
-    } else if (role === "PROVIDER") {
-      if (isVerified) {
-        router.replace("/my-listings");
-      } else {
-        router.replace("/verify");
-      }
-    }
-  }, [session, status, router]);
-
-  // Prevent UI from showing during redirect
-  const role = session?.user?.role;
-  const isVerified = (session?.user as any)?.isFaceVerified;
-
-  if (status === "loading" || (role === "CUSTOMER") || (role === "PROVIDER" && isVerified !== undefined)) {
-    return null;
-  }
-
   const handleRoleSelect = async (role: string) => {
+    // Prevent re-selecting the same role if it's already active/selected
     if (selectedRole === role) return;
 
     setIsLoading(true);
-    setSelectedRole(role);
 
     try {
-      const response = await axios.post("/api/role", { role }, { withCredentials: true });
+      // Set the selected role immediately for UI feedback
+      setSelectedRole(role); // Moved this here for immediate visual feedback
+
+      const response = await axios.post('/api/role', { role }, { withCredentials: true });
 
       if (response.status >= 200 && response.status < 300) {
-        onRoleSelected?.(role);
-        toast.success("Role selected successfully");
+        // No need to setSelectedRole here again as it's done above
+        onRoleSelected?.(role); // Call the optional callback
 
-        window.location.href = role === "PROVIDER" ? "/verify" : "/";
+        toast.success('Role selected successfully');
+
+        // Redirect based on the selected role
+        // A full page reload (window.location.href) is often good after role selection
+        // to ensure middleware re-evaluates correctly with the new session data.
+        window.location.href = role === 'PROVIDER' ? '/verify' : '/';
       } else {
-        toast.error(response?.data?.message || "Unexpected response from server");
+        // Handle non-2xx responses from the server
+        const message = response?.data?.message || 'Unexpected response from server';
+        toast.error(message);
       }
-    } catch (err) {
-      const axiosError = err as AxiosError;
+    } catch (err) { // `err` is implicitly `unknown` here
+      const axiosError = err as AxiosError; // Explicitly cast to AxiosError for type safety
+
+      // Extract error details
       const status = axiosError.response?.status;
-      const message =
-        (axiosError.response?.data as { message?: string })?.message ||
-        axiosError.message ||
-        "Failed to select role";
+      const message = (axiosError.response?.data as { message?: string })?.message || axiosError.message || 'Failed to select role';
 
       toast.error(message);
 
-      if (
-        status === 403 &&
-        (axiosError.response?.data as { error?: string })?.error === "Verification required"
-      ) {
+      // Specific handling for verification required error (if your API sends it)
+      if (status === 403 && (axiosError.response?.data as { error?: string })?.error === 'Verification required') {
         setTimeout(() => {
-          window.location.href = "/verify";
-        }, 1000);
+          window.location.href = '/verify';
+        }, 1000); // Redirect after a short delay
       }
-
+      // If the selection failed, revert the visual selection
       setSelectedRole(session?.user?.role || null);
     } finally {
       setIsLoading(false);
@@ -88,24 +69,24 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
 
   const roles = [
     {
-      value: "CUSTOMER",
-      label: "Customer",
-      desc: "Looking for services",
-      gradient: "from-blue-50 to-indigo-50",
-      border: "border-blue-200",
-      selectedBorder: "border-blue-500",
-      selectedBg: "bg-gradient-to-r from-blue-50 to-indigo-100",
-      icon: "🛍️",
+      value: 'CUSTOMER',
+      label: 'Customer',
+      desc: 'Looking for services',
+      gradient: 'from-blue-50 to-indigo-50',
+      border: 'border-blue-200',
+      selectedBorder: 'border-blue-500',
+      selectedBg: 'bg-gradient-to-r from-blue-50 to-indigo-100',
+      icon: '🛍️',
     },
     {
-      value: "PROVIDER",
-      label: "Service Provider",
-      desc: "Offering services",
-      gradient: "from-emerald-50 to-teal-50",
-      border: "border-emerald-200",
-      selectedBorder: "border-emerald-500",
-      selectedBg: "bg-gradient-to-r from-emerald-50 to-teal-100",
-      icon: "⚡",
+      value: 'PROVIDER',
+      label: 'Service Provider',
+      desc: 'Offering services',
+      gradient: 'from-emerald-50 to-teal-50',
+      border: 'border-emerald-200',
+      selectedBorder: 'border-emerald-500',
+      selectedBg: 'bg-gradient-to-r from-emerald-50 to-teal-100',
+      icon: '⚡',
     },
   ];
 
@@ -124,7 +105,7 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
           <button
             key={role.value}
             onClick={() => handleRoleSelect(role.value)}
-            disabled={isLoading}
+            disabled={isLoading} // Disable all buttons when loading
             className={`
               relative w-full p-5 rounded-xl text-left transition-all duration-300
               transform hover:scale-[1.02] active:scale-[0.98]
@@ -133,7 +114,7 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
                 ? `${role.selectedBorder} ${role.selectedBg} shadow-lg`
                 : `${role.border} bg-white hover:${role.gradient}`
               }
-              ${isLoading ? "opacity-70 cursor-not-allowed" : "cursor-pointer"}
+              ${isLoading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}
               group
             `}
           >
@@ -157,6 +138,7 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
                 )}
               </div>
             </div>
+            {/* Conditional bottom border for visual feedback on selection */}
             {selectedRole === role.value && (
               <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-b-xl" />
             )}
