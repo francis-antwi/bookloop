@@ -258,8 +258,19 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json(response);
-  } catch (error: any) {
-    console.error("❌ Verification error:", error.message);
-    return NextResponse.json({ error: error.message || "Internal server error" }, { status: 500 });
+  }   } catch (error: any) {
+    console.error("❌ [VERIFY ERROR]:", {
+      message: error?.message,
+      stack: error?.stack,
+      name: error?.name,
+      errorObject: error,
+    });
+
+    return NextResponse.json(
+      {
+        error: error?.message || "Internal server error",
+        debug: process.env.NODE_ENV === "development" ? error : undefined,
+      },
+      { status: 500 }
+    );
   }
-}
