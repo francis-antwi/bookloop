@@ -3,7 +3,6 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import {
-  FiCamera,
   FiUpload,
   FiCheck,
   FiLoader,
@@ -108,21 +107,16 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
       const registerRes = await axios.post('/api/register', registrationData);
       const registerData = registerRes.data;
 
-      // ✅ Auto-login if Google user and verified
       if (registerData.shouldAutoLogin) {
-        await signIn('google', { callbackUrl: '/' });
+        toast.success('Verification complete! Logging you in...');
+        await update();
+        router.push('/');
+        onComplete?.();
         return;
       }
 
-      // ✅ Fallback for email users
       await signIn('email', { email: registrationData.email, redirect: false });
-
-      if (registerData.shouldAutoLogin) {
-  await update(); // 🔄 refresh session to reflect verification
-  toast.success('Verification complete!');
-  router.push('/');
-  return;
-}
+      onComplete?.();
 
     } catch (error: any) {
       const errorData = error.response?.data;
@@ -203,7 +197,13 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
   );
 };
 
-const SelfieStep = ({ selfieImage, onSelfieCapture, onNext }) => (
+type SelfieStepProps = {
+  selfieImage: Blob | null;
+  onSelfieCapture: (blob: Blob) => void;
+  onNext: () => void;
+};
+
+const SelfieStep = ({ selfieImage, onSelfieCapture, onNext }: SelfieStepProps) => (
   <div className="space-y-6">
     <div className="text-center">
       <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-3">
@@ -239,7 +239,15 @@ const SelfieStep = ({ selfieImage, onSelfieCapture, onNext }) => (
   </div>
 );
 
-const IDStep = ({ idFile, onIdUpload, onBack, onSubmit, isLoading }) => (
+type IDStepProps = {
+  idFile: File | null;
+  onIdUpload: (file: File) => void;
+  onBack: () => void;
+  onSubmit: () => void;
+  isLoading: boolean;
+};
+
+const IDStep = ({ idFile, onIdUpload, onBack, onSubmit, isLoading }: IDStepProps) => (
   <div className="space-y-6">
     <div className="text-center">
       <div className="inline-flex items-center justify-center w-12 h-12 bg-indigo-100 rounded-full mb-3">
@@ -313,7 +321,13 @@ const IDStep = ({ idFile, onIdUpload, onBack, onSubmit, isLoading }) => (
   </div>
 );
 
-const SuccessMessage = ({ title, description, truncate = false }) => (
+type SuccessMessageProps = {
+  title: string;
+  description: string;
+  truncate?: boolean;
+};
+
+const SuccessMessage = ({ title, description, truncate = false }: SuccessMessageProps) => (
   <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
     <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
       <FiCheck className="text-white text-sm" />
