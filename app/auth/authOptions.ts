@@ -36,10 +36,13 @@ export const authOptions: AuthOptions = {
         );
 
         if (!isCorrectPassword) throw new Error("Invalid credentials");
+
         if (!user.isOtpVerified) throw new Error("Phone verification required");
+
         if (user.role === UserRole.PROVIDER && !user.isFaceVerified) {
           throw new Error("Face verification required for providers");
         }
+
         if (!user.role) throw new Error("Missing account role");
 
         return {
@@ -53,7 +56,7 @@ export const authOptions: AuthOptions = {
 
   pages: {
     signIn: "/",
-    error: "/auth/error", 
+    error: "/auth/error",
     newUser: "/role",
   },
 
@@ -79,36 +82,45 @@ export const authOptions: AuthOptions = {
         sameSite: "lax",
         path: "/",
         secure: true,
-        domain: "bookloop-eight.vercel.app", // ✅ Update for prod
+        domain: "bookloop-eight.vercel.app", // ✅ update for prod
       },
     },
   },
 
   callbacks: {
     async signIn({ user, account }) {
-      if (account?.provider === "google") {
-        const existingUser = await prisma.user.findUnique({
-          where: { email: user.email ?? "" },
-        });
+      const existingUser = await prisma.user.findUnique({
+        where: { email: user.email ?? "" },
+      });
 
-        if (!existingUser) {
-          // ✅ Allow login — onboarding continues on /role
-          return true;
-        }
+      if (!existingUser) {
+        // Allow onboarding flow for Google users (e.g., go to /role)
+        return true;
+      }
 
-        // ✅ User exists, now check OTP and face verification
-        if (!existingUser.isOtpVerified) {
-          throw new Error("Phone verification required.");
-        }
+      const isGoogle = account?.provider === "google";
 
+      // Google users don't need OTP, but PROVIDERs still need face check
+      if (isGoogle) {
         if (
           existingUser.role === UserRole.PROVIDER &&
           !existingUser.isFaceVerified
         ) {
           throw new Error("Face verification required.");
         }
-
         return true;
+      }
+
+      // Non-Google (credentials) users: OTP and face check for PROVIDERs
+      if (!existingUser.isOtpVerified) {
+        throw new Error("Phone verification required.");
+      }
+
+      if (
+        existingUser.role === UserRole.PROVIDER &&
+        !existingUser.isFaceVerified
+      ) {
+        throw new Error("Face verification required.");
       }
 
       return true;

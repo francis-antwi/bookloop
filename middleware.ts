@@ -32,35 +32,39 @@ export default withAuth(
       return NextResponse.redirect(new URL("/auth", req.url));
     }
 
-    // 2. Logged in but no role set yet → only allow access to /role
+    // 2. Admins bypass all restrictions
+    if (token.role === "ADMIN") {
+      return NextResponse.next();
+    }
+
+    // 3. No role yet → only allow /role
     if (!token.role && pathname !== "/role") {
       return NextResponse.redirect(new URL("/role", req.url));
     }
 
-    // 3. Access to /role
+    // 4. User is accessing /role
     if (pathname === "/role") {
-      // Allow if user has no role yet
       if (!token.role) {
-        return NextResponse.next();
+        return NextResponse.next(); // new user choosing role
       }
 
-      // Redirect based on existing role
+      // Redirect users with roles
       if (token.role === "PROVIDER") {
         return token.isFaceVerified
           ? NextResponse.redirect(new URL("/my-listings", req.url))
           : NextResponse.redirect(new URL("/verify", req.url));
       }
 
-      // Other roles (e.g., CUSTOMER)
+      // CUSTOMER → home
       return NextResponse.redirect(new URL("/", req.url));
     }
 
-    // 4. Verified PROVIDER should not access /verify again
+    // 5. Verified PROVIDER should not go to /verify
     if (pathname === "/verify" && isVerifiedProvider) {
       return NextResponse.redirect(new URL("/my-listings", req.url));
     }
 
-    // 5. Unverified PROVIDER accessing protected provider pages (except /verify)
+    // 6. PROVIDER not verified trying to access provider pages
     if (
       token.role === "PROVIDER" &&
       !token.isFaceVerified &&
@@ -70,7 +74,7 @@ export default withAuth(
       return NextResponse.redirect(new URL("/verify", req.url));
     }
 
-    // 6. Non-provider trying to access provider-only paths or /verify
+    // 7. CUSTOMER or other roles trying to access PROVIDER-only or /verify
     if (
       token.role !== "PROVIDER" &&
       (isProviderPath || pathname === "/verify")
@@ -78,11 +82,7 @@ export default withAuth(
       return NextResponse.redirect(new URL("/403", req.url));
     }
 
-    // 7. Admin access protection
-    if (pathname.startsWith("/admin") && token.role !== "ADMIN") {
-      return NextResponse.redirect(new URL("/403", req.url));
-    }
-
+    // ✅ Default: allow
     return NextResponse.next();
   },
   {
