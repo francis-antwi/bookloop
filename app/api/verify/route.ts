@@ -4,13 +4,14 @@ import { v2 as cloudinary } from "cloudinary";
 import axios from "axios";
 import sharp from "sharp";
 
-// ========== Cloudinary Config ==========
+// ===== Cloudinary Config =====
 cloudinary.config({
   cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!,
   api_key: process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY!,
   api_secret: process.env.CLOUDINARY_API_SECRET!,
 });
 
+// ===== Constants =====
 const OCR_MAX_RETRIES = 3;
 const OCR_TIMEOUT_MS = 60000;
 const MAX_IMAGE_SIZE = 5_000_000;
@@ -53,7 +54,7 @@ interface VerificationResult {
   };
 }
 
-// ========== Utility ==========
+// ===== Utilities =====
 const validateFile = (file: File) => {
   if (!file.type.match(/image\/(jpeg|jpg|png)/)) {
     throw new Error("Only JPEG or PNG images are allowed");
@@ -152,8 +153,17 @@ const extractIDInfo = (text: string): IDInfo => {
   if (!idDOB) warnings.push("Date of birth missing.");
 
   return {
-    idName, idNumber, personalIdNumber, idDOB, idIssueDate, idExpiryDate,
-    idIssuer, placeOfIssue, idType, idGender, idNationality,
+    idName,
+    idNumber,
+    personalIdNumber,
+    idDOB,
+    idIssueDate,
+    idExpiryDate,
+    idIssuer,
+    placeOfIssue,
+    idType,
+    idGender,
+    idNationality,
     rawText: text,
     extractionWarnings: warnings
   };
@@ -179,7 +189,7 @@ const compareFaces = async (selfieUrl: string, idUrl: string) => {
   return { confidence };
 };
 
-// ========== Main Handler ==========
+// ===== Main Handler =====
 export async function POST(req: Request) {
   try {
     const formData = await req.formData();
@@ -224,41 +234,62 @@ export async function POST(req: Request) {
       },
     };
 
-    // Register if requested
-    if (shouldRegister && email) {
-      const registerRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          name: extracted.idName,
-          idNumber: extracted.idNumber || extracted.personalIdNumber,
-          dob: extracted.idDOB,
-          idType: extracted.idType,
-          idIssuer: extracted.idIssuer,
-          idIssueDate: extracted.idIssueDate,
-          idExpiryDate: extracted.idExpiryDate,
-          placeOfIssue: extracted.placeOfIssue,
-          gender: extracted.idGender,
-          nationality: extracted.idNationality,
-          imageUrl: idUrl,
-          selfieUrl,
-          role: "PROVIDER",
-          verified: true,
-          rawText,
-        }),
-      });
+    const BASE_URL = process.env.BASE_URL || process.env.NEXT_PUBLIC_BASE_URL;
+    if (!BASE_URL) throw new Error("Missing BASE_URL in environment");
 
-      const regData = await registerRes.json();
-      response.registration = {
-        success: registerRes.ok,
-        userId: regData?.userId,
-        error: regData?.error,
-      };
+    if (shouldRegister && email) {
+      try {
+        const registerRes = await fetch(`${BASE_URL}/api/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email,
+            name: extracted.idName,
+            idNumber: extracted.idNumber || extracted.personalIdNumber,
+            dob: extracted.idDOB,
+            idType: extracted.idType,
+            idIssuer: extracted.idIssuer,
+            idIssueDate: extracted.idIssueDate,
+            idExpiryDate: extracted.idExpiryDate,
+            placeOfIssue: extracted.placeOfIssue,
+            gender: extracted.idGender,
+            nationality: extracted.idNationality,
+            imageUrl: idUrl,
+            selfieUrl,
+            role: "PROVIDER",
+            verified: true,
+            rawText,
+          }),
+        });
+
+        const regData = await registerRes.json();
+        response.registration = {
+          success: registerRes.ok,
+          userId: regData?.userId,
+          error: regData?.error,
+        };
+
+        if (!registerRes.ok) {
+          console.error("❌ Registration failed:", {
+            status: registerRes.status,
+            body: regData,
+          });
+        }
+      } catch (regErr: any) {
+        console.error("❌ Registration error:", {
+          message: regErr.message,
+          stack: regErr.stack,
+        });
+
+        response.registration = {
+          success: false,
+          error: regErr.message,
+        };
+      }
     }
 
     return NextResponse.json(response);
-  }   } catch (error: any) {
+  } catch (error: any) {
     console.error("❌ [VERIFY ERROR]:", {
       message: error?.message,
       stack: error?.stack,
@@ -274,3 +305,4 @@ export async function POST(req: Request) {
       { status: 500 }
     );
   }
+}
