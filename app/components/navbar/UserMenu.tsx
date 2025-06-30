@@ -8,9 +8,8 @@ import MenuItem from "./MenuItem";
 import { User } from "@prisma/client";
 import useRegisterModal from "@/app/hooks/useRegisterModal";
 import useLoginModal from "@/app/hooks/useLoginModal";
-import { signOut } from "next-auth/react";
 import useRentModal from "@/app/hooks/useRental";
-import { useSession } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface UserMenuProps {
@@ -28,7 +27,7 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuItemsRef = useRef<(HTMLDivElement | null)[]>([]);
-  const { data: session } = useSession();
+const { data: session, update } = useSession(); 
 
   const toggleOpen = useCallback(() => {
     setIsOpen((value) => !value);
@@ -110,15 +109,18 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
     }
   }, [isOpen]);
 
-  const handleSignOut = async () => {
-    setIsSigningOut(true);
-    try {
-      await signOut({ redirect: false });
-      router.push("/");
-    } finally {
-      setIsSigningOut(false);
-    }
-  };
+const handleSignOut = async () => {
+  setIsSigningOut(true);
+  try {
+    await signOut({ redirect: true, callbackUrl: "/" });
+    await update();
+  } catch (error) {
+    console.error("Sign out failed:", error);
+  } finally {
+    setIsSigningOut(false);
+  }
+};
+
 
   const isVerifiedProvider =
     currentUser?.role === "PROVIDER" && currentUser?.isFaceVerified;
