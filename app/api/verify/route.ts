@@ -40,7 +40,12 @@ export async function POST(req: Request) {
     // === Send to Taggun (keep original file, no resize) ===
     const ocrResponse = await sendOriginalToTaggun(idFile);
 
+// Log raw OCR result
+console.log('📄 [RAW OCR RESPONSE from Taggun]:', JSON.stringify(ocrResponse, null, 2));
+
+
     const extractedData = extractIDInfo(ocrResponse);
+    console.log('📦 [Extracted ID Fields]:', extractedData);
     const isValid = validateExtractedData(extractedData);
 
     if (!isValid) {
@@ -49,6 +54,7 @@ export async function POST(req: Request) {
 
     // === Compare faces ===
     const matchResult = await matchFace(selfieUrl, idUrl);
+    console.log('🧠 [Face Match Confidence]:', matchResult.confidence);
     if (!matchResult.isMatch) {
       return NextResponse.json({ error: "Face does not match ID", confidence: matchResult.confidence }, { status: 401 });
     }
@@ -75,6 +81,7 @@ export async function POST(req: Request) {
       success: true,
       verified: true,
       matchConfidence: matchResult.confidence,
+      
       extractedData,
     });
   } catch (err: any) {

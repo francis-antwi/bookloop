@@ -19,22 +19,27 @@ export async function createUserIfNeeded(data: RegistrationData) {
     where: { email: data.email }
   });
 
-  if (existingUser) return existingUser;
+  if (existingUser) {
+    console.log("👤 [User already exists]:", existingUser.email);
+    return existingUser;
+  }
 
-  return await prisma.user.create({
-    data: {
-      email: data.email,
-      name: data.name,
-      contactPhone: data.contactPhone,
-      role: data.role,
-      selfieUrl: data.selfieUrl,
-      idUrl: data.idUrl,
-      idName: data.idName,
-      idNumber: data.idNumber,
-      idDOB: data.idDOB,
-      idExpiryDate: data.idExpiryDate,
-      idIssuer: data.idIssuer,
-      isVerified: true, // optional, depending on your schema
-    }
-  });
+  const userPayload = {
+    email: data.email,
+    name: data.name,
+    contactPhone: data.contactPhone,
+    role: data.role,
+    selfieUrl: data.selfieUrl,
+    idUrl: data.idUrl,
+    idName: data.idName || null,
+    idNumber: data.idNumber || null,
+    idDOB: data.idDOB || null,
+    idExpiryDate: data.idExpiryDate || null,
+    idIssuer: data.idIssuer || null,
+    isVerified: true,
+  };
+
+  console.log("💾 [Creating new PROVIDER user]:", userPayload);
+
+  return await prisma.user.create({ data: userPayload });
 }
