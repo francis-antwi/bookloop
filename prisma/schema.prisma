@@ -32,46 +32,46 @@ enum NotificationType {
 }
 
 model User {
-  id               String     @id @default(uuid())
-  name             String?
-  email            String?    @unique
-  emailVerified    DateTime?
-  contactPhone     String?    @unique
-  image            String?
-  hashedPassword   String?
-  role             UserRole?  @default(CUSTOMER)
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
+  id                String   @id @default(cuid())
+  email             String   @unique
+  name              String
+  contactPhone      String?  @unique
+  hashedPassword    String?
+  role              UserRole
+  isOtpVerified     Boolean  @default(false)
+  isFaceVerified    Boolean  @default(false)
+  verified          Boolean  @default(false)
 
-  favouriteIds     String[]
+  selfieImage       String?
+  idImage           String?
+  faceConfidence    Float?
 
-  resetToken       String?
-  resetTokenExpiry DateTime?
+  idName            String?
+  idNumber          String?
+  personalIdNumber  String?
+  idDOB             DateTime?
+  idExpiryDate      DateTime?
+  idIssueDate       DateTime?
+  idIssuer          String?
+  idType            String?
+  nationality       String?     // ✅ Added
+  gender            String?     // ✅ Added
+  placeOfIssue      String?     // ✅ Added
+  rawText           String?     // ✅ Added
 
-  // Face Verification Fields
-  selfieImage      String?
-  idImage          String?
-  faceConfidence   Float?
-  isFaceVerified   Boolean    @default(false)
+  emailVerified     DateTime?
+  image             String?
+  resetToken        String?
+  resetTokenExpiry  DateTime?
 
-  // ID Information
-  idName           String?
-  idNumber         String?
-  idDOB            DateTime?
-  idExpiryDate     DateTime?
-  idIssuer         String?
-  personalIdNumber String?
-  idIssueDate      DateTime?
+  favouriteIds      String[]    @default([])
+  accounts          Account[]   // if you're using OAuth
+  listings          Listing[]
+  reservations      Reservation[]
+  notifications     Notification[]
 
-  // OTP Status (not used for verification)
-  isOtpVerified    Boolean    @default(false)
-  verified            Boolean  @default(false)
-  nationality       String?
-  // Relations
-  accounts         Account[]
-  listings         Listing[]
-  reservations     Reservation[]
-  notifications    Notification[]
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
 }
 
 model OTPVerification {

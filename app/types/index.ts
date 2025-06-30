@@ -6,6 +6,7 @@ import {
   ReservationStatus,
   UserRole,
 } from "@prisma/client";
+
 export type SafeUser = Omit<
   User,
   "createdAt" | "updatedAt" | "emailVerified" | "otpExpiresAt"
@@ -24,15 +25,21 @@ export type SafeUser = Omit<
   idImage: string | null;
   faceConfidence: number | null;
   isFaceVerified: boolean;
+
   idName: string | null;
   idNumber: string | null;
+  personalIdNumber: string | null;
   idDOB: string | null;
   idExpiryDate: string | null;
-  idIssuer: string | null;
-  personalIdNumber: string | null;
   idIssueDate: string | null;
-};
+  idIssuer: string | null;
+  idType: string | null;
 
+  nationality: string | null;     // ✅ newly added
+  gender: string | null;          // ✅ newly added
+  placeOfIssue: string | null;    // ✅ newly added
+  rawText: string | null;         // ✅ newly added
+};
 
 export type SafeListing = Omit<Listing, "createdAt"> & {
   createdAt: string;
