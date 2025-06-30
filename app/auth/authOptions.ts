@@ -58,7 +58,7 @@ export const authOptions: AuthOptions = {
   pages: {
     signIn: "/", // Redirect to home page for sign-in
     error: "/auth/error", // Custom error page
-    newUser: null, // Prevent automatic redirect to /role for new users by NextAuth itself
+    newUser: null, // Prevent automatic redirect to /role for new users
   },
 
   session: {
@@ -82,14 +82,8 @@ export const authOptions: AuthOptions = {
         httpOnly: true,
         sameSite: "lax",
         path: "/",
-        // --- MODIFIED LOGIC FOR COOKIE DOMAIN ---
-        // Set secure to true in production
-        secure: process.env.NODE_ENV === "production",
-        // Dynamically set domain for Vercel deployments
-        domain: process.env.VERCEL_URL
-          ? `.${process.env.VERCEL_URL.replace("https://", "").replace("http://", "")}`
-          : undefined, // If not Vercel, let it default to current domain
-        // --- END MODIFIED LOGIC ---
+        secure: true, // Should be true in production
+        domain: "bookloop-eight.vercel.app", // Your domain
       },
     },
   },
@@ -103,29 +97,23 @@ export const authOptions: AuthOptions = {
           where: { email: user.email ?? "" },
         });
 
-        // If no existing user, redirect to /role to allow them to complete their profile
+        // If no existing user, allow sign-in to proceed (likely to /role for registration)
         if (!existingUser) {
-          return "/role"; // Explicitly redirect new Google users to /role
+          console.log(`Google signIn: No existing user found for ${user.email}. Allowing registration flow.`);
+          return true;
         }
 
-        // --- START NEW LOGGING FOR EXISTING USERS --- (Removed logs)
-        // --- END NEW LOGGING ---
-
-        // --- MODIFIED LOGIC HERE --- (Removed log)
-        // If an existing user does not have a role defined, redirect them to /role
-        // This check is now less critical here as the JWT callback will ensure a role is always present.
-        if (!existingUser.role) {
-          return "/role";
-        }
-        // --- END MODIFIED LOGIC ---
+        console.log(`Google signIn: Found existing user ${existingUser.email} with role ${existingUser.role}.`);
 
         // If existing user is an ADMIN, allow sign-in
         if (existingUser.role === UserRole.ADMIN) {
+          console.log(`Google signIn: User is ADMIN. Allowing login.`);
           return true;
         }
 
         // If user is not OTP verified, redirect to /verify
         if (!existingUser.isOtpVerified) {
+          console.log(`Google signIn: User ${existingUser.email} is not OTP verified. Redirecting to /verify.`);
           return "/verify";
         }
 
@@ -134,10 +122,14 @@ export const authOptions: AuthOptions = {
           existingUser.role === UserRole.PROVIDER &&
           !existingUser.isFaceVerified
         ) {
+          console.log(`Google signIn: User ${existingUser.email} is PROVIDER but isFaceVerified is FALSE. Redirecting to /verify.`);
           return "/verify";
+        } else if (existingUser.role === UserRole.PROVIDER && existingUser.isFaceVerified) {
+            console.log(`Google signIn: User ${existingUser.email} is PROVIDER and isFaceVerified is TRUE. Allowing login.`);
         }
 
-        // For all other cases (existing user with role, OTP verified, and face verified if PROVIDER), allow sign-in
+
+        // For all other cases, allow sign-in
         return true;
       }
 
@@ -156,7 +148,12 @@ export const authOptions: AuthOptions = {
           data: { role: session.role },
         });
 
-        // The problematic line that was resetting isFaceVerified was already removed.
+        // Removed the problematic line:
+        // if (session.role === UserRole.PROVIDER) {
+        //   token.isFaceVerified = false; // This line was causing the issue
+        // }
+        // The `isFaceVerified` status should be managed by your verification flow,
+        // not reset here.
       }
 
       // If a user object is provided (on initial sign-in), populate token with user data
@@ -166,8 +163,8 @@ export const authOptions: AuthOptions = {
           id: user.id,
           name: user.name,
           email: user.email,
-          // Ensure role is always set, default to CUSTOMER if null/undefined from DB
-          role: user.role ?? UserRole.CUSTOMER, // <-- ADDED DEFAULT ROLE HERE
+          image: user.image,
+          role: user.role,
           isOtpVerified: user.isOtpVerified ?? true,
           otpCode: user.otpCode ?? null,
           otpExpiresAt: user.otpExpiresAt?.toISOString() ?? null,
@@ -186,10 +183,6 @@ export const authOptions: AuthOptions = {
             idIssueDate: user.idIssueDate?.toISOString() ?? null,
           }),
         };
-        // Also ensure image is set from user object if available
-        if (user.image) {
-            token.image = user.image;
-        }
       }
 
       return token;
