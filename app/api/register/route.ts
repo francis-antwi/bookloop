@@ -145,11 +145,12 @@ export async function POST(request: Request) {
       }
 
       if (isGoogleAuth && !extractionComplete) {
-        return NextResponse.json({
-          success: false,
-          skip: true,
-          message: "Google PROVIDER is not fully verified. User not saved."
-        }, { status: 200 });
+       return NextResponse.json({
+  error: "Google PROVIDER is not fully verified. User not saved.",
+  missing: ['extractionComplete'],
+  payload: body
+}, { status: 400 });
+
       }
     }
 

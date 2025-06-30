@@ -107,13 +107,23 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
       const registerRes = await axios.post('/api/register', registrationData);
       const registerData = registerRes.data;
 
-      if (registerData.shouldAutoLogin) {
-        toast.success('Verification complete! Logging you in...');
-        await update();
-        router.push('/');
-        onComplete?.();
-        return;
-      }
+     const registerData = registerRes.data;
+console.log("✅ Registration response:", registerData);
+
+if (!registerData.success) {
+  toast.error(registerData.message || "Registration failed");
+  return;
+}
+
+if (registerData.shouldAutoLogin) {
+  toast.success('Verification complete! Logging you in...');
+  await update();
+  router.push('/');
+  onComplete?.();
+  return;
+}
+
+toast.error("Verification complete, but auto-login failed. Please log in manually.");
 
       await signIn('email', { email: registrationData.email, redirect: false });
       onComplete?.();
