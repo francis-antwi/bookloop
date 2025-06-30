@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { v2 as cloudinary } from "cloudinary";
+const cloudinary = require("cloudinary").v2;
 import axios from "axios";
 import FormData from "form-data";
 import { Readable } from "stream";
