@@ -105,6 +105,15 @@ export const authOptions: AuthOptions = {
 
         console.log(`Google signIn: Found existing user ${existingUser.email} with role ${existingUser.role}.`);
 
+        // --- NEW LOGIC ADDED HERE ---
+        // If an existing user does not have a role defined, redirect them to /role
+        if (!existingUser.role) {
+          console.log(`Google signIn: Existing user ${existingUser.email} has no role defined. Redirecting to /role.`);
+          return "/role";
+        }
+        // --- END NEW LOGIC ---
+
+
         // If existing user is an ADMIN, allow sign-in
         if (existingUser.role === UserRole.ADMIN) {
           console.log(`Google signIn: User is ADMIN. Allowing login.`);
@@ -128,7 +137,7 @@ export const authOptions: AuthOptions = {
             console.log(`Google signIn: User ${existingUser.email} is PROVIDER and isFaceVerified is TRUE. Allowing login.`);
         }
 
-        // For all other cases, allow sign-in
+        // For all other cases, allow sign-in (redirects to pages.signIn which is "/")
         return true;
       }
 
