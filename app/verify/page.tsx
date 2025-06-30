@@ -81,8 +81,8 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
         throw new Error(response.data.error || 'Verification failed');
       }
 
-      const extractedData = response.data.document || {};
-      const confidence = response.data.confidence || extractedData.faceConfidence || 95;
+      const extractedData = response.data.extractedData || {};
+      const confidence = response.data.matchConfidence || extractedData.faceConfidence || 95;
 
       const registrationData = {
         email: session?.user?.email,
@@ -165,7 +165,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
             <span className="text-sm text-gray-500">{currentStep === 'selfie' ? '1' : '2'} of 2</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
-            <div 
+            <div
               className="bg-gradient-to-r from-blue-500 to-indigo-600 h-2 rounded-full transition-all duration-500 ease-out"
               style={{ width: currentStep === 'selfie' ? '50%' : '100%' }}
             />
@@ -186,7 +186,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
 
         <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
           {currentStep === 'selfie' ? (
-            <SelfieStep 
+            <SelfieStep
               selfieImage={selfieImage}
               onSelfieCapture={handleSelfieCapture}
               onNext={() => setCurrentStep('id')}
@@ -217,7 +217,6 @@ const SelfieStep = ({ selfieImage, onSelfieCapture, onNext }) => (
       <h2 className="text-xl font-semibold text-gray-900 mb-2">Face Verification</h2>
       <p className="text-gray-600 text-sm">Take a clear selfie for identity confirmation</p>
     </div>
-
     <div className="relative">
       <Camera onCapture={onSelfieCapture} />
       {selfieImage && (
@@ -226,14 +225,12 @@ const SelfieStep = ({ selfieImage, onSelfieCapture, onNext }) => (
         </div>
       )}
     </div>
-
     {selfieImage && (
-      <SuccessMessage 
-        title="Selfie captured successfully!" 
-        description="Ready to proceed to next step" 
+      <SuccessMessage
+        title="Selfie captured successfully!"
+        description="Ready to proceed to next step"
       />
     )}
-
     <div className="flex gap-3">
       <button
         onClick={onNext}
@@ -256,7 +253,6 @@ const IDStep = ({ idFile, onIdUpload, onBack, onSubmit, isLoading }) => (
       <h2 className="text-xl font-semibold text-gray-900 mb-2">ID Verification</h2>
       <p className="text-gray-600 text-sm">Upload a government-issued ID document</p>
     </div>
-
     <div className="relative">
       <input
         type="file"
@@ -266,8 +262,8 @@ const IDStep = ({ idFile, onIdUpload, onBack, onSubmit, isLoading }) => (
         disabled={isLoading}
         className="hidden"
       />
-      <label 
-        htmlFor="id-upload" 
+      <label
+        htmlFor="id-upload"
         className="cursor-pointer block border-2 border-dashed border-gray-300 hover:border-blue-400 rounded-xl p-8 text-center transition-all duration-200 hover:bg-blue-50"
       >
         <div className="space-y-4">
@@ -286,15 +282,13 @@ const IDStep = ({ idFile, onIdUpload, onBack, onSubmit, isLoading }) => (
         </div>
       )}
     </div>
-
     {idFile && (
-      <SuccessMessage 
-        title="Document uploaded" 
-        description={idFile.name} 
-        truncate 
+      <SuccessMessage
+        title="Document uploaded"
+        description={idFile.name}
+        truncate
       />
     )}
-
     <div className="flex gap-3">
       <button
         onClick={onBack}
@@ -303,7 +297,6 @@ const IDStep = ({ idFile, onIdUpload, onBack, onSubmit, isLoading }) => (
         <FiArrowLeft className="text-sm" />
         <span>Back</span>
       </button>
-      
       <button
         onClick={onSubmit}
         disabled={!idFile || isLoading}
@@ -332,9 +325,7 @@ const SuccessMessage = ({ title, description, truncate = false }) => (
     </div>
     <div className={truncate ? 'flex-1' : ''}>
       <p className="font-medium text-green-800">{title}</p>
-      <p className={`text-sm text-green-600 ${truncate ? 'truncate' : ''}`}>
-        {description}
-      </p>
+      <p className={`text-sm text-green-600 ${truncate ? 'truncate' : ''}`}>{description}</p>
     </div>
   </div>
 );
