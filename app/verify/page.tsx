@@ -117,9 +117,13 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
       // ✅ Fallback for email users
       await signIn('email', { email: registrationData.email, redirect: false });
 
-      await update();
-      toast.success('Verification complete!');
-      router.push('/');
+      if (registerData.shouldAutoLogin) {
+  await update(); // 🔄 refresh session to reflect verification
+  toast.success('Verification complete!');
+  router.push('/');
+  return;
+}
+
     } catch (error: any) {
       const errorData = error.response?.data;
       const errorMsg = errorData?.error || error.message || 'Verification failed';
