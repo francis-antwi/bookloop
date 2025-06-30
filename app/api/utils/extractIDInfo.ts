@@ -1,5 +1,4 @@
 export function extractIDInfo(data: any) {
-  // Defensive extraction of nested text string:
   const rawText = data?.text?.text;
 
   if (typeof rawText !== "string") {
@@ -7,33 +6,48 @@ export function extractIDInfo(data: any) {
     return {};
   }
 
-  const lines = rawText.split("\n").map((line: string) => line.trim());
+  const lines = rawText.split("\n").map((line: string) => line.trim()).filter(Boolean);
+  const fullText = lines.join(" ");
 
-  let idName = "";
-  let idNumber = "";
-  let idDOB = "";
-  let idExpiryDate = "";
-  let idIssuer = "";
+  const getDate = (text: string) => {
+    const match = text.match(/(\d{2})[\/\-](\d{2})[\/\-](\d{4})/);
+    return match ? `${match[3]}-${match[2]}-${match[1]}` : null;
+  };
 
-  for (const line of lines) {
-    const lower = line.toLowerCase();
+  const extractMatch = (regex: RegExp, join = false) => {
+    const match = fullText.match(regex);
+    return match ? (join ? match.slice(1).join(" ") : match[1]) : null;
+  };
 
-    if (!idName && /name|surname/.test(lower)) {
-      idName = line.split(":").pop()?.trim() || line;
-    }
-    if (!idNumber && /id|number/.test(lower)) {
-      idNumber = line.split(":").pop()?.trim() || line;
-    }
-    if (!idDOB && /(dob|date of birth)/.test(lower)) {
-      idDOB = line.split(":").pop()?.trim() || line;
-    }
-    if (!idExpiryDate && /(expiry|exp|expires)/.test(lower)) {
-      idExpiryDate = line.split(":").pop()?.trim() || line;
-    }
-    if (!idIssuer && /(authority|issuer|issued)/.test(lower)) {
-      idIssuer = line.split(":").pop()?.trim() || line;
-    }
-  }
+  const surname = extractMatch(/Surname\/Nom\s+([A-Z]+)/i);
+  const firstnames = extractMatch(/Firstnames\/Prénoms\s+([A-Z]+)/i);
+  const idName = [firstnames, surname].filter(Boolean).join(" ");
 
-  return { idName, idNumber, idDOB, idExpiryDate, idIssuer };
+  const idDOB = getDate(extractMatch(/Date of Birth.*?(\d{2}\/\d{2}\/\d{4})/i) ?? "");
+  const idIssueDate = getDate(extractMatch(/Date of Issuance.*?(\d{2}\/\d{2}\/\d{4})/i) ?? "");
+  const idExpiryDate = getDate(extractMatch(/Date of Expiry.*?(\d{2}\/\d{2}\/\d{4})/i) ?? "");
+
+  const idNumber = extractMatch(/Document Number.*?([A-Z0-9]+)/i)
+    ?? extractMatch(/([A-Z]{2}[0-9]{7,})/); // fallback if not labeled
+
+  const idIssuer = extractMatch(/Place of Issuance.*?([A-Z]+)/i)
+    ?? extractMatch(/ACCRA|KUMASI|TAKORADI|TAMALE/i);
+
+  const personalIdNumber = extractMatch(/(GHA-\d{12})/);
+
+  const gender = extractMatch(/Sex\/Sexe\s+([MF])\b/i);
+  const nationality = extractMatch(/Nationality\/Nationalité\s+([A-Z]+)/i);
+
+  return {
+    idName: idName || null,
+    idNumber: idNumber || null,
+    idDOB: idDOB || null,
+    idIssueDate: idIssueDate || null,
+    idExpiryDate: idExpiryDate || null,
+    idIssuer: idIssuer || null,
+    personalIdNumber: personalIdNumber || null,
+    gender: gender || null,
+    nationality: nationality || null,
+    rawText,
+  };
 }

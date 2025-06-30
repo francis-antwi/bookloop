@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-const cloudinary = require("cloudinary").v2;
+import { v2 as cloudinary } from "cloudinary";
 import axios from "axios";
 import FormData from "form-data";
 import { Readable } from "stream";
@@ -8,7 +8,6 @@ import { createUserIfNeeded } from "../utils/conditionalRegistration";
 import { extractIDInfo } from "../utils/extractIDInfo";
 import { matchFace } from "../utils/faceMatch";
 
-
 // === Cloudinary Config ===
 cloudinary.config({
   cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!,
@@ -16,7 +15,6 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET!,
 });
 
-// === POST Handler ===
 export async function POST(req: Request) {
   try {
     const formData = await req.formData();
@@ -37,76 +35,91 @@ export async function POST(req: Request) {
       uploadToCloudinary(idFile, "ids"),
     ]);
 
-    // === Send to Taggun (keep original file, no resize) ===
+    // === Send to Taggun ===
     const ocrResponse = await sendOriginalToTaggun(idFile);
-
-// Log raw OCR result
-console.log('📄 [RAW OCR RESPONSE from Taggun]:', JSON.stringify(ocrResponse, null, 2));
-
+    console.log("\uD83D\uDCC4 [RAW OCR RESPONSE from Taggun]:", JSON.stringify(ocrResponse, null, 2));
 
     const extractedData = extractIDInfo(ocrResponse);
-    console.log('📦 [Extracted ID Fields]:', extractedData);
-    const isValid = validateExtractedData(extractedData);
+    console.log("\uD83D\uDCE6 [Extracted ID Fields]:", extractedData);
 
+    const isValid = validateExtractedData(extractedData);
     if (!isValid) {
       return NextResponse.json({ error: "Invalid ID document" }, { status: 422 });
     }
 
-    // === Compare faces ===
+    // === Face Comparison ===
     const matchResult = await matchFace(selfieUrl, idUrl);
-    console.log('🧠 [Face Match Confidence]:', matchResult.confidence);
+    console.log("\uD83E\uDE1D [Face Match Confidence]:", matchResult.confidence);
     if (!matchResult.isMatch) {
-      return NextResponse.json({ error: "Face does not match ID", confidence: matchResult.confidence }, { status: 401 });
+      return NextResponse.json({
+        error: "Face does not match ID",
+        confidence: matchResult.confidence,
+      }, { status: 401 });
     }
 
-    // === Optionally register user (for Google OAuth case) ===
     if (shouldRegister && oauthEmail && role === "PROVIDER") {
-      const user = await createUserIfNeeded({
-        email: oauthEmail,
-        role,
-        idImageUrl: idUrl,
-        selfieUrl,
-        idName: extractedData.idName,
-        idNumber: extractedData.idNumber,
-        idDOB: extractedData.idDOB,
-        idExpiryDate: extractedData.idExpiryDate,
-        idIssuer: extractedData.idIssuer,
-        isVerified: true,
-      });
-      return NextResponse.json({ success: true, verified: true, user });
-    }
+  const user = await createUserIfNeeded({
+    email: oauthEmail,
+    role,
+    selfieImage: selfieUrl,
+    idImage: idUrl,
+    idName: extractedData.idName,
+    idNumber: extractedData.idNumber || extractedData.personalIdNumber,
+    personalIdNumber: extractedData.personalIdNumber,
+    idType: extractedData.idType,
+    idDOB: extractedData.idDOB,
+    idExpiryDate: extractedData.idExpiryDate,
+    idIssueDate: extractedData.idIssueDate,
+    idIssuer: extractedData.idIssuer,
+    nationality: extractedData.nationality,
+    gender: extractedData.gender,
+    placeOfIssue: extractedData.placeOfIssue,
+    rawText: extractedData.rawText,
+    isVerified: true,
+  });
 
-    // === Default success response ===
+  return NextResponse.json({
+    success: true,
+    verified: true,
+    user,
+    selfieUrl,
+    imageUrl: idUrl,
+    extractedData,
+  });
+}
+
+
     return NextResponse.json({
       success: true,
       verified: true,
+      selfieUrl,
+      imageUrl: idUrl,
       matchConfidence: matchResult.confidence,
-      
-      extractedData,
+      extractedData: {
+        ...extractedData,
+        selfieUrl,
+        idUrl,
+        faceConfidence: matchResult.confidence,
+      },
     });
   } catch (err: any) {
-    console.error("❌ [VERIFY ERROR]:", err);
+    console.error("\u274C [VERIFY ERROR]:", err);
     return NextResponse.json({ error: err.message || "Verification failed" }, { status: 500 });
   }
 }
 
-// === Upload to Cloudinary ===
 async function uploadToCloudinary(file: File, folder: string): Promise<string> {
   const buffer = Buffer.from(await file.arrayBuffer());
   const upload = await new Promise<{ secure_url: string }>((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      { folder },
-      (error, result) => {
-        if (error || !result) return reject(error);
-        resolve(result as any);
-      }
-    );
+    const stream = cloudinary.uploader.upload_stream({ folder }, (error, result) => {
+      if (error || !result) return reject(error);
+      resolve(result as any);
+    });
     Readable.from(buffer).pipe(stream);
   });
   return upload.secure_url;
 }
 
-// === Send original image file to Taggun ===
 async function sendOriginalToTaggun(idFile: File) {
   const buffer = Buffer.from(await idFile.arrayBuffer());
 

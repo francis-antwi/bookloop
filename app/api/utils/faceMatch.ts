@@ -20,7 +20,7 @@ export async function matchFace(
     });
 
     const { confidence } = response.data;
-    const isMatch = confidence >= 75;
+    const isMatch = confidence >= 80;
 
     return { confidence, isMatch };
   } catch (error: any) {
