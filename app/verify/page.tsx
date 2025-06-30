@@ -36,7 +36,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
   } | null>(null);
 
   const handleSelfieCapture = (blob: Blob) => setSelfieImage(blob);
-  
+
   const handleIdUpload = (file: File) => {
     if (!file.type.match(/image\/(jpeg|png|jpg)/)) {
       toast.error('Only JPEG/PNG images are allowed');
@@ -52,116 +52,105 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
     }
     setIdFile(file);
   };
-const submitVerification = async () => {
-  if (!selfieImage || !idFile) {
-    toast.error('Please complete all verification steps');
-    return;
-  }
 
-  setIsLoading(true);
-  setVerificationStatus(null);
-
-  try {
-    // 1. Prepare FormData with correct field names
-    const verificationFormData = new FormData();
-    verificationFormData.append('selfie', new File([selfieImage], 'selfie.jpg', { type: 'image/jpeg' }));
-    verificationFormData.append('idImage', idFile);
-    verificationFormData.append('email', session?.user?.email || '');
-
-    // Debug: Log FormData entries to verify correct data
-    for (let pair of verificationFormData.entries()) {
-      console.log(`${pair[0]}:`, pair[1]);
+  const submitVerification = async () => {
+    if (!selfieImage || !idFile) {
+      toast.error('Please complete all verification steps');
+      return;
     }
 
-    // 2. Send verification request
-    const response = await axios.post('/api/verify', verificationFormData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 60000
-    });
-
-    if (!response.data.success) {
-      throw new Error(response.data.error || 'Verification failed');
-    }
-
-    const extractedData = response.data.document || {};
-    const confidence = response.data.confidence || extractedData.faceConfidence || 95;
-
- const registrationData = {
-  email: session?.user?.email,
-  name: extractedData.idName || 'Verified User',
-  role: role || 'PROVIDER',
-  verified: true,
-  faceConfidence: confidence,
-  selfieUrl: response.data.selfieUrl,
-  imageUrl: response.data.imageUrl,
-  idName: extractedData.idName,
-  idNumber: extractedData.idNumber || extractedData.personalIdNumber,
-  idType: extractedData.idType,
-  idDOB: extractedData.idDOB,
-  idExpiryDate: extractedData.idExpiryDate,
-  idIssueDate: extractedData.idIssueDate,
-  idIssuer: extractedData.idIssuer,
-  nationality: extractedData.nationality,
-  gender: extractedData.gender,
-  placeOfIssue: extractedData.placeOfIssue,
-  rawText: extractedData.rawText,
-  extractionComplete: true
-};
-
+    setIsLoading(true);
+    setVerificationStatus(null);
 
     try {
-  await axios.post('/api/register', registrationData);
-} catch (regError) {
-  const regErrorData = regError.response?.data;
+      const verificationFormData = new FormData();
+      verificationFormData.append('selfie', new File([selfieImage], 'selfie.jpg', { type: 'image/jpeg' }));
+      verificationFormData.append('idImage', idFile);
+      verificationFormData.append('email', session?.user?.email || '');
 
-  console.error('❌ Registration failed:', regErrorData?.error || regError.message);
+      for (let pair of verificationFormData.entries()) {
+        console.log(`${pair[0]}:`, pair[1]);
+      }
 
-  if (regErrorData?.missing) {
-    console.warn('🔍 Missing fields:', regErrorData.missing);
-  }
+      const response = await axios.post('/api/verify', verificationFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 60000
+      });
 
-  if (regErrorData?.payload) {
-    console.debug('📦 Payload that caused issue:', regErrorData.payload);
-}
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Verification failed');
+      }
 
+      const extractedData = response.data.document || {};
+      const confidence = response.data.confidence || extractedData.faceConfidence || 95;
 
-    // 5. Update session
-    await update({
-      role: 'PROVIDER',
-      isFaceVerified: true,
-      verificationData: extractedData
-    });
+      const registrationData = {
+        email: session?.user?.email,
+        name: extractedData.idName || 'Verified User',
+        role: role || 'PROVIDER',
+        verified: true,
+        faceConfidence: confidence,
+        selfieImage: response.data.selfieUrl,
+        idImage: response.data.imageUrl,
+        idName: extractedData.idName || null,
+        idNumber: extractedData.idNumber || extractedData.personalIdNumber || null,
+        personalIdNumber: extractedData.personalIdNumber || null,
+        idType: extractedData.idType || null,
+        idDOB: extractedData.idDOB || null,
+        idExpiryDate: extractedData.idExpiryDate || null,
+        idIssueDate: extractedData.idIssueDate || null,
+        idIssuer: extractedData.idIssuer || null,
+        nationality: extractedData.nationality || null,
+        gender: extractedData.gender || null,
+        placeOfIssue: extractedData.placeOfIssue || null,
+        rawText: extractedData.rawText || null,
+        extractionComplete: true
+      };
 
-    toast.success('Verification complete!');
-    onComplete();
+      try {
+        await axios.post('/api/register', registrationData);
+      } catch (regError: any) {
+        const regErrorData = regError.response?.data;
+        console.error('❌ Registration failed:', regErrorData?.error || regError.message);
+        if (regErrorData?.missing) {
+          console.warn('🔍 Missing fields:', regErrorData.missing);
+        }
+        if (regErrorData?.payload) {
+          console.debug('📦 Payload that caused issue:', regErrorData.payload);
+        }
+      }
 
-  } } catch (error: any) {
-  const errorData = error.response?.data;
-  const errorMsg = errorData?.error || error.message || 'Verification failed';
+      await update({
+        role: 'PROVIDER',
+        isFaceVerified: true,
+        verificationData: extractedData
+      });
 
-  console.error('❌ Verification error:', errorMsg);
+      toast.success('Verification complete!');
+      onComplete();
 
-  // Log missing fields if available
-  if (errorData?.missing) {
-    console.warn('🔍 Missing verification fields:', errorData.missing);
-  }
+    } catch (error: any) {
+      const errorData = error.response?.data;
+      const errorMsg = errorData?.error || error.message || 'Verification failed';
 
-  // Log payload that failed (e.g. during /api/register triggered by /api/verify)
-  if (errorData?.payload) {
-    console.debug('📦 Payload that caused the error:', errorData.payload);
-  }
+      console.error('❌ Verification error:', errorMsg);
+      if (errorData?.missing) {
+        console.warn('🔍 Missing verification fields:', errorData.missing);
+      }
+      if (errorData?.payload) {
+        console.debug('📦 Payload that caused the error:', errorData.payload);
+      }
 
-  setVerificationStatus({ success: false, error: errorMsg });
-  toast.error(errorMsg);
-} finally {
-  setIsLoading(false);
-}
-
+      setVerificationStatus({ success: false, error: errorMsg });
+      toast.error(errorMsg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-4">
       <div className="max-w-md mx-auto">
-        {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full mb-4 shadow-lg">
             <FiShield className="text-2xl text-white" />
@@ -170,7 +159,6 @@ const submitVerification = async () => {
           <p className="text-gray-600">You need to pass verification before you can access provider functions</p>
         </div>
 
-        {/* Progress Bar */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-gray-700">Progress</span>
@@ -184,7 +172,6 @@ const submitVerification = async () => {
           </div>
         </div>
 
-        {/* Error Message */}
         {verificationStatus?.success === false && (
           <div className="p-4 bg-red-50 border border-red-200 rounded-xl mb-6">
             <div className="flex items-start gap-3">
@@ -197,7 +184,6 @@ const submitVerification = async () => {
           </div>
         )}
 
-        {/* Step Content */}
         <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
           {currentStep === 'selfie' ? (
             <SelfieStep 
@@ -222,7 +208,6 @@ const submitVerification = async () => {
   );
 };
 
-// Sub-components for better organization
 const SelfieStep = ({ selfieImage, onSelfieCapture, onNext }) => (
   <div className="space-y-6">
     <div className="text-center">
