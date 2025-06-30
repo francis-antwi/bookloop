@@ -37,10 +37,19 @@ export default withAuth(
       return NextResponse.redirect(new URL("/role", req.url));
     }
 
-    // 3. Prevent verified PROVIDERs from going back to /role or /verify
-    if (isVerifiedProvider && (pathname === "/role" || pathname === "/verify")) {
-      return NextResponse.redirect(new URL("/my-listings", req.url));
-    }
+    // 3. Block ALL users who already have a role from re-visiting /role
+if (pathname === "/role") {
+  if (token.role === "PROVIDER") {
+    // If PROVIDER is already verified, go to /my-listings
+    return token.isFaceVerified
+      ? NextResponse.redirect(new URL("/my-listings", req.url))
+      : NextResponse.redirect(new URL("/verify", req.url));
+  }
+
+  // Any other role (e.g. CUSTOMER) just go home
+  return NextResponse.redirect(new URL("/", req.url));
+}
+
 
     // 4. Prevent ANY user with a role from going back to /role
     if (token.role && pathname === "/role") {
