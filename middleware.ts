@@ -8,7 +8,7 @@ export default withAuth(
     const token = req.nextauth?.token;
 
     const publicPaths = ["/auth", "/auth/error", "/api/auth", "/_next"];
-    const isPublic = publicPaths.some(path => pathname.startsWith(path));
+    const isPublic = publicPaths.some((path) => pathname.startsWith(path));
 
     const providerPaths = [
       "/my-listings",
@@ -17,7 +17,7 @@ export default withAuth(
       "/favourites",
       "/notifications",
     ];
-    const isProviderPath = providerPaths.some(path =>
+    const isProviderPath = providerPaths.some((path) =>
       pathname.startsWith(path)
     );
 
@@ -32,22 +32,35 @@ export default withAuth(
       return NextResponse.redirect(new URL("/auth", req.url));
     }
 
-    // 2. Logged in but no role set yet
+    // 2. Logged in but no role set yet → only allow access to /role
     if (!token.role && pathname !== "/role") {
       return NextResponse.redirect(new URL("/role", req.url));
     }
 
-    // 3. Handle role access rules
+    // 3. Access to /role
     if (pathname === "/role") {
+      // Allow if user has no role yet
+      if (!token.role) {
+        return NextResponse.next();
+      }
+
+      // Redirect based on existing role
       if (token.role === "PROVIDER") {
         return token.isFaceVerified
           ? NextResponse.redirect(new URL("/my-listings", req.url))
           : NextResponse.redirect(new URL("/verify", req.url));
       }
+
+      // Other roles (e.g., CUSTOMER)
       return NextResponse.redirect(new URL("/", req.url));
     }
 
-    // 4. PROVIDER not verified trying to access provider pages (not /verify)
+    // 4. Verified PROVIDER should not access /verify again
+    if (pathname === "/verify" && isVerifiedProvider) {
+      return NextResponse.redirect(new URL("/my-listings", req.url));
+    }
+
+    // 5. Unverified PROVIDER accessing protected provider pages (except /verify)
     if (
       token.role === "PROVIDER" &&
       !token.isFaceVerified &&
@@ -57,7 +70,7 @@ export default withAuth(
       return NextResponse.redirect(new URL("/verify", req.url));
     }
 
-    // 5. CUSTOMER or other roles trying to access provider-only pages or /verify
+    // 6. Non-provider trying to access provider-only paths or /verify
     if (
       token.role !== "PROVIDER" &&
       (isProviderPath || pathname === "/verify")
@@ -65,7 +78,7 @@ export default withAuth(
       return NextResponse.redirect(new URL("/403", req.url));
     }
 
-    // 6. Admin protection
+    // 7. Admin access protection
     if (pathname.startsWith("/admin") && token.role !== "ADMIN") {
       return NextResponse.redirect(new URL("/403", req.url));
     }

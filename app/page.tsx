@@ -6,27 +6,23 @@ import EmptyState from "./components/EmptyState";
 import ListingCard from "./components/listings/ListingCard";
 import { SafeListing } from "./types";
 
-
 interface HomeProps {
-  // Accept searchParams as a Promise resolving to flexible key-value pairs
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
+  searchParams: Record<string, string | string[] | undefined>;
 }
 
 const Home = async ({ searchParams }: HomeProps) => {
-  // Await the raw search params
-  const rawParams = await searchParams;
-
-  // Normalize rawParams to IListingsParams expected by getListings
   const params: IListingsParams = {
-    userId: Array.isArray(rawParams.userId) ? rawParams.userId[0] : rawParams.userId,
-    category: Array.isArray(rawParams.category) ? rawParams.category[0] : rawParams.category,
+    userId: Array.isArray(searchParams.userId)
+      ? searchParams.userId[0]
+      : searchParams.userId,
+    category: Array.isArray(searchParams.category)
+      ? searchParams.category[0]
+      : searchParams.category,
   };
 
-  // Fetch listings and current user
   const listings = await getListings(params);
   const currentUser = await getCurrentUser();
 
-  // Render empty state if no listings found
   if (listings.length === 0) {
     return (
       <Client>
@@ -35,9 +31,7 @@ const Home = async ({ searchParams }: HomeProps) => {
     );
   }
 
-  // Render listings grid
   return (
-  <>
     <Client>
       <Container>
         <div
@@ -55,18 +49,15 @@ const Home = async ({ searchParams }: HomeProps) => {
         >
           {listings.map((listing: SafeListing) => (
             <ListingCard
-              currentUser={currentUser}
               key={listing.id}
               data={listing}
+              currentUser={currentUser}
             />
           ))}
         </div>
       </Container>
     </Client>
-
-  </>
-);
-
+  );
 };
 
 export default Home;

@@ -15,10 +15,8 @@ function parseDate(dateStr: string): Date | null {
       const date = new Date(iso);
       return isNaN(date.getTime()) ? null : date;
     }
-    return null;
-  } catch {
-    return null;
-  }
+  } catch {}
+  return null;
 }
 
 export async function POST(request: Request) {
@@ -27,11 +25,11 @@ export async function POST(request: Request) {
 
   try {
     const session = await getServerSession(authOptions);
-    const isLoggedIn = !!session?.user;
+    const isGoogleAuth = !!(session?.user && !session.user.password && !session.user.otpCode);
     const googleUserEmail = session?.user?.email || null;
 
     const body = await request.json();
-    console.log("📦 Incoming registration payload:", JSON.stringify(body, null, 2));
+    console.log("📦 Registration payload:", JSON.stringify(body, null, 2));
     errorContext.requestBody = body;
 
     const {
@@ -62,19 +60,15 @@ export async function POST(request: Request) {
       extractionComplete
     } = body;
 
-    const isGoogleAuth = isLoggedIn && !password && !otpCode;
-
+    // Basic validation
     if (!name || (!email && !isGoogleAuth)) {
-      return NextResponse.json(
-        {
-          error: "Missing required fields",
-          missing: [
-            ...(!name ? ["name"] : []),
-            ...(!email && !isGoogleAuth ? ["email"] : [])
-          ]
-        },
-        { status: 400 }
-      );
+      return NextResponse.json({
+        error: "Missing required fields",
+        missing: [
+          ...(!name ? ["name"] : []),
+          ...(!email && !isGoogleAuth ? ["email"] : [])
+        ]
+      }, { status: 400 });
     }
 
     if (!Object.values(UserRole).includes(role)) {
@@ -82,18 +76,18 @@ export async function POST(request: Request) {
     }
 
     const [existingEmail, existingPhone] = await Promise.all([
-      email ? prisma.user.findUnique({ where: { email } }) : Promise.resolve(null),
-      contactPhone ? prisma.user.findUnique({ where: { contactPhone } }) : Promise.resolve(null)
+      email ? prisma.user.findUnique({ where: { email } }) : null,
+      contactPhone ? prisma.user.findUnique({ where: { contactPhone } }) : null
     ]);
 
     if (!isGoogleAuth && existingEmail) {
       return NextResponse.json({ error: "Email already registered" }, { status: 409 });
     }
-
     if (existingPhone) {
       return NextResponse.json({ error: "Phone already registered" }, { status: 409 });
     }
 
+    // OTP Verification for standard registrations
     if (!isGoogleAuth && otpCode && contactPhone) {
       const otpVerification = await prisma.oTPVerification.findFirst({
         where: {
@@ -111,10 +105,12 @@ export async function POST(request: Request) {
       await prisma.oTPVerification.delete({ where: { id: otpVerification.id } });
     }
 
-    let parsedDOB = idDOB ? parseDate(idDOB) : null;
-    let parsedExpiry = idExpiryDate ? parseDate(idExpiryDate) : null;
-    let parsedIssue = idIssueDate ? parseDate(idIssueDate) : null;
+    // Parse dates
+    const parsedDOB = idDOB ? parseDate(idDOB) : null;
+    const parsedExpiry = idExpiryDate ? parseDate(idExpiryDate) : null;
+    const parsedIssue = idIssueDate ? parseDate(idIssueDate) : null;
 
+    // Provider-specific validation
     if (role === "PROVIDER") {
       const missing = [];
 
@@ -125,9 +121,7 @@ export async function POST(request: Request) {
       if (!idNumber && !personalIdNumber) missing.push("idNumber or personalIdNumber");
       if (!idType) missing.push("idType");
 
-      if (missing.length) {
-        console.error("❌ Missing PROVIDER verification fields:", missing);
-        console.log("📤 Full payload:", JSON.stringify(body, null, 2));
+      if (missing.length > 0) {
         return NextResponse.json({
           error: "Missing provider verification data",
           missing,
@@ -139,29 +133,27 @@ export async function POST(request: Request) {
       if (parsedExpiry && parsedExpiry < new Date()) {
         return NextResponse.json({ error: "ID document has expired" }, { status: 400 });
       }
-
       if (parsedDOB && parsedDOB > new Date()) {
         return NextResponse.json({ error: "Invalid date of birth" }, { status: 400 });
       }
-
       if (isGoogleAuth && !extractionComplete) {
-       return NextResponse.json({
-  error: "Google PROVIDER is not fully verified. User not saved.",
-  missing: ['extractionComplete'],
-  payload: body
-}, { status: 400 });
-
+        return NextResponse.json({
+          error: "Google PROVIDER is not fully verified. User not saved.",
+          missing: ["extractionComplete"],
+          payload: body
+        }, { status: 400 });
       }
     }
 
-    const hashedPassword = password ? await bcrypt.hash(password, 12) : null;
-
+    // Google users: prevent re-registration
     if (isGoogleAuth && googleUserEmail) {
       const existingGoogleUser = await prisma.user.findUnique({ where: { email: googleUserEmail } });
       if (existingGoogleUser) {
         return NextResponse.json({ error: "Google user already exists" }, { status: 409 });
       }
     }
+
+    const hashedPassword = password ? await bcrypt.hash(password, 12) : null;
 
     const user = await prisma.user.create({
       data: {
@@ -201,19 +193,18 @@ export async function POST(request: Request) {
       }
     });
 
-return NextResponse.json({
-  success: true,
-  user,
-  shouldAutoLogin: isGoogleAuth && role === "PROVIDER" && user.verified,
-  message: `${role} account created successfully`,
-}, { status: 201 });
-
+    return NextResponse.json({
+      success: true,
+      user,
+      shouldAutoLogin: isGoogleAuth && role === "PROVIDER" && user.verified,
+      message: `${role} account created successfully`
+    }, { status: 201 });
 
   } catch (error: any) {
     console.error("REGISTRATION ERROR", {
-      error: error.message,
-      context: errorContext,
+      message: error.message,
       stack: error.stack,
+      context: errorContext,
       tookMs: Date.now() - startTime
     });
 

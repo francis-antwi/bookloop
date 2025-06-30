@@ -1,12 +1,25 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function AuthErrorRedirectPage() {
+export default function ClientErrorHandler() {
   const router = useRouter();
-  const params = useSearchParams();
-  const error = params.get("error");
+  const searchParams = useSearchParams();
+  const error = searchParams?.get("error");
+
+  const message = useMemo(() => {
+    switch (error) {
+      case "ROLE_SELECTION_REQUIRED":
+      case "redirect-role":
+        return "Redirecting to role selection...";
+      case "PROVIDER_VERIFICATION_REQUIRED":
+      case "redirect-verify":
+        return "Redirecting to verification...";
+      default:
+        return "Redirecting...";
+    }
+  }, [error]);
 
   useEffect(() => {
     if (!error) return;
@@ -19,13 +32,13 @@ export default function AuthErrorRedirectPage() {
     } else if (verifyErrors.includes(error)) {
       router.replace("/verify");
     } else {
-      router.replace("/"); // fallback
+      router.replace("/");
     }
-  }, [error]); // ✅ only re-run if error changes
+  }, [error, router]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center text-lg">
-      Redirecting...
+    <div className="flex min-h-screen items-center justify-center text-lg text-gray-700">
+      {message}
     </div>
   );
 }

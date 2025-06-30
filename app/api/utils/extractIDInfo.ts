@@ -1,47 +1,58 @@
 export function extractIDInfo(data: any) {
   const rawText = data?.text?.text;
-
   if (typeof rawText !== "string") {
-    console.error("extractIDInfo: OCR text is not a string", rawText);
+    console.error("❌ OCR text is not valid");
     return {};
   }
 
-  const lines = rawText.split("\n").map((line: string) => line.trim()).filter(Boolean);
+  const lines = rawText.split("\n").map(line => line.trim()).filter(Boolean);
   const fullText = lines.join(" ");
+  const lowerText = fullText.toLowerCase();
 
-  const getDate = (text: string) => {
-    const match = text.match(/(\d{2})[\/\-](\d{2})[\/\-](\d{4})/);
-    return match ? `${match[3]}-${match[2]}-${match[1]}` : null;
+  const getDate = (str: string): string | null => {
+    const dateMatch = str.match(/\b(\d{2})[\/\-](\d{2})[\/\-](\d{4})\b/);
+    if (!dateMatch) return null;
+    const [_, day, month, year] = dateMatch;
+    return `${year}-${month}-${day}`;
   };
 
-  const extractMatch = (regex: RegExp, join = false) => {
-    const match = fullText.match(regex);
-    return match ? (join ? match.slice(1).join(" ") : match[1]) : null;
+  const findLine = (keywords: string[]) => {
+    return lines.find(line =>
+      keywords.some(keyword => line.toLowerCase().includes(keyword.toLowerCase()))
+    );
   };
 
-  const surname = extractMatch(/Surname\/Nom\s+([A-Z]+)/i);
-  const firstnames = extractMatch(/Firstnames\/Prénoms\s+([A-Z]+)/i);
-  const idName = [firstnames, surname].filter(Boolean).join(" ");
+  const extractValueAfterKeyword = (line: string, keyword: string) => {
+    const index = line.toLowerCase().indexOf(keyword.toLowerCase());
+    return index !== -1 ? line.slice(index + keyword.length).trim() : "";
+  };
 
-  const idDOB = getDate(extractMatch(/Date of Birth.*?(\d{2}\/\d{2}\/\d{4})/i) ?? "");
-  const idIssueDate = getDate(extractMatch(/Date of Issuance.*?(\d{2}\/\d{2}\/\d{4})/i) ?? "");
-  const idExpiryDate = getDate(extractMatch(/Date of Expiry.*?(\d{2}\/\d{2}\/\d{4})/i) ?? "");
+  const surnameLine = findLine(["Surname", "Nom"]);
+  const firstnameLine = findLine(["Firstnames", "Prénoms"]);
+  const idName =
+    `${extractValueAfterKeyword(firstnameLine || "", "Firstnames") || ""} ${extractValueAfterKeyword(surnameLine || "", "Surname") || ""}`.trim();
 
-  const idNumber =
-    extractMatch(/Document Number.*?([A-Z0-9]+)/i) ??
-    extractMatch(/([A-Z]{2}[0-9]{7,})/); // fallback
+  const dobLine = findLine(["Date of Birth", "DOB"]);
+  const idDOB = getDate(dobLine || "");
 
-  const idIssuer =
-    extractMatch(/Place of Issuance.*?([A-Z]+)/i) ??
-    extractMatch(/ACCRA|KUMASI|TAKORADI|TAMALE/i);
+  const issueLine = findLine(["Date of Issuance", "Issued"]);
+  const idIssueDate = getDate(issueLine || "");
 
-  const personalIdNumber = extractMatch(/(GHA-\d{12})/);
+  const expiryLine = findLine(["Date of Expiry", "Expires"]);
+  const idExpiryDate = getDate(expiryLine || "");
 
-  const gender = extractMatch(/Sex\/Sexe\s+([MF])\b/i);
-  const nationality = extractMatch(/Nationality\/Nationalité\s+([A-Z]+)/i);
+  const genderLine = findLine(["Sex", "Gender"]);
+  const gender = extractValueAfterKeyword(genderLine || "", "Sex").match(/[MF]/i)?.[0].toUpperCase() || null;
 
-  // ✅ Infer ID Type from rawText
-  const lowerText = rawText.toLowerCase();
+  const nationalityLine = findLine(["Nationality", "Nationalité"]);
+  const nationality = extractValueAfterKeyword(nationalityLine || "", "Nationality").split(" ")[0] || null;
+
+  const personalIdNumber = fullText.match(/GHA[-\s]?\d{12}/)?.[0].replace(/\s/g, "") || null;
+
+  const idNumber = fullText.match(/\b[A-Z]{2}\d{6,8}\b/)?.[0] ?? personalIdNumber;
+
+  const idIssuer = fullText.match(/\b(ACCRA|KUMASI|TAMALE|TAKORADI|BOLGATANGA)\b/i)?.[0].toUpperCase() || null;
+
   let idType: string | null = null;
   if (lowerText.includes("ghana card") || lowerText.includes("identity card")) {
     idType = "ghana_card";
@@ -50,18 +61,17 @@ export function extractIDInfo(data: any) {
   } else if (lowerText.includes("driver") || lowerText.includes("license")) {
     idType = "driver_license";
   }
-
   return {
     idName: idName || null,
     idNumber: idNumber || null,
-    idDOB: idDOB || null,
-    idIssueDate: idIssueDate || null,
-    idExpiryDate: idExpiryDate || null,
-    idIssuer: idIssuer || null,
-    personalIdNumber: personalIdNumber || null,
-    gender: gender || null,
-    nationality: nationality || null,
-    idType: idType || null,          // ✅ Add idType to output
+    personalIdNumber,
+    idDOB,
+    idIssueDate,
+    idExpiryDate,
+    idIssuer,
+    gender,
+    nationality,
+    idType,
     rawText,
   };
 }

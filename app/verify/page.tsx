@@ -106,7 +106,6 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
 
       const registerRes = await axios.post('/api/register', registrationData);
       const registerData = registerRes.data;
-console.log("✅ Registration response:", registerData);
 
 if (!registerData.success) {
   toast.error(registerData.message || "Registration failed");
