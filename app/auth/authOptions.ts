@@ -1,8 +1,8 @@
 import NextAuth, { AuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
-import bcrypt from "bcrypt";
 import prisma from "@/app/libs/prismadb";
+import bcrypt from "bcrypt";
 import { UserRole } from "@prisma/client";
 
 export const authOptions: AuthOptions = {
@@ -42,10 +42,20 @@ export const authOptions: AuthOptions = {
         }
         if (!user.role) throw new Error("Missing account role");
 
-        return user;
+        return {
+          ...user,
+          isOtpVerified: user.isOtpVerified ?? true,
+          isFaceVerified: user.isFaceVerified ?? false,
+        };
       },
     }),
   ],
+
+  pages: {
+    signIn: "/",
+    error: "/auth/error", 
+    newUser: "/role",
+  },
 
   session: {
     strategy: "jwt",
@@ -55,12 +65,6 @@ export const authOptions: AuthOptions = {
 
   jwt: {
     maxAge: 30 * 24 * 60 * 60,
-  },
-
-  pages: {
-    signIn: "/",
-    error: "/auth/error",
-    newUser: "/role",
   },
 
   secret: process.env.NEXTAUTH_SECRET,
@@ -75,7 +79,7 @@ export const authOptions: AuthOptions = {
         sameSite: "lax",
         path: "/",
         secure: true,
-        domain: "bookloop-eight.vercel.app",
+        domain: "bookloop-eight.vercel.app", // ✅ Update for prod
       },
     },
   },
@@ -87,8 +91,12 @@ export const authOptions: AuthOptions = {
           where: { email: user.email ?? "" },
         });
 
-        if (!existingUser) return true; // Let them pick a role on first login
+        if (!existingUser) {
+          // ✅ Allow login — onboarding continues on /role
+          return true;
+        }
 
+        // ✅ User exists, now check OTP and face verification
         if (!existingUser.isOtpVerified) {
           throw new Error("Phone verification required.");
         }
@@ -99,71 +107,51 @@ export const authOptions: AuthOptions = {
         ) {
           throw new Error("Face verification required.");
         }
+
+        return true;
       }
 
       return true;
     },
 
     async jwt({ token, user, trigger, session }) {
-      if (user) {
-        const dbUser = await prisma.user.findUnique({
-          where: { email: user.email ?? "" },
+      if (trigger === "update" && session?.role) {
+        token.role = session.role;
+        await prisma.user.update({
+          where: { email: token.email ?? "" },
+          data: { role: session.role },
         });
 
-        if (!dbUser) {
-          token.notRegistered = true;
-          return token;
+        if (session.role === UserRole.PROVIDER) {
+          token.isFaceVerified = false;
         }
-
-        token = {
-          ...token,
-          id: dbUser.id,
-          name: dbUser.name,
-          email: dbUser.email,
-          image: dbUser.image,
-          role: dbUser.role,
-          isOtpVerified: dbUser.isOtpVerified ?? true,
-          otpCode: dbUser.otpCode ?? null,
-          otpExpiresAt: dbUser.otpExpiresAt?.toISOString() ?? null,
-          isFaceVerified: dbUser.isFaceVerified ?? false,
-          selfieImage: dbUser.selfieImage ?? null,
-          idImage: dbUser.idImage ?? null,
-          faceConfidence: dbUser.faceConfidence ?? null,
-          idName: dbUser.idName ?? null,
-          idNumber: dbUser.idNumber ?? null,
-          idDOB: dbUser.idDOB?.toISOString() ?? null,
-          idExpiryDate: dbUser.idExpiryDate?.toISOString() ?? null,
-          idIssuer: dbUser.idIssuer ?? null,
-          personalIdNumber: dbUser.personalIdNumber ?? null,
-          idIssueDate: dbUser.idIssueDate?.toISOString() ?? null,
-        };
       }
 
-      // When session.update() is called from the client
-      if (trigger === "update" && session) {
-        token.role = session.role ?? token.role;
-        token.isFaceVerified = session.isFaceVerified ?? token.isFaceVerified;
-
-        if (session.verificationData) {
-          token.selfieImage = session.verificationData.selfieImage ?? token.selfieImage;
-          token.idImage = session.verificationData.idImage ?? token.idImage;
-          token.faceConfidence = session.verificationData.faceConfidence ?? token.faceConfidence;
-          token.idName = session.verificationData.idName ?? token.idName;
-          token.idNumber = session.verificationData.idNumber ?? token.idNumber;
-          token.idDOB = session.verificationData.idDOB ?? token.idDOB;
-          token.idExpiryDate = session.verificationData.idExpiryDate ?? token.idExpiryDate;
-          token.idIssuer = session.verificationData.idIssuer ?? token.idIssuer;
-          token.personalIdNumber = session.verificationData.personalIdNumber ?? token.personalIdNumber;
-          token.idIssueDate = session.verificationData.idIssueDate ?? token.idIssueDate;
-        }
-
-        // Optionally sync role update in DB
-        if (session.role) {
-          await prisma.user.update({
-            where: { email: token.email ?? "" },
-            data: { role: session.role },
-          });
-        }
+      if (user) {
+        token = {
+          ...token,
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          role: user.role,
+          isOtpVerified: user.isOtpVerified ?? true,
+          otpCode: user.otpCode ?? null,
+          otpExpiresAt: user.otpExpiresAt?.toISOString() ?? null,
+          isFaceVerified: user.isFaceVerified ?? false,
+          ...(user.role === UserRole.PROVIDER && {
+            selfieImage: user.selfieImage ?? null,
+            idImage: user.idImage ?? null,
+            faceConfidence: user.faceConfidence ?? null,
+            idName: user.idName ?? null,
+            idNumber: user.idNumber ?? null,
+            idDOB: user.idDOB?.toISOString() ?? null,
+            idExpiryDate: user.idExpiryDate?.toISOString() ?? null,
+            idIssuer: user.idIssuer ?? null,
+            personalIdNumber: user.personalIdNumber ?? null,
+            idIssueDate: user.idIssueDate?.toISOString() ?? null,
+          }),
+        };
       }
 
       return token;
@@ -174,27 +162,26 @@ export const authOptions: AuthOptions = {
         session.user = {
           ...session.user,
           id: token.id as string,
-          name: token.name,
-          email: token.email,
-          image: token.image,
-          role: token.role,
+          name: token.name ?? null,
+          email: token.email ?? null,
+          image: token.image ?? null,
+          role: token.role as UserRole,
           isOtpVerified: token.isOtpVerified,
           otpCode: token.otpCode,
           otpExpiresAt: token.otpExpiresAt,
           isFaceVerified: token.isFaceVerified,
-          notRegistered: token.notRegistered ?? false,
-          selfieImage: token.selfieImage ?? null,
-          idImage: token.idImage ?? null,
-          faceConfidence: token.faceConfidence ?? null,
-          verificationData: {
-            idName: token.idName ?? null,
-            idNumber: token.idNumber ?? null,
-            idDOB: token.idDOB ?? null,
-            idExpiryDate: token.idExpiryDate ?? null,
-            idIssuer: token.idIssuer ?? null,
-            personalIdNumber: token.personalIdNumber ?? null,
-            idIssueDate: token.idIssueDate ?? null,
-          },
+          ...(token.role === UserRole.PROVIDER && {
+            selfieImage: token.selfieImage,
+            idImage: token.idImage,
+            faceConfidence: token.faceConfidence,
+            idName: token.idName,
+            idNumber: token.idNumber,
+            idDOB: token.idDOB,
+            idExpiryDate: token.idExpiryDate,
+            idIssuer: token.idIssuer,
+            personalIdNumber: token.personalIdNumber,
+            idIssueDate: token.idIssueDate,
+          }),
         };
       }
 
