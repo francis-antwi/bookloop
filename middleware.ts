@@ -1,13 +1,44 @@
 import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import type { JWT } from "next-auth/jwt"; // Import JWT type if you're directly using it
+
+// Extend the NextRequest type to include the 'auth' property provided by next-auth
+declare module "next/server" {
+  interface NextRequest {
+    auth?: {
+      user: {
+        email?: string | null;
+        name?: string | null;
+        image?: string | null;
+        role?: "CUSTOMER" | "PROVIDER" | "ADMIN"; // Define your roles
+        isFaceVerified?: boolean;
+      };
+      token?: JWT; // If you're explicitly passing the JWT token through callbacks
+    };
+  }
+}
 
 export default withAuth(
   async function middleware(req: NextRequest) {
     const { pathname } = req.nextUrl;
-    const token = req.nextauth?.token;
+    // Access the session/token directly from req.auth
+    const token = req.auth?.token; // Access the raw JWT token if you've configured it in callbacks
+    const user = req.auth?.user; // Or access the user object directly
 
-    const publicPaths = ["/auth", "/auth/error", "/api/auth", "/_next"];
+    // Decide whether to use `token` (raw JWT) or `user` (session user) for your logic.
+    // Given your original code used `token.role` and `token.isFaceVerified`,
+    // it implies you are passing a custom `token` object through the JWT callback.
+    // Let's assume you want to work with the `token` directly as per your original code's structure.
+
+    const publicPaths = [
+      "/", // Often the home page is public
+      "/auth",
+      "/auth/error",
+      "/api/auth",
+      "/_next",
+      "/403", // Your access denied page
+    ];
     const isPublic = publicPaths.some((path) => pathname.startsWith(path));
 
     const providerPaths = [
@@ -24,7 +55,7 @@ export default withAuth(
     const isVerifiedProvider =
       token?.role === "PROVIDER" && token?.isFaceVerified === true;
 
-    // 1. Not logged in
+    // 1. Not logged in (no token)
     if (!token) {
       if (isPublic || pathname === "/role" || pathname === "/verify") {
         return NextResponse.next();
@@ -89,7 +120,31 @@ export default withAuth(
   },
   {
     callbacks: {
-      authorized: () => true,
+      // The `authorized` callback determines if the user is authenticated for the path.
+      // Returning `true` here means that `next-auth` will not block the request
+      // and will proceed to execute your `middleware` function. You then handle
+      // all redirection/authorization logic within your `middleware` function.
+      authorized: ({ token, req }) => {
+        // If the path is public, always allow access.
+        const publicPaths = [
+          "/",
+          "/auth",
+          "/auth/error",
+          "/api/auth",
+          "/_next",
+          "/403",
+        ];
+        const isPublic = publicPaths.some((path) =>
+          req.nextUrl.pathname.startsWith(path)
+        );
+
+        if (isPublic) {
+          return true; // Allow access to public paths
+        }
+
+        // For all other paths, require a token (i.e., user must be logged in)
+        return !!token;
+      },
     },
   }
 );
@@ -104,7 +159,9 @@ export const config = {
     "/admin/:path*",
     "/role",
     "/verify",
-    "/auth/:path*",
-    "/api/auth/:path*",
+    "/auth/:path*", // Include auth paths for redirection logic within middleware
+    "/api/auth/:path*", // NextAuth.js API routes are handled internally but sometimes included here
+    "/", // Include the root path if you have protected content there
+    "/403", // Include your 403 page
   ],
 };
