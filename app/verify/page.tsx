@@ -52,8 +52,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
     }
     setIdFile(file);
   };
-
-  const submitVerification = async () => {
+const submitVerification = async () => {
   if (!selfieImage || !idFile) {
     toast.error('Please complete all verification steps');
     return;
@@ -63,12 +62,18 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
   setVerificationStatus(null);
 
   try {
-    // 1. Perform verification
+    // 1. Prepare FormData with correct field names
     const verificationFormData = new FormData();
-    verificationFormData.append('selfieImage', new File([selfieImage], 'selfie.jpg', { type: 'image/jpeg' }));
+    verificationFormData.append('selfie', new File([selfieImage], 'selfie.jpg', { type: 'image/jpeg' }));
     verificationFormData.append('idImage', idFile);
     verificationFormData.append('email', session?.user?.email || '');
 
+    // Debug: Log FormData entries to verify correct data
+    for (let pair of verificationFormData.entries()) {
+      console.log(`${pair[0]}:`, pair[1]);
+    }
+
+    // 2. Send verification request
     const response = await axios.post('/api/verify', verificationFormData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 60000
@@ -81,7 +86,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
     const extractedData = response.data.document || {};
     const confidence = response.data.confidence || extractedData.faceConfidence || 95;
 
-    // 2. Prepare registration payload
+    // 3. Prepare registration payload
     const registrationData = {
       email: session?.user?.email,
       name: extractedData.idName || 'Verified User',
@@ -91,14 +96,14 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
       ...extractedData
     };
 
-    // 3. Register PROVIDER (Google users only if needed)
+    // 4. Register PROVIDER (Google users only if needed)
     try {
       await axios.post('/api/register', registrationData);
     } catch (regError) {
       console.log('Registration completed with warnings:', regError.response?.data);
     }
 
-    // 4. Update session
+    // 5. Update session
     await update({
       role: 'PROVIDER',
       isFaceVerified: true,
