@@ -32,9 +32,9 @@ export default withAuth(
       return NextResponse.redirect(new URL("/auth", req.url));
     }
 
-    // 2. If ADMIN, always redirect to home (/) from /role or /verify
+    // 2. If admin, allow full access and redirect /role to home
     if (token.role === "ADMIN") {
-      if (pathname === "/role" || pathname === "/verify") {
+      if (pathname === "/role") {
         return NextResponse.redirect(new URL("/", req.url));
       }
       return NextResponse.next();
@@ -47,16 +47,19 @@ export default withAuth(
 
     // 4. Access to /role
     if (pathname === "/role") {
-      if (!token.role) return NextResponse.next();
+      // Allow if user has no role yet
+      if (!token.role) {
+        return NextResponse.next();
+      }
 
+      // Redirect based on existing role
       if (token.role === "PROVIDER") {
         return token.isFaceVerified
           ? NextResponse.redirect(new URL("/my-listings", req.url))
           : NextResponse.redirect(new URL("/verify", req.url));
       }
 
-      // Other roles (e.g., CUSTOMER)
-      return NextResponse.redirect(new URL("/", req.url));
+      return NextResponse.redirect(new URL("/", req.url)); // CUSTOMER and other roles
     }
 
     // 5. Verified PROVIDER should not access /verify again
