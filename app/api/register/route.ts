@@ -129,6 +129,7 @@ export async function POST(request: Request) {
     }
 
     // OTP Verification for non-Google registrations
+    // Google users will be marked as OTP verified automatically below
     if (!isGoogleAuth && otpCode && contactPhone) {
       const otpVerification = await prisma.oTPVerification.findFirst({
         where: {
@@ -240,8 +241,11 @@ export async function POST(request: Request) {
         name: isGoogleAuth ? googleUserName || name : name, // Use Google name if available
         contactPhone: contactPhone || null,
         hashedPassword,
-        role,
-        isOtpVerified: !isGoogleAuth, // OTP verified for non-Google users
+        // --- FIX APPLIED HERE ---
+        // Mark Google users as OTP verified automatically.
+        // For non-Google users, this depends on the OTP verification flow above.
+        isOtpVerified: isGoogleAuth || (!isGoogleAuth && !!otpCode),
+        // --- END FIX ---
         isFaceVerified: role === "PROVIDER", // Face verified if role is PROVIDER
         // 'verified' status: true for PROVIDERs if all checks pass, otherwise based on 'verified' from body
         verified: role === "PROVIDER" ? true : !!verified,
@@ -274,7 +278,7 @@ export async function POST(request: Request) {
       }
     });
 
-    console.log(`User ${user.id} (${user.email || user.contactPhone}) created successfully with role ${user.role}. Verified: ${user.verified}`);
+    console.log(`User ${user.id} (${user.email || user.contactPhone}) created successfully with role ${user.role}. Verified: ${user.verified}. OTP Verified: ${user.isOtpVerified}`);
 
     // Determine if auto-login should occur for Google PROVIDERs
     const shouldAutoLogin = isGoogleAuth && role === "PROVIDER" && user.verified;
