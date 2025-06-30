@@ -1,90 +1,59 @@
-import { withAuth } from "next-auth/middleware";
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+export default withAuth(async function middleware(req) {
+  const { pathname } = req.nextUrl;
+  const token = req.nextauth?.token;
 
-export default withAuth(
-  async function middleware(req: NextRequest) {
-    if (!req.nextUrl) {
-      console.error("req.nextUrl is undefined in middleware for path:", req.url);
+  const publicPaths = [
+    "/auth",
+    "/auth/error",
+    "/api/auth",
+    "/api/auth/",
+    "/_next",
+  ];
+  const isPublic = publicPaths.some(path => pathname.startsWith(path));
+  const providerPaths = ["/my-listings", "/approvals", "/bookings", "/favourites", "/notifications"];
+  const isProviderPath = providerPaths.some(path => pathname.startsWith(path));
+
+  if (!token) {
+    if (isPublic || pathname === "/role" || pathname === "/verify") {
       return NextResponse.next();
     }
+    return NextResponse.redirect(new URL("/auth", req.url));
+  }
 
-    const { pathname } = req.nextUrl;
-    const token = req.nextauth?.token;
+  // Role guard
+  if (!token.role && pathname !== "/role") {
+    return NextResponse.redirect(new URL("/role", req.url));
+  }
 
-    const publicPaths = [
-      "/auth",
-      "/auth/error",
-    ];
+  if (token.role && pathname === "/role") {
+    return NextResponse.redirect(new URL("/", req.url));
+  }
 
-    const isPublicPath = publicPaths.some(
-      (path) => pathname === path || pathname.startsWith(`${path}/`)
-    );
-
-    const providerRestrictedPaths = [
-      "/my-listings",
-      "/approvals",
-      "/bookings",
-      "/favourites",
-      "/notifications",
-    ];
-    const isProviderRestrictedPath = providerRestrictedPaths.some(
-      (path) => pathname.startsWith(path)
-    );
-
-    // === If not logged in ===
-    if (!token) {
-      if (isPublicPath || pathname === "/role" || pathname === "/verify") {
-        return NextResponse.next();
-      }
-      return NextResponse.redirect(new URL("/auth", req.url));
-    }
-
-    // === If no role yet, force role selection ===
-    if (!token.role && pathname !== "/role") {
-      return NextResponse.redirect(new URL("/role", req.url));
-    }
-
-    // ✅ Prevent users with a role from going back to role selection
-    if (token.role && pathname === "/role") {
-      return NextResponse.redirect(new URL("/", req.url));
-    }
-
-    // ✅ Redirect verified PROVIDERs away from /verify
-    if (token.role === "PROVIDER" && token.isFaceVerified && pathname === "/verify") {
+  // Provider verify redirect guards
+  if (token.role === "PROVIDER") {
+    if (token.isFaceVerified && pathname === "/verify") {
       return NextResponse.redirect(new URL("/my-listings", req.url));
     }
-
-    // ✅ Force unverified PROVIDERs to /verify before accessing protected areas
-    if (
-      token.role === "PROVIDER" &&
-      !token.isFaceVerified &&
-      isProviderRestrictedPath &&
-      pathname !== "/verify"
-    ) {
+    if (!token.isFaceVerified && isProviderPath && pathname !== "/verify") {
       return NextResponse.redirect(new URL("/verify", req.url));
     }
-
-    // ✅ Prevent CUSTOMERs from accessing provider-only routes or /verify
-    if (token.role !== "PROVIDER" && (isProviderRestrictedPath || pathname === "/verify")) {
-      return NextResponse.redirect(new URL("/403", req.url));
-    }
-
-    // ✅ Only ADMINs can access /admin
-    if (pathname.startsWith("/admin") && token.role !== "ADMIN") {
-      return NextResponse.redirect(new URL("/403", req.url));
-    }
-
-    return NextResponse.next();
-  },
-  {
-    callbacks: {
-      authorized: () => true,
-    },
   }
-);
 
-// === Pages this middleware protects ===
+  // Prevent customers from going to any provider route or /verify
+  if (token.role !== "PROVIDER" && (isProviderPath || pathname === "/verify")) {
+    return NextResponse.redirect(new URL("/403", req.url));
+  }
+
+  // Admin-protect:
+  if (pathname.startsWith("/admin") && token.role !== "ADMIN") {
+    return NextResponse.redirect(new URL("/403", req.url));
+  }
+
+  return NextResponse.next();
+}, {
+  callbacks: { authorized: () => true },
+});
+
 export const config = {
   matcher: [
     "/bookings/:path*",
@@ -96,5 +65,6 @@ export const config = {
     "/role",
     "/verify",
     "/auth/:path*",
+    "/api/auth/:path*",
   ],
 };
