@@ -20,7 +20,7 @@ export async function createUserIfNeeded(data: RegistrationData) {
   });
 
   if (existingUser) {
-    console.log("👤 [User already exists]:", existingUser.email);
+ 
     return existingUser;
   }
 
@@ -39,7 +39,6 @@ export async function createUserIfNeeded(data: RegistrationData) {
     isVerified: true,
   };
 
-  console.log("💾 [Creating new PROVIDER user]:", userPayload);
 
   return await prisma.user.create({ data: userPayload });
 }

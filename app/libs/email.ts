@@ -7,13 +7,7 @@ import nodemailer from "nodemailer";
  * @param resetUrl - Password reset link
  */
 export async function sendPasswordResetEmail(to: string, resetUrl: string) {
-  console.log("📧 Email Configuration:", {
-    EMAIL_HOST: process.env.EMAIL_HOST,
-    EMAIL_PORT: process.env.EMAIL_PORT,
-    EMAIL_USER: process.env.EMAIL_USER,
-    EMAIL_PASS: process.env.EMAIL_PASS ? "***" : undefined,
-    EMAIL_FROM: process.env.EMAIL_FROM,
-  });
+ 
 
   try {
     const transporter = nodemailer.createTransport({
@@ -46,7 +40,7 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string) {
       `,
     });
 
-    console.log("Email sent successfully:", info.messageId);
+
   } catch (error) {
     console.error("❌ Email sending failed:", error);
     throw new Error("Could not send email. Please try again later.");

@@ -33,12 +33,12 @@ const PhoneAuth: React.FC<PhoneAuthProps> = ({ phoneNumber, onVerified }) => {
         size: 'invisible',
         callback: (response: string) => {
           // reCAPTCHA solved, you can log this or use the response if needed
-          console.log('reCAPTCHA solved:', response);
+
           // If you were using explicit reCAPTCHA execution, you might trigger OTP send here
         },
         'expired-callback': () => {
           // reCAPTCHA expired, you might want to re-render or notify the user
-          console.log('reCAPTCHA expired, re-rendering if needed.');
+         
           // Optionally, re-render reCAPTCHA or refresh the page if this happens frequently
           if (window.recaptchaVerifier) {
             window.recaptchaVerifier.render().catch(console.error);

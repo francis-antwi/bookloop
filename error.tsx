@@ -8,7 +8,6 @@ export default async function getListingById(params: IParams) {
     try {
         const { listingId } = params;
 
-        console.log("Received listingId:", listingId); // Log the listingId for debugging
 
         if (!listingId) {
             throw new Error("Listing ID is required");
@@ -24,11 +23,11 @@ export default async function getListingById(params: IParams) {
         });
 
         if (!listing) {
-            console.log("Listing not found for ID:", listingId); // Log if listing is not found
+         
             return null;
         }
 
-        console.log("Listing found:", listing); // Log the fetched listing data
+   
 
         return {
             ...listing,

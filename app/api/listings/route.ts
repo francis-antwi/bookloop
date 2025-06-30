@@ -22,17 +22,16 @@ export async function GET() {
 // POST: Create a new listing
 export async function POST(request: Request) {
   try {
-    console.log("POST /api/listings called");
+
 
     const currentUser = await getCurrentUser();
     if (!currentUser) {
-      console.log("Unauthorized: no current user");
+   
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    console.log("Current user:", currentUser.id);
-
+ 
     const body = await request.json();
-    console.log("Request body:", body);
+
 
     const {
       title,
@@ -83,7 +82,7 @@ export async function POST(request: Request) {
       !email ||
       !address
     ) {
-      console.log("Missing required fields");
+ 
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
@@ -136,7 +135,6 @@ export async function POST(request: Request) {
       data.requiresBooking = Boolean(requiresBooking);
     if (serviceProvider !== undefined) data.serviceProvider = serviceProvider;
 
-    console.log("Final listing data to create:", data);
 
     const listing = await prisma.listing.create({ data });
 

@@ -19,7 +19,7 @@ export async function POST(req: Request) {
       );
     }
 
-    console.log("🔍 Looking for user with resetToken:", token);
+
 
     const user = await prisma.user.findFirst({
       where: {
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    console.log("🔐 Hashed new password for user:", user.email);
+
 
     await prisma.user.update({
       where: { id: user.id },
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
       },
     });
 
-    console.log("✅ Password successfully reset for:", user.email);
+ 
 
     return NextResponse.json({ message: "Password reset successfully." });
   } catch (error) {

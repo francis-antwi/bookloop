@@ -69,7 +69,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
       verificationFormData.append('email', session?.user?.email || '');
 
       for (let pair of verificationFormData.entries()) {
-        console.log(`${pair[0]}:`, pair[1]);
+
       }
 
       const response = await axios.post('/api/verify', verificationFormData, {
@@ -120,11 +120,8 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
         }
       }
 
-      await update({
-        role: 'PROVIDER',
-        isFaceVerified: true,
-        verificationData: extractedData
-      });
+   await update();
+
 
       toast.success('Verification complete!');
       onComplete();

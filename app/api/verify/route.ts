@@ -37,10 +37,10 @@ export async function POST(req: Request) {
 
     // === Send to Taggun ===
     const ocrResponse = await sendOriginalToTaggun(idFile);
-    console.log("\uD83D\uDCC4 [RAW OCR RESPONSE from Taggun]:", JSON.stringify(ocrResponse, null, 2));
+
 
     const extractedData = extractIDInfo(ocrResponse);
-    console.log("\uD83D\uDCE6 [Extracted ID Fields]:", extractedData);
+  
 
     const isValid = validateExtractedData(extractedData);
     if (!isValid) {
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
 
     // === Face Comparison ===
     const matchResult = await matchFace(selfieUrl, idUrl);
-    console.log("\uD83E\uDE1D [Face Match Confidence]:", matchResult.confidence);
+   
     if (!matchResult.isMatch) {
       return NextResponse.json({
         error: "Face does not match ID",

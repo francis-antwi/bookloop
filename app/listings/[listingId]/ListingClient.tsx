@@ -105,7 +105,7 @@ const onCreateReservation = useCallback(() => {
         email: listing.email || '',
     };
 
-    console.log("Sending reservation data:", reservationData);
+
 
     axios.post('/api/reservations', reservationData)
         .then((response) => {

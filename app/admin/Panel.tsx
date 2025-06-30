@@ -227,7 +227,7 @@ const BookingDashboard = () => {
         body: JSON.stringify({ status }),
       });
       if (!res.ok) throw new Error('Failed to update reservation');
-      console.log(`Reservation ${reservationId} updated to ${status}`);
+   
       
       // Update the local state
       setReservations(prev => 

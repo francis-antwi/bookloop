@@ -119,7 +119,7 @@ const SearchModal = () => {
           });
 
           await loader.load(); // this loads Google Maps API the proper way
-          console.log('Google Maps API loaded successfully');
+    
         }
 
         scriptsLoadedRef.current = true;

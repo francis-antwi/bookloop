@@ -9,7 +9,7 @@ async function makeAdmin() {
     data: { role: "ADMIN" },
   });
 
-  console.log("User updated:", user);
+
 }
 
 makeAdmin()
