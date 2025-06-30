@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 export default withAuth(
-  async function middleware(req) {
+  async function middleware(req: NextRequest) {
     if (!req.nextUrl) {
       console.error("req.nextUrl is undefined in middleware for path:", req.url);
       return NextResponse.next();
@@ -13,7 +13,6 @@ export default withAuth(
     const token = req.nextauth?.token;
 
     const publicPaths = [
-      // Removed "/" from here as it's now excluded from the matcher
       "/auth",
       "/auth/error",
     ];
@@ -33,17 +32,30 @@ export default withAuth(
       (path) => pathname.startsWith(path)
     );
 
+    // === If not logged in ===
     if (!token) {
-      if (isPublicPath || pathname === "/role" || pathname.startsWith("/auth")) {
+      if (isPublicPath || pathname === "/role" || pathname === "/verify") {
         return NextResponse.next();
       }
       return NextResponse.redirect(new URL("/auth", req.url));
     }
 
+    // === If no role yet, force role selection ===
     if (!token.role && pathname !== "/role") {
       return NextResponse.redirect(new URL("/role", req.url));
     }
 
+    // ✅ Prevent users with a role from going back to role selection
+    if (token.role && pathname === "/role") {
+      return NextResponse.redirect(new URL("/", req.url));
+    }
+
+    // ✅ Redirect verified PROVIDERs away from /verify
+    if (token.role === "PROVIDER" && token.isFaceVerified && pathname === "/verify") {
+      return NextResponse.redirect(new URL("/my-listings", req.url));
+    }
+
+    // ✅ Force unverified PROVIDERs to /verify before accessing protected areas
     if (
       token.role === "PROVIDER" &&
       !token.isFaceVerified &&
@@ -53,14 +65,13 @@ export default withAuth(
       return NextResponse.redirect(new URL("/verify", req.url));
     }
 
-    if (pathname.startsWith("/admin") && token.role !== "ADMIN") {
+    // ✅ Prevent CUSTOMERs from accessing provider-only routes or /verify
+    if (token.role !== "PROVIDER" && (isProviderRestrictedPath || pathname === "/verify")) {
       return NextResponse.redirect(new URL("/403", req.url));
     }
-    if (token.role === "PROVIDER" && token.isFaceVerified && pathname === "/verify") {
-      return NextResponse.redirect(new URL("/my-listings", req.url));
-    }
-    
-    if (token.role !== "PROVIDER" && isProviderRestrictedPath) {
+
+    // ✅ Only ADMINs can access /admin
+    if (pathname.startsWith("/admin") && token.role !== "ADMIN") {
       return NextResponse.redirect(new URL("/403", req.url));
     }
 
@@ -73,9 +84,9 @@ export default withAuth(
   }
 );
 
+// === Pages this middleware protects ===
 export const config = {
   matcher: [
-    // Removed "/" from here to exclude it from middleware protection
     "/bookings/:path*",
     "/favourites/:path*",
     "/approvals/:path*",
@@ -83,6 +94,7 @@ export const config = {
     "/notifications/:path*",
     "/admin/:path*",
     "/role",
+    "/verify",
     "/auth/:path*",
   ],
 };

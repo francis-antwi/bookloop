@@ -115,11 +115,10 @@ if (!registerData.success) {
 
 if (registerData.shouldAutoLogin) {
   toast.success('Verification complete! Logging you in...');
-  await update();
-  router.push('/');
-  onComplete?.();
+  window.location.href = '/'; 
   return;
 }
+
 
 toast.error("Verification complete, but auto-login failed. Please log in manually.");
 
