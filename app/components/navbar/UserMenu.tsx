@@ -242,28 +242,22 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
               <div className="py-1 px-1 space-y-0.5">
                 {menuItems.map((item, index) => (
                   <MenuItem
-  key={item.label}
-  ref={(el) => (menuItemsRef.current[index] = el)}
-  onClick={() => {
-    item.onClick();
-
-    if (item.label === "Logout") {
-      window.location.reload(); // or router.refresh() if using App Router
-    }
-
-    setIsOpen(false);
-  }}
-  label={
-    item.label === "Logout" && isSigningOut
-      ? "Signing out..."
-      : item.label
-  }
-  className={item.className}
-  role="menuitem"
-  tabIndex={-1}
-  disabled={item.label === "Logout" && isSigningOut}
-/>
-
+                    key={item.label}
+                    ref={(el) => (menuItemsRef.current[index] = el)}
+                    onClick={() => {
+                      item.onClick();
+                      setIsOpen(false);
+                    }}
+                    label={
+                      item.label === "Logout" && isSigningOut
+                        ? "Signing out..."
+                        : item.label
+                    }
+                    className={item.className}
+                    role="menuitem"
+                    tabIndex={-1}
+                    disabled={item.label === "Logout" && isSigningOut}
+                  />
                 ))}
               </div>
             </motion.div>
