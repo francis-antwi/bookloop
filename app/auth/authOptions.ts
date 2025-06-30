@@ -58,7 +58,7 @@ export const authOptions: AuthOptions = {
   pages: {
     signIn: "/", // Redirect to home page for sign-in
     error: "/auth/error", // Custom error page
-    newUser: null, // Prevent automatic redirect to /role for new users
+    newUser: null, // Prevent automatic redirect to /role for new users by NextAuth itself
   },
 
   session: {
@@ -97,10 +97,10 @@ export const authOptions: AuthOptions = {
           where: { email: user.email ?? "" },
         });
 
-        // If no existing user, allow sign-in to proceed (likely to /role for registration)
+        // If no existing user, redirect to /role to allow them to complete their profile
         if (!existingUser) {
-          console.log(`Google signIn: No existing user found for ${user.email}. Allowing registration flow.`);
-          return true;
+          console.log(`Google signIn: No existing user found for ${user.email}. Redirecting to /role for registration flow.`);
+          return "/role"; // Explicitly redirect new Google users to /role
         }
 
         console.log(`Google signIn: Found existing user ${existingUser.email} with role ${existingUser.role}.`);
@@ -128,7 +128,6 @@ export const authOptions: AuthOptions = {
             console.log(`Google signIn: User ${existingUser.email} is PROVIDER and isFaceVerified is TRUE. Allowing login.`);
         }
 
-
         // For all other cases, allow sign-in
         return true;
       }
@@ -148,12 +147,7 @@ export const authOptions: AuthOptions = {
           data: { role: session.role },
         });
 
-        // Removed the problematic line:
-        // if (session.role === UserRole.PROVIDER) {
-        //   token.isFaceVerified = false; // This line was causing the issue
-        // }
-        // The `isFaceVerified` status should be managed by your verification flow,
-        // not reset here.
+        // The problematic line that was resetting isFaceVerified was already removed.
       }
 
       // If a user object is provided (on initial sign-in), populate token with user data
