@@ -37,26 +37,17 @@ export default withAuth(
       return NextResponse.redirect(new URL("/role", req.url));
     }
 
-    // 3. Block ALL users who already have a role from re-visiting /role
-if (pathname === "/role") {
-  if (token.role === "PROVIDER") {
-    // If PROVIDER is already verified, go to /my-listings
-    return token.isFaceVerified
-      ? NextResponse.redirect(new URL("/my-listings", req.url))
-      : NextResponse.redirect(new URL("/verify", req.url));
-  }
-
-  // Any other role (e.g. CUSTOMER) just go home
-  return NextResponse.redirect(new URL("/", req.url));
-}
-
-
-    // 4. Prevent ANY user with a role from going back to /role
-    if (token.role && pathname === "/role") {
+    // 3. Handle role access rules
+    if (pathname === "/role") {
+      if (token.role === "PROVIDER") {
+        return token.isFaceVerified
+          ? NextResponse.redirect(new URL("/my-listings", req.url))
+          : NextResponse.redirect(new URL("/verify", req.url));
+      }
       return NextResponse.redirect(new URL("/", req.url));
     }
 
-    // 5. PROVIDER not verified trying to access provider pages (not /verify)
+    // 4. PROVIDER not verified trying to access provider pages (not /verify)
     if (
       token.role === "PROVIDER" &&
       !token.isFaceVerified &&
@@ -66,7 +57,7 @@ if (pathname === "/role") {
       return NextResponse.redirect(new URL("/verify", req.url));
     }
 
-    // 6. CUSTOMER or other roles trying to access provider-only pages or /verify
+    // 5. CUSTOMER or other roles trying to access provider-only pages or /verify
     if (
       token.role !== "PROVIDER" &&
       (isProviderPath || pathname === "/verify")
@@ -74,7 +65,7 @@ if (pathname === "/role") {
       return NextResponse.redirect(new URL("/403", req.url));
     }
 
-    // 7. Admin protection
+    // 6. Admin protection
     if (pathname.startsWith("/admin") && token.role !== "ADMIN") {
       return NextResponse.redirect(new URL("/403", req.url));
     }
