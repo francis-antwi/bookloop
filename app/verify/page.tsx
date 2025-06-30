@@ -86,15 +86,28 @@ const submitVerification = async () => {
     const extractedData = response.data.document || {};
     const confidence = response.data.confidence || extractedData.faceConfidence || 95;
 
-    // 3. Prepare registration payload
-    const registrationData = {
-      email: session?.user?.email,
-      name: extractedData.idName || 'Verified User',
-      role: role || 'PROVIDER',
-      verified: true,
-      faceConfidence: confidence,
-      ...extractedData
-    };
+ const registrationData = {
+  email: session?.user?.email,
+  name: extractedData.idName || 'Verified User',
+  role: role || 'PROVIDER',
+  verified: true,
+  faceConfidence: confidence,
+  selfieUrl: response.data.selfieUrl,
+  imageUrl: response.data.imageUrl,
+  idName: extractedData.idName,
+  idNumber: extractedData.idNumber || extractedData.personalIdNumber,
+  idType: extractedData.idType,
+  idDOB: extractedData.idDOB,
+  idExpiryDate: extractedData.idExpiryDate,
+  idIssueDate: extractedData.idIssueDate,
+  idIssuer: extractedData.idIssuer,
+  nationality: extractedData.nationality,
+  gender: extractedData.gender,
+  placeOfIssue: extractedData.placeOfIssue,
+  rawText: extractedData.rawText,
+  extractionComplete: true
+};
+
 
     // 4. Register PROVIDER (Google users only if needed)
     try {
