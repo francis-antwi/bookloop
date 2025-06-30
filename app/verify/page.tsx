@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import {
   FiCamera,
@@ -24,6 +25,7 @@ interface VerificationStepsProps {
 }
 
 const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
+  const router = useRouter();
   const { data: session, update } = useSession();
   const [currentStep, setCurrentStep] = useState<'selfie' | 'id'>('selfie');
   const [selfieImage, setSelfieImage] = useState<Blob | null>(null);
@@ -68,10 +70,6 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
       verificationFormData.append('idImage', idFile);
       verificationFormData.append('email', session?.user?.email || '');
 
-      for (let pair of verificationFormData.entries()) {
-
-      }
-
       const response = await axios.post('/api/verify', verificationFormData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 60000
@@ -111,7 +109,6 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
         await axios.post('/api/register', registrationData);
       } catch (regError: any) {
         const regErrorData = regError.response?.data;
-        console.error('❌ Registration failed:', regErrorData?.error || regError.message);
         if (regErrorData?.missing) {
           console.warn('🔍 Missing fields:', regErrorData.missing);
         }
@@ -120,12 +117,9 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
         }
       }
 
-   await update();
-
-
+      await update();
       toast.success('Verification complete!');
-      onComplete();
-
+      router.push('/');
     } catch (error: any) {
       const errorData = error.response?.data;
       const errorMsg = errorData?.error || error.message || 'Verification failed';
