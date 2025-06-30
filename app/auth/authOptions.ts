@@ -82,8 +82,14 @@ export const authOptions: AuthOptions = {
         httpOnly: true,
         sameSite: "lax",
         path: "/",
-        secure: true, // Should be true in production
-        domain: "bookloop-eight.vercel.app", // Your domain
+        // --- MODIFIED LOGIC FOR COOKIE DOMAIN ---
+        // Set secure to true in production
+        secure: process.env.NODE_ENV === "production",
+        // Dynamically set domain for Vercel deployments
+        domain: process.env.VERCEL_URL
+          ? `.${process.env.VERCEL_URL.replace("https://", "").replace("http://", "")}`
+          : undefined, // If not Vercel, let it default to current domain
+        // --- END MODIFIED LOGIC ---
       },
     },
   },
@@ -99,35 +105,27 @@ export const authOptions: AuthOptions = {
 
         // If no existing user, redirect to /role to allow them to complete their profile
         if (!existingUser) {
-          console.log(`Google signIn: No existing user found for ${user.email}. Redirecting to /role for registration flow.`);
           return "/role"; // Explicitly redirect new Google users to /role
         }
 
-        // --- START NEW LOGGING FOR EXISTING USERS ---
-        console.log(`Google signIn: Found existing user ${existingUser.email}.`);
-        console.log(`  - Role: ${existingUser.role}`);
-        console.log(`  - isOtpVerified: ${existingUser.isOtpVerified}`);
-        console.log(`  - isFaceVerified: ${existingUser.isFaceVerified}`);
+        // --- START NEW LOGGING FOR EXISTING USERS --- (Removed logs)
         // --- END NEW LOGGING ---
 
-        // --- MODIFIED LOGIC HERE ---
+        // --- MODIFIED LOGIC HERE --- (Removed log)
         // If an existing user does not have a role defined, redirect them to /role
         // This check is now less critical here as the JWT callback will ensure a role is always present.
         if (!existingUser.role) {
-          console.log(`Google signIn: Existing user ${existingUser.email} has no role defined. Redirecting to /role.`);
           return "/role";
         }
         // --- END MODIFIED LOGIC ---
 
         // If existing user is an ADMIN, allow sign-in
         if (existingUser.role === UserRole.ADMIN) {
-          console.log(`Google signIn: User is ADMIN. Allowing login.`);
           return true;
         }
 
         // If user is not OTP verified, redirect to /verify
         if (!existingUser.isOtpVerified) {
-          console.log(`Google signIn: User ${existingUser.email} is not OTP verified. Redirecting to /verify.`);
           return "/verify";
         }
 
@@ -136,12 +134,10 @@ export const authOptions: AuthOptions = {
           existingUser.role === UserRole.PROVIDER &&
           !existingUser.isFaceVerified
         ) {
-          console.log(`Google signIn: User ${existingUser.email} is PROVIDER but isFaceVerified is FALSE. Redirecting to /verify.`);
           return "/verify";
         }
 
         // For all other cases (existing user with role, OTP verified, and face verified if PROVIDER), allow sign-in
-        console.log(`Google signIn: User ${existingUser.email} is fully verified and has a role. Allowing login to root.`);
         return true;
       }
 
