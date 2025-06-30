@@ -94,8 +94,8 @@ const uploadToCloudinary = async (buffer: Buffer, fileType: string) => {
 const performTaggunOCR = async (buffer: Buffer): Promise<string> => {
   const base64 = buffer.toString("base64");
 
-  const res = await axios.post(
-    "https://api.taggun.io/api/receipt/v1/verbose/file",
+const res = await axios.post(
+  "https://api.taggun.io/api/ocr/scan/base64",
     {
       filename: "id.jpg",
       contentType: "image/jpeg",
