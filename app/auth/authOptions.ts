@@ -103,16 +103,18 @@ export const authOptions: AuthOptions = {
           return "/role"; // Explicitly redirect new Google users to /role
         }
 
-        console.log(`Google signIn: Found existing user ${existingUser.email} with role ${existingUser.role}.`);
+        // --- START NEW LOGGING FOR EXISTING USERS ---
+        console.log(`Google signIn: Found existing user ${existingUser.email}.`);
+        console.log(`  - Role: ${existingUser.role}`);
+        console.log(`  - isOtpVerified: ${existingUser.isOtpVerified}`);
+        console.log(`  - isFaceVerified: ${existingUser.isFaceVerified}`);
+        // --- END NEW LOGGING ---
 
-        // --- NEW LOGIC ADDED HERE ---
         // If an existing user does not have a role defined, redirect them to /role
         if (!existingUser.role) {
           console.log(`Google signIn: Existing user ${existingUser.email} has no role defined. Redirecting to /role.`);
           return "/role";
         }
-        // --- END NEW LOGIC ---
-
 
         // If existing user is an ADMIN, allow sign-in
         if (existingUser.role === UserRole.ADMIN) {
@@ -133,11 +135,10 @@ export const authOptions: AuthOptions = {
         ) {
           console.log(`Google signIn: User ${existingUser.email} is PROVIDER but isFaceVerified is FALSE. Redirecting to /verify.`);
           return "/verify";
-        } else if (existingUser.role === UserRole.PROVIDER && existingUser.isFaceVerified) {
-            console.log(`Google signIn: User ${existingUser.email} is PROVIDER and isFaceVerified is TRUE. Allowing login.`);
         }
 
-        // For all other cases, allow sign-in (redirects to pages.signIn which is "/")
+        // For all other cases (existing user with role, OTP verified, and face verified if PROVIDER), allow sign-in
+        console.log(`Google signIn: User ${existingUser.email} is fully verified and has a role. Allowing login to root.`);
         return true;
       }
 
