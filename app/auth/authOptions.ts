@@ -110,11 +110,14 @@ export const authOptions: AuthOptions = {
         console.log(`  - isFaceVerified: ${existingUser.isFaceVerified}`);
         // --- END NEW LOGGING ---
 
+        // --- MODIFIED LOGIC HERE ---
         // If an existing user does not have a role defined, redirect them to /role
+        // This check is now less critical here as the JWT callback will ensure a role is always present.
         if (!existingUser.role) {
           console.log(`Google signIn: Existing user ${existingUser.email} has no role defined. Redirecting to /role.`);
           return "/role";
         }
+        // --- END MODIFIED LOGIC ---
 
         // If existing user is an ADMIN, allow sign-in
         if (existingUser.role === UserRole.ADMIN) {
@@ -167,8 +170,8 @@ export const authOptions: AuthOptions = {
           id: user.id,
           name: user.name,
           email: user.email,
-          image: user.image,
-          role: user.role,
+          // Ensure role is always set, default to CUSTOMER if null/undefined from DB
+          role: user.role ?? UserRole.CUSTOMER, // <-- ADDED DEFAULT ROLE HERE
           isOtpVerified: user.isOtpVerified ?? true,
           otpCode: user.otpCode ?? null,
           otpExpiresAt: user.otpExpiresAt?.toISOString() ?? null,
@@ -187,6 +190,10 @@ export const authOptions: AuthOptions = {
             idIssueDate: user.idIssueDate?.toISOString() ?? null,
           }),
         };
+        // Also ensure image is set from user object if available
+        if (user.image) {
+            token.image = user.image;
+        }
       }
 
       return token;
