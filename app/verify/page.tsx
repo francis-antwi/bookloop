@@ -14,7 +14,7 @@ import {
   FiFileText,
   FiAlertCircle
 } from 'react-icons/fi';
-import { useSession } from 'next-auth/react';
+import { useSession, signIn } from 'next-auth/react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import Camera from '../components/inputs/Camera';
@@ -107,6 +107,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
 
       try {
         await axios.post('/api/register', registrationData);
+        await signIn('email', { email: registrationData.email, redirect: false });
       } catch (regError: any) {
         const regErrorData = regError.response?.data;
         if (regErrorData?.missing) {
@@ -140,7 +141,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-4">
+   <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-4">
       <div className="max-w-md mx-auto">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full mb-4 shadow-lg">
@@ -333,6 +334,6 @@ const SecurityNotice = () => (
       </div>
     </div>
   </div>
-);
+  );
 
 export default VerificationSteps;
