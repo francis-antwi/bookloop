@@ -5,7 +5,6 @@ import { UserRole } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import authOptions from "@/app/auth/authOptions";
 
-
 function parseDate(dateStr: string): Date | null {
   try {
     const parts = dateStr.split(/[\/\-\.]/).map(p => p.trim());
@@ -32,7 +31,7 @@ export async function POST(request: Request) {
     const googleUserEmail = session?.user?.email || null;
 
     const body = await request.json();
-    console.log("\ud83d\udce6 Incoming registration payload:", JSON.stringify(body, null, 2));
+    console.log("📦 Incoming registration payload:", JSON.stringify(body, null, 2));
     errorContext.requestBody = body;
 
     const {
@@ -121,14 +120,18 @@ export async function POST(request: Request) {
 
       if (!selfieImage && !selfieUrl) missing.push("selfieImage");
       if (!idImage && !imageUrl) missing.push("idImage");
-      if (!faceConfidence) missing.push("faceConfidence");
+      if (!faceConfidence || Number(faceConfidence) < 0.5) missing.push("faceConfidence");
       if (!idName) missing.push("idName");
       if (!idNumber && !personalIdNumber) missing.push("idNumber or personalIdNumber");
+      if (!idType) missing.push("idType");
 
       if (missing.length) {
+        console.error("❌ Missing PROVIDER verification fields:", missing);
+        console.log("📤 Full payload:", JSON.stringify(body, null, 2));
         return NextResponse.json({
           error: "Missing provider verification data",
           missing,
+          payload: body,
           message: "User not saved. Verification incomplete."
         }, { status: 400 });
       }
