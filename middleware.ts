@@ -135,7 +135,5 @@ export const config = {
     "/verify",
     "/auth/:path*",
     "/api/auth/:path*",
-    "/",
-    "/403",
   ],
 };
