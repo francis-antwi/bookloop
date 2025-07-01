@@ -68,8 +68,8 @@ export const authOptions: AuthOptions = {
   },
 
   secret: process.env.NEXTAUTH_SECRET,
-  debug: process.env.NODE_ENV === "development",
   trustHost: true,
+  debug: process.env.NODE_ENV === "development",
 
   cookies: {
     sessionToken: {
@@ -79,84 +79,31 @@ export const authOptions: AuthOptions = {
         sameSite: "lax",
         path: "/",
         secure: true,
-        domain: "bookloop-eight.vercel.app", // change if using a custom domain
+        domain: "bookloop-eight.vercel.app",
       },
     },
   },
 
   callbacks: {
-    async signIn({ user, account, profile }) {
+    async signIn({ user, account }) {
       if (account?.provider === "google") {
-        if (!user.email) {
-          console.error("Google signIn: No email found on user object");
-          return false;
-        }
-
         const existingUser = await prisma.user.findUnique({
-          where: { email: user.email },
+          where: { email: user.email! },
           select: { role: true, isFaceVerified: true },
         });
 
-        if (!existingUser) {
-          return "/role";
-        }
-
+        if (!existingUser) return "/role";
         if (
           existingUser.role === UserRole.PROVIDER &&
           !existingUser.isFaceVerified
         ) {
           throw new Error("Face verification required.");
         }
-
-        return true;
       }
-
       return true;
     },
 
     async jwt({ token, user, account, profile, trigger, session }) {
-      // Google profile fallback
-      if (!token.email && account?.provider === "google" && profile) {
-        token.email = profile.email ?? null;
-        token.name = profile.name ?? null;
-        token.image = profile.picture ?? null;
-      }
-
-      // 🛠️ If user is missing but token exists, fetch user from DB
-      if (!user && token.email) {
-        const dbUser = await prisma.user.findUnique({
-          where: { email: token.email },
-        });
-
-        if (dbUser) {
-          token = {
-            ...token,
-            id: dbUser.id,
-            email: dbUser.email,
-            name: dbUser.name,
-            image: dbUser.image,
-            role: dbUser.role,
-            isOtpVerified: dbUser.isOtpVerified ?? true,
-            otpCode: dbUser.otpCode ?? null,
-            otpExpiresAt: dbUser.otpExpiresAt?.toISOString() ?? null,
-            isFaceVerified: dbUser.isFaceVerified ?? false,
-            ...(dbUser.role === UserRole.PROVIDER && {
-              selfieImage: dbUser.selfieImage ?? null,
-              idImage: dbUser.idImage ?? null,
-              faceConfidence: dbUser.faceConfidence ?? null,
-              idName: dbUser.idName ?? null,
-              idNumber: dbUser.idNumber ?? null,
-              idDOB: dbUser.idDOB?.toISOString() ?? null,
-              idExpiryDate: dbUser.idExpiryDate?.toISOString() ?? null,
-              idIssuer: dbUser.idIssuer ?? null,
-              personalIdNumber: dbUser.personalIdNumber ?? null,
-              idIssueDate: dbUser.idIssueDate?.toISOString() ?? null,
-            }),
-          };
-        }
-      }
-
-      // If user is provided (fresh login)
       if (user) {
         token = {
           ...token,
@@ -184,10 +131,22 @@ export const authOptions: AuthOptions = {
         };
       }
 
-      // Manual session update (e.g., role)
+      // Rehydrate missing token data
+      if (!token.role || token.isFaceVerified === undefined) {
+        const dbUser = await prisma.user.findUnique({
+          where: { email: token.email ?? "" },
+        });
+
+        if (dbUser) {
+          token.role = dbUser.role;
+          token.isFaceVerified = dbUser.isFaceVerified ?? false;
+          token.isOtpVerified = dbUser.isOtpVerified ?? true;
+        }
+      }
+
+      // Handle manual role updates
       if (trigger === "update" && session?.role) {
         token.role = session.role;
-
         await prisma.user.update({
           where: { email: token.email ?? "" },
           data: { role: session.role },
@@ -229,8 +188,8 @@ export const authOptions: AuthOptions = {
         };
       }
 
-      if (process.env.NODE_ENV !== "production") {
-        console.log("[SESSION CALLBACK]:", session);
+      if (process.env.NODE_ENV === "development") {
+        console.log("[SESSION CALLBACK]", session);
       }
 
       return session;
@@ -238,7 +197,7 @@ export const authOptions: AuthOptions = {
 
     async redirect({ url, baseUrl }) {
       if (url.startsWith("/")) return `${baseUrl}${url}`;
-      else if (new URL(url).origin === baseUrl) return url;
+      if (new URL(url).origin === baseUrl) return url;
       return baseUrl;
     },
   },
