@@ -1,55 +1,59 @@
-import { getToken } from "next-auth/jwt";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/auth/authOptions";
 import prisma from "@/app/libs/prismadb";
 import { UserRole } from "@prisma/client";
 
-const secret = process.env.NEXTAUTH_SECRET;
-
 export async function POST(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.email) {
+    return NextResponse.json(
+      { error: "Unauthorized", message: "No session or email found" },
+      { status: 401 }
+    );
+  }
+
+  const email = session.user.email;
+
+  let body: { role?: string } = {};
+
   try {
-    // Verify authentication
-    const token = await getToken({ req, secret });
-    if (!token?.email) {
-      return NextResponse.json(
-        { error: "Unauthorized", message: "No session or email found" },
-        { status: 401 }
-      );
-    }
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { error: "Bad Request", message: "Invalid JSON body" },
+      { status: 400 }
+    );
+  }
 
-    // Parse request body
-    let body: { role?: string };
-    try {
-      body = await req.json();
-    } catch (error) {
-      return NextResponse.json(
-        { error: "Bad Request", message: "Invalid JSON body" },
-        { status: 400 }
-      );
-    }
+  const normalizedRole = body.role?.toUpperCase();
 
-    // Validate role
-    const normalizedRole = body.role?.toUpperCase();
-    if (!normalizedRole || !["CUSTOMER", "PROVIDER"].includes(normalizedRole)) {
-      return NextResponse.json(
-        { 
-          error: "Bad Request", 
-          message: "Valid role (CUSTOMER or PROVIDER) is required" 
-        },
-        { status: 400 }
-      );
-    }
+  if (!normalizedRole) {
+    return NextResponse.json(
+      { error: "Bad Request", message: "Role is required" },
+      { status: 400 }
+    );
+  }
 
-    const email = token.email;
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+  if (!["CUSTOMER", "PROVIDER"].includes(normalizedRole)) {
+    return NextResponse.json(
+      { error: "Bad Request", message: "Invalid role provided" },
+      { status: 400 }
+    );
+  }
 
-    // Handle new users (no existing record)
-    if (!existingUser) {
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+
+    if (!user) {
+      // New Google user
       if (normalizedRole === "CUSTOMER") {
         const newUser = await prisma.user.create({
           data: {
             email,
-            name: token.name ?? "",
-            image: token.picture ?? null,
+            name: session.user.name ?? "",
+            image: session.user.image ?? "",
             isOtpVerified: true,
             isFaceVerified: false,
             role: "CUSTOMER",
@@ -57,86 +61,62 @@ export async function POST(req: NextRequest) {
         });
 
         return NextResponse.json(
-          { 
-            success: true, 
-            message: "Customer account created", 
-            user: {
-              id: newUser.id,
-              email: newUser.email,
-              role: newUser.role
-            } 
-          },
+          { success: true, message: "Customer account created", user: newUser },
           { status: 201 }
         );
       }
 
-      // For new providers, defer creation until verification
+      // PROVIDER — do not create yet
       return NextResponse.json(
         {
           success: false,
+          message:
+            "Provider role selected. User will be saved after verification.",
           skipCreate: true,
-          message: "Provider account requires verification before creation",
         },
         { status: 200 }
       );
     }
 
-    // Handle existing users
-    if (existingUser.role === normalizedRole) {
+    // User already exists
+    if (user.role === normalizedRole) {
       return NextResponse.json(
-        { 
-          success: true, 
-          message: "Role already set", 
-          user: {
-            id: existingUser.id,
-            email: existingUser.email,
-            role: existingUser.role
-          }
-        },
+        { success: true, message: "Role already set", user },
         { status: 200 }
       );
     }
 
-    // Additional checks for provider role
-    if (normalizedRole === "PROVIDER") {
-      if (!existingUser.isFaceVerified || !existingUser.selfieImage || !existingUser.idImage) {
-        return NextResponse.json(
-          {
-            error: "Verification required",
-            message: "Complete ID and face verification to become a provider",
-            requiredVerification: true
-          },
-          { status: 403 }
-        );
-      }
+    // Trying to change to PROVIDER
+    if (
+      normalizedRole === "PROVIDER" &&
+      (!user.isFaceVerified || !user.selfieImage || !user.idImage)
+    ) {
+      return NextResponse.json(
+        {
+          error: "Verification required",
+          message:
+            "You must complete ID and face verification before becoming a provider.",
+        },
+        { status: 403 }
+      );
     }
 
-    // Update user role
-    const updatedUser = await prisma.user.update({
+    // Update role
+    await prisma.user.update({
       where: { email },
       data: { role: normalizedRole as UserRole },
     });
 
     return NextResponse.json(
-      { 
-        success: true, 
-        message: "Role updated successfully",
-        user: {
-          id: updatedUser.id,
-          email: updatedUser.email,
-          role: updatedUser.role
-        }
-      },
+      { success: true, message: "Role updated successfully" },
       { status: 200 }
     );
-
   } catch (error: any) {
     console.error("[ROLE_API_ERROR]", error);
     return NextResponse.json(
       {
-        error: "Internal Server Error",
-        message: "An unexpected error occurred while processing your request",
-        details: process.env.NODE_ENV === "development" ? error.message : undefined
+        error: "Internal server error",
+        message: error?.message || "Something went wrong",
       },
       { status: 500 }
     );
