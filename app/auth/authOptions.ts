@@ -84,7 +84,6 @@ export const authOptions: AuthOptions = {
   },
 
   callbacks: {
-    callbacks: {
   async signIn({ user, account }) {
     if (account?.provider === "google") {
       const existingUser = await prisma.user.findUnique({
@@ -190,6 +189,5 @@ export const authOptions: AuthOptions = {
       return session;
     },
   },
-};
 
 export default NextAuth(authOptions);
