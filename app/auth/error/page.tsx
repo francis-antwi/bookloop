@@ -15,7 +15,7 @@ export default function AuthErrorRedirectPage() {
     const verifyErrors = ["PROVIDER_VERIFICATION_REQUIRED", "redirect-verify"];
 
     if (roleErrors.includes(error)) {
-      router.replace("/role");
+      router.replace("/auth/error");
     } else if (verifyErrors.includes(error)) {
       router.replace("/verify");
     } else {
