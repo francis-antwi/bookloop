@@ -1,113 +1,85 @@
 import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import type { JWT } from "next-auth/jwt";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
 
 export default withAuth(
   async function middleware(req: NextRequest) {
     const { pathname } = req.nextUrl;
-    const token = req.auth?.token;
+    const token = req.nextauth?.token;
 
-    const publicPaths = ["/", "/auth", "/auth/error", "/api/auth", "/_next", "/403"];
-    const providerPaths = ["/my-listings", "/approvals", "/bookings", "/favourites", "/notifications"];
-    const adminPaths = ["/admin"];
-    const roleSelectionPath = "/role";
-    const verificationPath = "/verify";
+    const publicPaths = ["/auth", "/auth/error", "/api/auth", "/_next"];
+    const isPublic = publicPaths.some((path) => pathname.startsWith(path));
 
-    const isPublicPath = publicPaths.some(path => pathname.startsWith(path));
-    const isProviderPath = providerPaths.some(path => pathname.startsWith(path));
-    const isAdminPath = adminPaths.some(path => pathname.startsWith(path));
-    const isRoleSelection = pathname === roleSelectionPath;
-    const isVerification = pathname === verificationPath;
+    const providerPaths = [
+      "/my-listings",
+      "/approvals",
+      "/bookings",
+      "/favourites",
+      "/notifications",
+    ];
+    const isProviderPath = providerPaths.some((path) =>
+      pathname.startsWith(path)
+    );
 
-    // If not authenticated
+    const isVerifiedProvider =
+      token?.role === "PROVIDER" && token?.isFaceVerified === true;
+
+    // 1. Not logged in
     if (!token) {
-      if (isPublicPath || isRoleSelection || isVerification) {
+      if (isPublic || pathname === "/role" || pathname === "/verify") {
         return NextResponse.next();
       }
       return NextResponse.redirect(new URL("/auth", req.url));
     }
 
-    // Prevent logged-in users from accessing /auth (except /auth/error)
-    if (pathname.startsWith("/auth") && pathname !== "/auth/error") {
+    // 2. Logged in but no role set yet → only allow access to /role
+    if (!token.role && pathname !== "/role") {
+      return NextResponse.redirect(new URL("/role", req.url));
+    }
+
+    // 3. Access to /role
+    if (pathname === "/role") {
+      // Allow if user has no role yet
+      if (!token.role) {
+        return NextResponse.next();
+      }
+
+      // Redirect based on existing role
+      if (token.role === "PROVIDER") {
+        return token.isFaceVerified
+          ? NextResponse.redirect(new URL("/my-listings", req.url))
+          : NextResponse.redirect(new URL("/verify", req.url));
+      }
+
+      // Other roles (e.g., CUSTOMER)
       return NextResponse.redirect(new URL("/", req.url));
     }
 
-    let currentEffectiveRole = token.role;
-
-    // Always fetch DB role if missing in token
-    if (!currentEffectiveRole && token.email) {
-      try {
-        const dbUser = await prisma.user.findUnique({
-          where: { email: token.email },
-          select: { role: true },
-        });
-
-        currentEffectiveRole = dbUser?.role || null;
-
-        if (!currentEffectiveRole && pathname !== roleSelectionPath && pathname !== verificationPath) {
-          return NextResponse.redirect(new URL(roleSelectionPath, req.url));
-        } else if (currentEffectiveRole && pathname === roleSelectionPath) {
-          return NextResponse.redirect(new URL("/", req.url));
-        }
-      } catch (err) {
-        console.error("Failed to fetch user role:", err);
-      }
+    // 4. Verified PROVIDER should not access /verify again
+    if (pathname === "/verify" && isVerifiedProvider) {
+      return NextResponse.redirect(new URL("/my-listings", req.url));
     }
 
-    // For /role: ensure user with role cannot access
-    if (isRoleSelection) {
-      if (token.email) {
-        try {
-          const dbUser = await prisma.user.findUnique({
-            where: { email: token.email },
-            select: { role: true },
-          });
-
-          if (dbUser?.role) {
-            return NextResponse.redirect(new URL("/", req.url));
-          }
-        } catch (err) {
-          console.error("Error checking role for /role access:", err);
-        }
-      }
-
-      return NextResponse.next(); // allow if no role
+    // 5. Unverified PROVIDER accessing protected provider pages (except /verify)
+    if (
+      token.role === "PROVIDER" &&
+      !token.isFaceVerified &&
+      isProviderPath &&
+      pathname !== "/verify"
+    ) {
+      return NextResponse.redirect(new URL("/verify", req.url));
     }
 
-    // Admin logic
-    if (token.role === "ADMIN") {
-      if (!isAdminPath && pathname !== "/") {
-        return NextResponse.redirect(new URL("/admin", req.url));
-      }
-      return NextResponse.next();
+    // 6. Non-provider trying to access provider-only paths or /verify
+    if (
+      token.role !== "PROVIDER" &&
+      (isProviderPath || pathname === "/verify")
+    ) {
+      return NextResponse.redirect(new URL("/403", req.url));
     }
 
-    // Redirect providers who aren't verified
-    if (isVerification) {
-      if (token.role === "PROVIDER" && (token.isFaceVerified || token.verified)) {
-        return NextResponse.redirect(new URL("/my-listings", req.url));
-      }
-      if (token.role === "CUSTOMER" && (token.isOtpVerified || token.verified)) {
-        return NextResponse.redirect(new URL("/", req.url));
-      }
-      return NextResponse.next();
-    }
-
-    if (isProviderPath) {
-      if (token.role !== "PROVIDER") {
-        return NextResponse.redirect(new URL("/403", req.url));
-      }
-
-      if (!token.isFaceVerified && !token.verified) {
-        return NextResponse.redirect(new URL(verificationPath, req.url));
-      }
-    }
-
-    if (isAdminPath && token.role !== "ADMIN") {
+    // 7. Admin access protection
+    if (pathname.startsWith("/admin") && token.role !== "ADMIN") {
       return NextResponse.redirect(new URL("/403", req.url));
     }
 
@@ -115,19 +87,22 @@ export default withAuth(
   },
   {
     callbacks: {
-      authorized: ({ token, req }) => {
-        const { pathname } = req.nextUrl;
-        const publicPathsForAuth = ["/", "/auth", "/auth/error", "/api/auth", "/_next", "/403"];
-        const isAllowedPublic = publicPathsForAuth.some(path => pathname.startsWith(path)) ||
-          pathname === "/role" || pathname === "/verify";
-
-        if (!token && isAllowedPublic) return true;
-        return !!token;
-      },
+      authorized: () => true,
     },
   }
 );
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    "/bookings/:path*",
+    "/favourites/:path*",
+    "/approvals/:path*",
+    "/my-listings/:path*",
+    "/notifications/:path*",
+    "/admin/:path*",
+    "/role",
+    "/verify",
+    "/auth/:path*",
+    "/api/auth/:path*",
+  ],
 };
