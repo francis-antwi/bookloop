@@ -245,7 +245,7 @@ const LoginModal = () => {
                         <button
   onClick={() => {
     setIsLoading(true);
-    signIn("google", { callbackUrl: "/role" })
+    signIn("google", { callbackUrl: "/" })
       .catch(() => {
         setIsLoading(false);
         toast.error("Google sign-in failed. Please try again.");
