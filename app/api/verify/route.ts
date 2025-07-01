@@ -22,6 +22,13 @@ export async function POST(req: Request) {
   try {
     const formData = await req.formData();
 
+    // --- NEW LOGGING FOR DEBUGGING FORMDATA ---
+    console.log("⚙️ [VERIFY]: Received FormData entries:");
+    for (const pair of formData.entries()) {
+      console.log(`  - ${pair[0]}: ${typeof pair[1] === 'object' && pair[1] !== null && 'name' in pair[1] ? (pair[1] as File).name : pair[1]}`);
+    }
+    // --- END NEW LOGGING ---
+
     const selfieFile = formData.get("selfie") as File | null;
     const idFile = formData.get("idImage") as File | null;
     const role = formData.get("role")?.toString() || "CUSTOMER";
