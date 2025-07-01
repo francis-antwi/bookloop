@@ -37,13 +37,17 @@ export const authOptions: AuthOptions = {
 
         if (!isCorrectPassword) throw new Error("Invalid credentials");
         if (!user.isOtpVerified) throw new Error("Phone verification required");
+        // Check if the user is a PROVIDER and if they are NOT face verified.
+        // This check relies on the database's `isFaceVerified` status.
         if (user.role === UserRole.PROVIDER && !user.isFaceVerified) {
           throw new Error("Face verification required for providers");
         }
         if (!user.role) throw new Error("Missing account role");
 
+        // Return the user object with relevant properties for the session
         return {
           ...user,
+          // Ensure these properties are explicitly set for the session
           isOtpVerified: user.isOtpVerified ?? true,
           isFaceVerified: user.isFaceVerified ?? false,
         };
@@ -52,24 +56,24 @@ export const authOptions: AuthOptions = {
   ],
 
   pages: {
-    signIn: "/",
-    error: "/auth/error",
-    newUser: null, // Prevent NextAuth default /new-user
+    signIn: "/", // Redirect to home page for sign-in
+    error: "/auth/error", // Custom error page
+    newUser: null, // Prevent automatic redirect to /role for new users
   },
 
   session: {
-    strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60,
-    updateAge: 24 * 60 * 60,
+    strategy: "jwt", // Use JWT for session management
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+    updateAge: 24 * 60 * 60, // 24 hours
   },
 
   jwt: {
-    maxAge: 30 * 24 * 60 * 60,
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   },
 
-  secret: process.env.NEXTAUTH_SECRET,
-  debug: process.env.NODE_ENV === "development",
-  trustHost: true,
+  secret: process.env.NEXTAUTH_SECRET, // JWT secret
+  debug: process.env.NODE_ENV === "development", // Enable debug logs in development
+  trustHost: true, // Trust the host for secure cookies
 
   cookies: {
     sessionToken: {
@@ -78,57 +82,81 @@ export const authOptions: AuthOptions = {
         httpOnly: true,
         sameSite: "lax",
         path: "/",
-        secure: true,
-        domain: "bookloop-eight.vercel.app",
+        secure: true, // Should be true in production
+        domain: "bookloop-eight.vercel.app", // Your domain
       },
     },
   },
 
   callbacks: {
+    // This callback is called when a user signs in.
     async signIn({ user, account }) {
+      // Handle Google sign-in specific logic
       if (account?.provider === "google") {
         const existingUser = await prisma.user.findUnique({
           where: { email: user.email ?? "" },
         });
 
-        // New Google user
+        // If no existing user, allow sign-in to proceed (likely to /role for registration)
         if (!existingUser) {
-          return "/role";
+          console.log(`Google signIn: No existing user found for ${user.email}. Allowing registration flow.`);
+          return true;
         }
 
-        // Existing user but missing role (shouldn't happen)
-        if (!existingUser.role) {
-          return "/role";
+        console.log(`Google signIn: Found existing user ${existingUser.email} with role ${existingUser.role}.`);
+
+        // If existing user is an ADMIN, allow sign-in
+        if (existingUser.role === UserRole.ADMIN) {
+          console.log(`Google signIn: User is ADMIN. Allowing login.`);
+          return true;
         }
 
-        // OTP check
+        // If user is not OTP verified, redirect to /verify
         if (!existingUser.isOtpVerified) {
+          console.log(`Google signIn: User ${existingUser.email} is not OTP verified. Redirecting to /verify.`);
           return "/verify";
         }
 
-        // PROVIDER face verification check
+        // If user is a PROVIDER and not face verified, redirect to /verify
         if (
           existingUser.role === UserRole.PROVIDER &&
           !existingUser.isFaceVerified
         ) {
+          console.log(`Google signIn: User ${existingUser.email} is PROVIDER but isFaceVerified is FALSE. Redirecting to /verify.`);
           return "/verify";
+        } else if (existingUser.role === UserRole.PROVIDER && existingUser.isFaceVerified) {
+            console.log(`Google signIn: User ${existingUser.email} is PROVIDER and isFaceVerified is TRUE. Allowing login.`);
         }
 
+
+        // For all other cases, allow sign-in
         return true;
       }
 
+      // For non-Google providers, always allow sign-in if authorize passes
       return true;
     },
 
+    // This callback is called whenever a JWT is created or updated.
     async jwt({ token, user, trigger, session }) {
+      // Handle session updates (e.g., when a user updates their role)
       if (trigger === "update" && session?.role) {
-        token.role = session.role;
+        token.role = session.role; // Update role in token
+        // Update user role in the database
         await prisma.user.update({
           where: { email: token.email ?? "" },
           data: { role: session.role },
         });
+
+        // Removed the problematic line:
+        // if (session.role === UserRole.PROVIDER) {
+        //   token.isFaceVerified = false; // This line was causing the issue
+        // }
+        // The `isFaceVerified` status should be managed by your verification flow,
+        // not reset here.
       }
 
+      // If a user object is provided (on initial sign-in), populate token with user data
       if (user) {
         token = {
           ...token,
@@ -140,7 +168,8 @@ export const authOptions: AuthOptions = {
           isOtpVerified: user.isOtpVerified ?? true,
           otpCode: user.otpCode ?? null,
           otpExpiresAt: user.otpExpiresAt?.toISOString() ?? null,
-          isFaceVerified: user.isFaceVerified ?? false,
+          isFaceVerified: user.isFaceVerified ?? false, // Ensure this reflects the actual DB status
+          // Include PROVIDER-specific data if the role is PROVIDER
           ...(user.role === UserRole.PROVIDER && {
             selfieImage: user.selfieImage ?? null,
             idImage: user.idImage ?? null,
@@ -159,7 +188,9 @@ export const authOptions: AuthOptions = {
       return token;
     },
 
+    // This callback is called whenever a session is checked.
     async session({ session, token }) {
+      // If session user exists, populate it with data from the token
       if (session.user) {
         session.user = {
           ...session.user,
@@ -171,7 +202,8 @@ export const authOptions: AuthOptions = {
           isOtpVerified: token.isOtpVerified,
           otpCode: token.otpCode,
           otpExpiresAt: token.otpExpiresAt,
-          isFaceVerified: token.isFaceVerified,
+          isFaceVerified: token.isFaceVerified, // Ensure this is correctly passed
+          // Include PROVIDER-specific data in the session if the role is PROVIDER
           ...(token.role === UserRole.PROVIDER && {
             selfieImage: token.selfieImage,
             idImage: token.idImage,
