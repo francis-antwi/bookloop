@@ -71,43 +71,54 @@ export const authOptions: AuthOptions = {
   debug: process.env.NODE_ENV === "development",
   trustHost: true,
 
-  cookies: {
-    sessionToken: {
-      name: `__Secure-next-auth.session-token`,
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: true,
-        domain: "bookloop-eight.vercel.app",
-      },
+ cookies: {
+  sessionToken: {
+    name: `__Secure-next-auth.session-token`,
+    options: {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      secure: process.env.NODE_ENV === "production",
+      domain: process.env.NODE_ENV === "production" 
+        ? "bookloop-eight.vercel.app" 
+        : undefined,
     },
   },
-
+},
   callbacks: {
-    async signIn({ user, account }) {
-      if (account?.provider === "google") {
-        const existingUser = await prisma.user.findUnique({
-          where: { email: user.email ?? "" },
-          select: { role: true, isFaceVerified: true },
-        });
+   async signIn({ user, account }) {
+  if (account?.provider === "google") {
+    const existingUser = await prisma.user.findUnique({
+      where: { email: user.email ?? "" },
+    });
 
-        if (!existingUser) {
-          return "/role";
+    if (!existingUser) {
+      // Create a temporary user record immediately
+      const newUser = await prisma.user.create({
+        data: {
+          email: user.email ?? "",
+          name: user.name ?? "",
+          image: user.image ?? null,
         }
+      });
+      
+      // Store the new user ID in the token
+      if (user) user.id = newUser.id;
+      
+      return '/role';
+    }
 
-        if (
-          existingUser.role === UserRole.PROVIDER &&
-          !existingUser.isFaceVerified
-        ) {
-          throw new Error("Face verification required.");
-        }
+    if (
+      existingUser.role === UserRole.PROVIDER &&
+      !existingUser.isFaceVerified
+    ) {
+      throw new Error("Face verification required.");
+    }
 
-        return true;
-      }
-
-      return true;
-    },
+    return true;
+  }
+  return true;
+},
 
     async redirect({ url, baseUrl }) {
       if (url.startsWith("/")) return `${baseUrl}${url}`;

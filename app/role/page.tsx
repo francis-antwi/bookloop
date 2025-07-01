@@ -2,19 +2,19 @@
 
 import { useState } from 'react';
 import { FiUserCheck, FiCheck, FiLoader } from 'react-icons/fi';
-import { useSession } from 'next-auth/react';
+import { useSession, update } from 'next-auth/react';
 import axios, { AxiosError } from 'axios';
 import toast from 'react-hot-toast';
+import { useRouter } from 'next/navigation';
 
 interface RoleSelectorProps {
   onRoleSelected?: (role: string) => void;
 }
 
 const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
-  const { data: session } = useSession();
-   console.log("Session from useSession():", session);
+  const { data: session, update: updateSession } = useSession();
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-
   const [selectedRole, setSelectedRole] = useState<string | null>(session?.user?.role || null);
 
   const handleRoleSelect = async (role: string) => {
@@ -25,41 +25,43 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
     try {
       setSelectedRole(role);
 
+      // First update the role via API
       const response = await axios.post('/api/role', { role }, { withCredentials: true });
 
-      // --- MODIFIED LOGIC HERE ---
-      // Check both HTTP status and the 'success' flag in the response data
-      if (response.status >= 200 && response.status < 300 && response.data.success) {
-        onRoleSelected?.(role);
-        toast.success('Role selected successfully');
+      // Then update the session to ensure consistency
+      const updatedSession = await updateSession({
+        role: role,
+        ...(role === 'PROVIDER' && { isFaceVerified: false }),
+      });
 
-        // Redirect based on the selected role
-        window.location.href = role === 'PROVIDER' ? '/verify' : '/';
-      } else if (response.status >= 200 && response.status < 300 && response.data.skipCreate) {
-        // This specifically handles the case where /api/role returns success: false but status 200
-        // with skipCreate: true (for new PROVIDERs).
-        toast.success(response.data.message || 'Provider role selected. Proceeding to verification.');
-        window.location.href = '/verify'; // Always redirect to /verify for PROVIDER after this response
-      }
-      else {
-        // Handle non-2xx responses or 2xx responses with success: false (if not skipCreate)
-        const message = response?.data?.message || 'Unexpected response from server';
-        toast.error(message);
-        setSelectedRole(session?.user?.role || null); // Revert selection on non-specific error
-      }
-      // --- END MODIFIED LOGIC ---
+      console.log('Updated session:', updatedSession);
 
+      if (response.status >= 200 && response.status < 300) {
+        if (response.data.success) {
+          onRoleSelected?.(role);
+          toast.success('Role selected successfully');
+          router.push(role === 'PROVIDER' ? '/verify' : '/');
+        } else if (response.data.skipCreate) {
+          toast.success(response.data.message || 'Provider role selected. Proceeding to verification.');
+          router.push('/verify');
+        } else {
+          throw new Error(response.data.message || 'Role selection failed');
+        }
+      } else {
+        throw new Error(response.data.message || 'Unexpected response from server');
+      }
     } catch (err) {
       const axiosError = err as AxiosError;
-
       const status = axiosError.response?.status;
-      const message = (axiosError.response?.data as { message?: string })?.message || axiosError.message || 'Failed to select role';
+      const message = (axiosError.response?.data as { message?: string })?.message || 
+                     axiosError.message || 
+                     'Failed to select role';
 
       toast.error(message);
 
       if (status === 403 && (axiosError.response?.data as { error?: string })?.error === 'Verification required') {
         setTimeout(() => {
-          window.location.href = '/verify';
+          router.push('/verify');
         }, 1000);
       }
       setSelectedRole(session?.user?.role || null);
