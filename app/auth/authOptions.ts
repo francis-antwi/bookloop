@@ -1,4 +1,4 @@
-import NextAuth, { AuthOptions } from "next-auth";
+am i not doig that already import NextAuth, { AuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import prisma from "@/app/libs/prismadb";
