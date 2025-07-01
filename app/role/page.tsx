@@ -17,11 +17,12 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedRole, setSelectedRole] = useState<string | null>(session?.user?.role || null);
 
-  // ✅ Redirect immediately if the user already has a role
+  // ✅ Redirect if user exists in DB and has role
   useEffect(() => {
     if (status === 'loading') return;
 
-    if (session?.user?.role) {
+    // If the user already exists in DB and has a role, redirect away
+    if (session?.user?.userExists && session?.user?.role) {
       router.replace('/');
     }
   }, [session, status, router]);
