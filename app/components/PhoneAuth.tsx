@@ -109,7 +109,7 @@ const PhoneAuth: React.FC<PhoneAuthProps> = ({ phoneNumber, onVerified }) => {
       } else if (error.code === 'auth/captcha-check-failed' || error.code === 'auth/web-storage-unsupported') {
         toast.error('Security check failed. Please refresh and try again.');
       } else {
-        toast.error(`Failed to send OTP: ${error.message}`);
+        toast.error(`Failed to send OTP:You failed captcha`);
       }
     } finally {
       setSending(false);
