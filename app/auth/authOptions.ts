@@ -54,7 +54,7 @@ export const authOptions: AuthOptions = {
   pages: {
     signIn: "/",
     error: "/auth/error",
-    newUser: null, // 🔄 prevent automatic redirect to /role
+    newUser: null, // Prevent NextAuth default /new-user
   },
 
   session: {
@@ -91,14 +91,22 @@ export const authOptions: AuthOptions = {
           where: { email: user.email ?? "" },
         });
 
-        if (!existingUser) return true; // New Google user, let them go to /role
+        // New Google user
+        if (!existingUser) {
+          return "/role";
+        }
 
-        if (existingUser.role === UserRole.ADMIN) return true;
+        // Existing user but missing role (shouldn't happen)
+        if (!existingUser.role) {
+          return "/role";
+        }
 
+        // OTP check
         if (!existingUser.isOtpVerified) {
           return "/verify";
         }
 
+        // PROVIDER face verification check
         if (
           existingUser.role === UserRole.PROVIDER &&
           !existingUser.isFaceVerified
@@ -119,10 +127,6 @@ export const authOptions: AuthOptions = {
           where: { email: token.email ?? "" },
           data: { role: session.role },
         });
-
-        if (session.role === UserRole.PROVIDER) {
-          token.isFaceVerified = false;
-        }
       }
 
       if (user) {
