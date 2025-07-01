@@ -16,16 +16,20 @@ export default withAuth(
     const adminPaths = ["/admin"];
     const roleSelectionPath = "/role";
     const verificationPath = "/verify";
+    const apiRolePath = "/api/role"; // Define your API role path here
 
     const isPublicPath = publicPaths.some(path => pathname.startsWith(path));
     const isProviderPath = providerPaths.some(path => pathname.startsWith(path));
     const isAdminPath = adminPaths.some(path => pathname.startsWith(path));
     const isRoleSelection = pathname === roleSelectionPath;
     const isVerification = pathname === verificationPath;
+    const isApiRolePath = pathname === apiRolePath; // Check if it's the API role path
 
     // If not authenticated
     if (!token) {
-      if (isPublicPath || isRoleSelection || isVerification) {
+      // Allow public paths, role selection, verification, and the role API for unauthenticated users
+      // (though the API route itself will handle the 'no session' error)
+      if (isPublicPath || isRoleSelection || isVerification || isApiRolePath) {
         return NextResponse.next();
       }
       return NextResponse.redirect(new URL("/auth", req.url));
@@ -47,6 +51,12 @@ export default withAuth(
         });
 
         currentEffectiveRole = dbUser?.role || null;
+
+        // IMPORTANT CHANGE: Allow the /api/role endpoint to proceed even if no role is set
+        // This prevents the middleware from redirecting the API call itself.
+        if (isApiRolePath) {
+            return NextResponse.next();
+        }
 
         if (!currentEffectiveRole && pathname !== roleSelectionPath && pathname !== verificationPath) {
           return NextResponse.redirect(new URL(roleSelectionPath, req.url));
@@ -119,7 +129,7 @@ export default withAuth(
         const { pathname } = req.nextUrl;
         const publicPathsForAuth = ["/", "/auth", "/auth/error", "/api/auth", "/_next", "/403"];
         const isAllowedPublic = publicPathsForAuth.some(path => pathname.startsWith(path)) ||
-          pathname === "/role" || pathname === "/verify";
+          pathname === "/role" || pathname === "/verify" || pathname === "/api/role"; // Allow /api/role here too
 
         if (!token && isAllowedPublic) return true;
         return !!token;
