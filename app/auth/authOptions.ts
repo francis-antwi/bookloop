@@ -54,7 +54,7 @@ export const authOptions: AuthOptions = {
   pages: {
     signIn: "/",
     error: "/auth/error",
-    newUser: null,
+    newUser: null, // Prevent NextAuth default /new-user
   },
 
   session: {
@@ -91,10 +91,22 @@ export const authOptions: AuthOptions = {
           where: { email: user.email ?? "" },
         });
 
-        if (!existingUser) return "/role";
-        if (!existingUser.role) return "/role";
-        if (!existingUser.isOtpVerified) return "/verify";
+        // New Google user
+        if (!existingUser) {
+          return "/role";
+        }
 
+        // Existing user but missing role (shouldn't happen)
+        if (!existingUser.role) {
+          return "/role";
+        }
+
+        // OTP check
+        if (!existingUser.isOtpVerified) {
+          return "/verify";
+        }
+
+        // PROVIDER face verification check
         if (
           existingUser.role === UserRole.PROVIDER &&
           !existingUser.isFaceVerified
@@ -118,10 +130,6 @@ export const authOptions: AuthOptions = {
       }
 
       if (user) {
-        const existingUser = await prisma.user.findUnique({
-          where: { email: user.email ?? "" },
-        });
-
         token = {
           ...token,
           id: user.id,
@@ -133,7 +141,6 @@ export const authOptions: AuthOptions = {
           otpCode: user.otpCode ?? null,
           otpExpiresAt: user.otpExpiresAt?.toISOString() ?? null,
           isFaceVerified: user.isFaceVerified ?? false,
-          userExists: !!existingUser, // ✅ Add this
           ...(user.role === UserRole.PROVIDER && {
             selfieImage: user.selfieImage ?? null,
             idImage: user.idImage ?? null,
@@ -165,7 +172,6 @@ export const authOptions: AuthOptions = {
           otpCode: token.otpCode,
           otpExpiresAt: token.otpExpiresAt,
           isFaceVerified: token.isFaceVerified,
-          userExists: token.userExists ?? false, // ✅ Add this
           ...(token.role === UserRole.PROVIDER && {
             selfieImage: token.selfieImage,
             idImage: token.idImage,
