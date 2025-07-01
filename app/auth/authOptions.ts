@@ -36,7 +36,6 @@ export const authOptions: AuthOptions = {
         );
 
         if (!isCorrectPassword) throw new Error("Invalid credentials");
-
         if (user.role === UserRole.PROVIDER && !user.isFaceVerified) {
           throw new Error("Face verification required for providers");
         }
@@ -85,31 +84,37 @@ export const authOptions: AuthOptions = {
   },
 
   callbacks: {
-    async signIn({ user, account }) {
-      if (account?.provider === "google") {
-        const existingUser = await prisma.user.findUnique({
-          where: { email: user.email ?? "" },
-        });
+    callbacks: {
+  async signIn({ user, account }) {
+    if (account?.provider === "google") {
+      const existingUser = await prisma.user.findUnique({
+        where: { email: user.email ?? "" },
+        select: { role: true, isFaceVerified: true }
+      });
 
-        if (!existingUser) {
-          // ✅ Allow login — onboarding continues on /role
-          return true;
-        }
-
-        // ✅ User exists, now check OTP and face verification
-
-        if (
-          existingUser.role === UserRole.PROVIDER &&
-          !existingUser.isFaceVerified
-        ) {
-          throw new Error("Face verification required.");
-        }
-
-        return true;
+      if (!existingUser) {
+        // New user - redirect to role selection
+        return '/role';
       }
 
+      // Existing user checks
+      if (existingUser.role === UserRole.PROVIDER && !existingUser.isFaceVerified) {
+        throw new Error("Face verification required.");
+      }
+
+      // Existing user with role - continue to callbackUrl (which defaults to home)
       return true;
-    },
+    }
+    return true;
+  },
+  
+  async redirect({ url, baseUrl }) {
+    // Handle custom redirects
+    if (url.startsWith("/")) return `${baseUrl}${url}`;
+    else if (new URL(url).origin === baseUrl) return url;
+    return baseUrl;
+  },
+},
 
     async jwt({ token, user, trigger, session }) {
       if (trigger === "update" && session?.role) {
