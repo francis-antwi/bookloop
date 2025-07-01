@@ -1,111 +1,93 @@
 import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import type { JWT } from "next-auth/jwt";
-import { UserRole } from "@prisma/client";
-
-declare module "next-auth/jwt" {
-  interface JWT {
-    role?: "CUSTOMER" | "PROVIDER" | "ADMIN";
-    isFaceVerified?: boolean;
-    isOtpVerified?: boolean;
-    userExists?: boolean;
-  }
-}
 
 export default withAuth(
   async function middleware(req: NextRequest) {
     const { pathname } = req.nextUrl;
-    const token = req.auth?.token;
+    const token = req.nextauth?.token;
 
-    const isPublicPath = [
-      "/",
-      "/auth",
-      "/auth/error",
-      "/api/auth",
-      "/_next",
-      "/403",
-      "/role",
-      "/verify",
-    ].some((p) => pathname.startsWith(p));
+    const publicPaths = ["/auth", "/auth/error", "/api/auth", "/_next"];
+    const isPublic = publicPaths.some((path) => pathname.startsWith(path));
 
-    const isProviderRoute = [
+    const providerPaths = [
       "/my-listings",
       "/approvals",
       "/bookings",
       "/favourites",
       "/notifications",
-    ].some((p) => pathname.startsWith(p));
+    ];
+    const isProviderPath = providerPaths.some((path) =>
+      pathname.startsWith(path)
+    );
 
-    // === 1. Not Logged In
+    const isVerifiedProvider =
+      token?.role === "PROVIDER" && token?.isFaceVerified === true;
+
+    // 1. Not logged in
     if (!token) {
-      if (isPublicPath) return NextResponse.next();
+      if (isPublic || pathname === "/role" || pathname === "/verify") {
+        return NextResponse.next();
+      }
       return NextResponse.redirect(new URL("/auth", req.url));
     }
 
-    // === 2. Logged In
+    // 2. Logged in but no role set yet → only allow access to /role
+    if (!token.role && pathname !== "/role") {
+      return NextResponse.redirect(new URL("/role", req.url));
+    }
 
-    // Block all users from /auth pages except error
-    if (pathname.startsWith("/auth") && pathname !== "/auth/error") {
+    // 3. Access to /role
+    if (pathname === "/role") {
+      // Allow if user has no role yet
+      if (!token.role) {
+        return NextResponse.next();
+      }
+
+      // Redirect based on existing role
+      if (token.role === "PROVIDER") {
+        return token.isFaceVerified
+          ? NextResponse.redirect(new URL("/my-listings", req.url))
+          : NextResponse.redirect(new URL("/verify", req.url));
+      }
+
+      // Other roles (e.g., CUSTOMER)
       return NextResponse.redirect(new URL("/", req.url));
     }
 
-    // ADMIN: Full access except /role and /verify
-    if (token.role === UserRole.ADMIN) {
-      if (pathname === "/role" || pathname === "/verify") {
-        return NextResponse.redirect(new URL("/", req.url));
-      }
-      return NextResponse.next();
+    // 4. Verified PROVIDER should not access /verify again
+    if (pathname === "/verify" && isVerifiedProvider) {
+      return NextResponse.redirect(new URL("/my-listings", req.url));
     }
 
-    // 🚫 Block EXISTING users from /role
-    if (pathname === "/role" && token.userExists) {
-      return NextResponse.redirect(new URL("/", req.url));
-    }
-
-    // 🚫 Block EXISTING users from /verify unless PROVIDER and not verified
-    if (pathname === "/verify") {
-      if (
-        token.role !== UserRole.PROVIDER ||
-        token.isFaceVerified ||
-        !token.userExists
-      ) {
-        return NextResponse.redirect(new URL("/", req.url));
-      }
-      return NextResponse.next(); // ✅ Allow PROVIDERs who are unverified
-    }
-
-    // 🔐 PROVIDER must be verified to access protected provider routes
+    // 5. Unverified PROVIDER accessing protected provider pages (except /verify)
     if (
-      token.role === UserRole.PROVIDER &&
+      token.role === "PROVIDER" &&
       !token.isFaceVerified &&
-      isProviderRoute
+      isProviderPath &&
+      pathname !== "/verify"
     ) {
       return NextResponse.redirect(new URL("/verify", req.url));
     }
 
-    // 🚫 Non-provider trying to access provider-only routes
+    // 6. Non-provider trying to access provider-only paths or /verify
     if (
-      token.role !== UserRole.PROVIDER &&
-      isProviderRoute
+      token.role !== "PROVIDER" &&
+      (isProviderPath || pathname === "/verify")
     ) {
       return NextResponse.redirect(new URL("/403", req.url));
     }
 
-    // 🚧 New users without role should be forced to /role
-    if (
-      !token.role &&
-      !pathname.startsWith("/role") &&
-      !pathname.startsWith("/auth")
-    ) {
-      return NextResponse.redirect(new URL("/role", req.url));
+    // 7. Admin access protection
+    if (pathname.startsWith("/admin") && token.role !== "ADMIN") {
+      return NextResponse.redirect(new URL("/403", req.url));
     }
 
-    return NextResponse.next(); // ✅ Allow
+    return NextResponse.next();
   },
   {
     callbacks: {
-      authorized: ({ token }) => !!token, // basic token presence
+      authorized: () => true,
     },
   }
 );
