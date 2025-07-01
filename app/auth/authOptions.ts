@@ -36,11 +36,11 @@ export const authOptions: AuthOptions = {
         );
 
         if (!isCorrectPassword) throw new Error("Invalid credentials");
-        if (!user.role) throw new Error("Missing account role");
-
+     
         if (user.role === UserRole.PROVIDER && !user.isFaceVerified) {
           throw new Error("Face verification required for providers");
         }
+        if (!user.role) throw new Error("Missing account role");
 
         return {
           ...user,
@@ -53,8 +53,8 @@ export const authOptions: AuthOptions = {
 
   pages: {
     signIn: "/",
-    error: "/auth/error",
-    newUser: "/role", // This will be used for new users after successful sign-in
+    error: "/auth/error", 
+    newUser: "/role",
   },
 
   session: {
@@ -68,8 +68,8 @@ export const authOptions: AuthOptions = {
   },
 
   secret: process.env.NEXTAUTH_SECRET,
-  trustHost: true,
   debug: process.env.NODE_ENV === "development",
+  trustHost: true,
 
   cookies: {
     sessionToken: {
@@ -79,10 +79,7 @@ export const authOptions: AuthOptions = {
         sameSite: "lax",
         path: "/",
         secure: true,
-        // Dynamically set the domain for the session cookie
-        // This is crucial for local development and Vercel preview deployments
-        // If VERCEL_URL is present, use its hostname. Otherwise, let NextAuth.js handle it (e.g., for localhost).
-        domain: process.env.VERCEL_URL ? new URL(`https://${process.env.VERCEL_URL}`).hostname : undefined,
+        domain: "bookloop-eight.vercel.app", // ✅ Update for prod
       },
     },
   },
@@ -90,38 +87,49 @@ export const authOptions: AuthOptions = {
   callbacks: {
     async signIn({ user, account }) {
       if (account?.provider === "google") {
-        // Find the user to check their role and face verification status
         const existingUser = await prisma.user.findUnique({
-          where: { email: user.email! },
-          select: { role: true, isFaceVerified: true },
+          where: { email: user.email ?? "" },
         });
 
-        // If the user doesn't exist, NextAuth.js will create them automatically
-        // and then redirect to the 'pages.newUser' path (which is "/role" in your config).
-        // We no longer explicitly return "/role" here.
-        if (existingUser) {
-          // If an existing provider is not face verified, throw an error.
-          // NextAuth.js will redirect to pages.error with this message.
-          if (
-            existingUser.role === UserRole.PROVIDER &&
-            !existingUser.isFaceVerified
-          ) {
-            throw new Error("Face verification required.");
-          }
+        if (!existingUser) {
+          // ✅ Allow login — onboarding continues on /role
+          return true;
         }
+
+        // ✅ User exists, now check OTP and face verification
+
+        if (
+          existingUser.role === UserRole.PROVIDER &&
+          !existingUser.isFaceVerified
+        ) {
+          throw new Error("Face verification required.");
+        }
+
+        return true;
       }
-      // For all successful sign-ins (including new Google users), return true.
-      // NextAuth.js will then handle redirects based on 'pages.newUser' or 'callbackUrl'.
+
       return true;
     },
 
-    async jwt({ token, user, account, profile, trigger, session }) {
+    async jwt({ token, user, trigger, session }) {
+      if (trigger === "update" && session?.role) {
+        token.role = session.role;
+        await prisma.user.update({
+          where: { email: token.email ?? "" },
+          data: { role: session.role },
+        });
+
+        if (session.role === UserRole.PROVIDER) {
+          token.isFaceVerified = false;
+        }
+      }
+
       if (user) {
         token = {
           ...token,
           id: user.id,
-          email: user.email,
           name: user.name,
+          email: user.email,
           image: user.image,
           role: user.role,
           isOtpVerified: user.isOtpVerified ?? true,
@@ -143,32 +151,6 @@ export const authOptions: AuthOptions = {
         };
       }
 
-      // Rehydrate missing token data
-      if (!token.role || token.isFaceVerified === undefined) {
-        const dbUser = await prisma.user.findUnique({
-          where: { email: token.email ?? "" },
-        });
-
-        if (dbUser) {
-          token.role = dbUser.role;
-          token.isFaceVerified = dbUser.isFaceVerified ?? false;
-          token.isOtpVerified = dbUser.isOtpVerified ?? true;
-        }
-      }
-
-      // Handle manual role updates
-      if (trigger === "update" && session?.role) {
-        token.role = session.role;
-        await prisma.user.update({
-          where: { email: token.email ?? "" },
-          data: { role: session.role },
-        });
-
-        if (session.role === UserRole.PROVIDER) {
-          token.isFaceVerified = false;
-        }
-      }
-
       return token;
     },
 
@@ -177,8 +159,8 @@ export const authOptions: AuthOptions = {
         session.user = {
           ...session.user,
           id: token.id as string,
-          email: token.email ?? null,
           name: token.name ?? null,
+          email: token.email ?? null,
           image: token.image ?? null,
           role: token.role as UserRole,
           isOtpVerified: token.isOtpVerified,
@@ -200,17 +182,7 @@ export const authOptions: AuthOptions = {
         };
       }
 
-      if (process.env.NODE_ENV === "development") {
-        console.log("[SESSION CALLBACK]", session);
-      }
-
       return session;
-    },
-
-    async redirect({ url, baseUrl }) {
-      if (url.startsWith("/")) return `${baseUrl}${url}`;
-      if (new URL(url).origin === baseUrl) return url;
-      return baseUrl;
     },
   },
 };
