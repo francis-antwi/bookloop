@@ -36,11 +36,11 @@ export const authOptions: AuthOptions = {
         );
 
         if (!isCorrectPassword) throw new Error("Invalid credentials");
-     
+        if (!user.role) throw new Error("Missing account role");
+
         if (user.role === UserRole.PROVIDER && !user.isFaceVerified) {
           throw new Error("Face verification required for providers");
         }
-        if (!user.role) throw new Error("Missing account role");
 
         return {
           ...user,
@@ -53,8 +53,8 @@ export const authOptions: AuthOptions = {
 
   pages: {
     signIn: "/",
-    error: "/auth/error", 
-    newUser: "/role",
+    error: "/auth/error",
+    newUser: "/role", // fallback if all else fails
   },
 
   session: {
@@ -79,7 +79,7 @@ export const authOptions: AuthOptions = {
         sameSite: "lax",
         path: "/",
         secure: true,
-        domain: "bookloop-eight.vercel.app", // ✅ Update for prod
+        domain: "bookloop-eight.vercel.app", // ✅ Update as needed
       },
     },
   },
@@ -89,14 +89,12 @@ export const authOptions: AuthOptions = {
       if (account?.provider === "google") {
         const existingUser = await prisma.user.findUnique({
           where: { email: user.email ?? "" },
+          select: { role: true, isFaceVerified: true },
         });
 
         if (!existingUser) {
-          // ✅ Allow login — onboarding continues on /role
-          return true;
+          return "/role"; // ✅ Redirect new users to /role
         }
-
-        // ✅ User exists, now check OTP and face verification
 
         if (
           existingUser.role === UserRole.PROVIDER &&
@@ -105,10 +103,16 @@ export const authOptions: AuthOptions = {
           throw new Error("Face verification required.");
         }
 
-        return true;
+        return true; // ✅ Allow existing users
       }
 
       return true;
+    },
+
+    async redirect({ url, baseUrl }) {
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      else if (new URL(url).origin === baseUrl) return url;
+      return baseUrl;
     },
 
     async jwt({ token, user, trigger, session }) {
