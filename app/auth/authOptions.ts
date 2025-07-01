@@ -54,7 +54,7 @@ export const authOptions: AuthOptions = {
   pages: {
     signIn: "/",
     error: "/auth/error",
-    newUser: "/role",
+    newUser: "/role", // This will be used for new users after successful sign-in
   },
 
   session: {
@@ -90,19 +90,28 @@ export const authOptions: AuthOptions = {
   callbacks: {
     async signIn({ user, account }) {
       if (account?.provider === "google") {
+        // Find the user to check their role and face verification status
         const existingUser = await prisma.user.findUnique({
           where: { email: user.email! },
           select: { role: true, isFaceVerified: true },
         });
 
-        if (!existingUser) return "/role";
-        if (
-          existingUser.role === UserRole.PROVIDER &&
-          !existingUser.isFaceVerified
-        ) {
-          throw new Error("Face verification required.");
+        // If the user doesn't exist, NextAuth.js will create them automatically
+        // and then redirect to the 'pages.newUser' path (which is "/role" in your config).
+        // We no longer explicitly return "/role" here.
+        if (existingUser) {
+          // If an existing provider is not face verified, throw an error.
+          // NextAuth.js will redirect to pages.error with this message.
+          if (
+            existingUser.role === UserRole.PROVIDER &&
+            !existingUser.isFaceVerified
+          ) {
+            throw new Error("Face verification required.");
+          }
         }
       }
+      // For all successful sign-ins (including new Google users), return true.
+      // NextAuth.js will then handle redirects based on 'pages.newUser' or 'callbackUrl'.
       return true;
     },
 

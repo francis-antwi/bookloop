@@ -17,14 +17,13 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedRole, setSelectedRole] = useState<string | null>(session?.user?.role || null);
 
-  // ✅ Wait for session before deciding what to do
+  // Removed the 'status === "unauthenticated"' redirect from here.
+  // The 'pages.newUser' in authOptions and middleware should handle initial unauthenticated redirects.
   useEffect(() => {
     if (status === 'loading') return;
-
-    if (status === 'unauthenticated') {
-      toast.error('Please log in first.');
-      router.replace('/');
-    }
+    // If a user somehow lands here unauthenticated and not via a new user flow,
+    // the middleware should catch it. This component should focus on role selection
+    // once a session is established or being established.
   }, [status, router]);
 
   const handleRoleSelect = async (role: string) => {
