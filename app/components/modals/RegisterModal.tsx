@@ -2,65 +2,57 @@
 
 import axios from 'axios';
 import { IoMdClose } from 'react-icons/io';
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState } from 'react';
 import { signIn } from "next-auth/react";
-import {
-  FieldValues,
-  SubmitHandler,
-  useForm
-} from 'react-hook-form';
+import { FieldValues, SubmitHandler, useForm } from 'react-hook-form';
 import useRegisterModal from '@/app/hooks/useRegisterModal';
 import useLoginModal from '@/app/hooks/useLoginModal';
 import toast from 'react-hot-toast';
 import { 
-  FiUser, 
-  FiMail, 
-  FiPhone, 
-  FiLock, 
-  FiEye, 
-  FiEyeOff, 
-  FiCheck,
-  FiArrowRight,
-  FiArrowLeft,
-  FiCamera,
-  FiUpload,
-  FiUserCheck,
-  FiShield,
-  FiRefreshCw
+  FiUser, FiMail, FiPhone, FiLock, FiEye, FiEyeOff, 
+  FiCheck, FiArrowRight, FiArrowLeft, FiCamera,
+  FiUpload, FiUserCheck, FiShield, FiFileText, FiAlertCircle, FiLoader
 } from 'react-icons/fi';
 import Camera from '../inputs/Camera';
 import PhoneAuth from "@/app/components/PhoneAuth";
+import { useRouter } from 'next/navigation';
 
 interface VerificationResponse {
-  verification: {
-    faceMatch: boolean;
-    confidence: number;
-    threshold: number;
+  success: boolean;
+  extractedData?: {
+    idName?: string;
+    idNumber?: string;
+    personalIdNumber?: string;
+    idType?: string;
+    idDOB?: string;
+    idExpiryDate?: string;
+    idIssueDate?: string;
+    idIssuer?: string;
+    nationality?: string;
+    gender?: string;
+    placeOfIssue?: string;
+    rawText?: string;
+    faceConfidence?: number;
   };
-  document: {
-    imageUrl: string;
-    idName: string;
-    idNumber: string;
-    idDOB: string;
-    idExpiryDate: string;
-    idIssuer: string;
-  };
-  selfie: {
-    imageUrl: string;
-  };
+  matchConfidence?: number;
+  selfieUrl?: string;
+  imageUrl?: string;
+  error?: string;
 }
 
 const RegisterModal = () => {
   const registerModal = useRegisterModal();
   const loginModal = useLoginModal();
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [selfieImageBlob, setSelfieImageBlob] = useState<Blob | null>(null);
   const [idFile, setIdFile] = useState<File | null>(null);
-  const [matchStatus, setMatchStatus] = useState<{
+  const [verificationStatus, setVerificationStatus] = useState<{
     success: boolean;
-    faceConfidence: number | null;
+    confidence?: number;
+    error?: string;
   } | null>(null);
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);
 
@@ -72,6 +64,7 @@ const RegisterModal = () => {
     trigger,
     setValue,
     getValues,
+    reset,
   } = useForm<FieldValues>({
     defaultValues: {
       name: '',
@@ -79,13 +72,15 @@ const RegisterModal = () => {
       contactPhone: '',
       password: '',
       role: '',
+      otp: '',
     },
   });
 
   const watchedValues = watch();
 
-  const handlePhoneVerified = (phoneNumber: string) => {
+  const handlePhoneVerified = (phoneNumber: string, otp: string) => {
     setIsPhoneVerified(true);
+    setValue('otp', otp);
     toast.success('Phone number verified successfully!');
   };
 
@@ -140,7 +135,7 @@ const RegisterModal = () => {
     { 
       field: 'idImage', 
       label: 'Upload ID',
-      icon: FiUpload,
+      icon: FiFileText,
       description: 'Upload a photo of your Ghana Card',
       providerOnly: true
     },
@@ -155,159 +150,193 @@ const RegisterModal = () => {
 
   const filteredSteps = getFilteredSteps();
 
-  const onSubmit: SubmitHandler<FieldValues> = async (data) => {
-    // If user is a customer, skip ID/face verification
-    if (data.role === 'CUSTOMER') {
-      setIsLoading(true);
-      try {
-        await axios.post('/api/register', {
-          ...data,
-           otp: data.otp, // Include the verified OTP
-          isPhoneVerified: true,
-          isFaceVerified: false, // Customers don't need face verification
-        });
-
-        // Automatically log in the customer
-        const loginRes = await signIn("credentials", {
-          redirect: false,
-          email: data.email,
-          password: data.password,
-        });
-
-        if (loginRes?.ok) {
-          toast.success('Account created and logged in!');
-          registerModal.onClose();
-        } else {
-          toast.error('Registration succeeded, but auto-login failed.');
-          loginModal.onOpen();
-        }
-      } catch (err: any) {
-        console.error('Registration error:', err);
-        const errorMessage = err.response?.data?.error || 
-                          err.response?.data?.message || 
-                          err.message || 
-                          "Registration failed. Please try again.";
-        toast.error(errorMessage);
-      } finally {
-        setIsLoading(false);
-      }
+  const handleIdUpload = (file: File) => {
+    if (!file.type.match(/image\/(jpeg|png|jpg)/)) {
+      toast.error('Only JPEG/PNG images are allowed');
       return;
     }
+    if (file.size < 20000) {
+      toast.error('Image too small. Try a higher-quality photo.');
+      return;
+    }
+    if (file.size > 5000000) {
+      toast.error('Image too large. Max 5MB.');
+      return;
+    }
+    setIdFile(file);
+  };
 
-    // For service providers, proceed with verification
+  const submitVerification = async () => {
     if (!selfieImageBlob || !idFile) {
-      toast.error('Please capture a selfie and upload your Ghana Card.');
-      return;
-    }
-
-    if (idFile.size > 2 * 1024 * 1024) {
-      toast.error("ID image is too large. Please upload one smaller than 2MB.");
-      return;
+      toast.error('Please complete all verification steps');
+      throw new Error('Missing verification files');
     }
 
     setIsLoading(true);
-    const formData = new FormData();
-    formData.append("selfieImage", new File([selfieImageBlob], "selfie.jpg", { type: "image/jpeg" }));
-    formData.append("idImage", idFile);
+    setVerificationStatus(null);
 
     try {
-      // Verify identity first
-      const verifyRes = await axios.post<VerificationResponse>('/api/verify', formData);
-      const { verification, document, selfie } = verifyRes.data;
-      const confidence = verification.confidence || 0;
-      const verified = verification.faceMatch && confidence >= verification.threshold;
+      const verificationFormData = new FormData();
+      verificationFormData.append('selfie', new File([selfieImageBlob], 'selfie.jpg', { type: 'image/jpeg' }));
+      verificationFormData.append('idImage', idFile);
+      verificationFormData.append('email', watchedValues.email);
 
-      if (verified) {
-        // Register user if verification succeeds
-        await axios.post('/api/register', {
-          ...data,
-          selfieImage: selfie.imageUrl,
-          idImage: document.imageUrl,
-          faceConfidence: confidence,
-          isFaceVerified: true,
-          isPhoneVerified: true,
-          idName: document.idName,
-          idNumber: document.idNumber,
-          idDOB: document.idDOB,
-          idExpiryDate: document.idExpiryDate,
-          idIssuer: document.idIssuer,
-          
-        });
+      const response = await axios.post<VerificationResponse>('/api/verify', verificationFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 60000
+      });
 
-        toast.success('Account created successfully!');
-        loginModal.onOpen();
-        registerModal.onClose();
-      } else {
-        const score = confidence.toFixed(1);
-        toast.error(`Face match failed (${score}%). Please try again.`);
-        setMatchStatus({ 
-          success: false, 
-          faceConfidence: confidence 
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Verification failed');
+      }
+
+      const extractedData = response.data.extractedData || {};
+      const confidence = response.data.matchConfidence || extractedData.faceConfidence || 0;
+
+      if (confidence < 80) {
+        throw new Error(`Face match confidence too low (${confidence.toFixed(1)}%)`);
+      }
+
+      setVerificationStatus({ success: true, confidence });
+      return {
+        ...response.data,
+        extractedData: {
+          ...extractedData,
+          idType: extractedData.idType || 'GHANA_CARD',
+          nationality: extractedData.nationality || 'Ghanaian'
+        }
+      };
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.error || error.message || 'Verification failed';
+      setVerificationStatus({ 
+        success: false, 
+        error: errorMsg,
+        confidence: error.response?.data?.matchConfidence
+      });
+      toast.error(errorMsg);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const onSubmit: SubmitHandler<FieldValues> = async (data) => {
+    setIsLoading(true);
+    
+    try {
+      // Common registration data
+      const registrationPayload: any = {
+        name: data.name,
+        email: data.email,
+        contactPhone: data.contactPhone,
+        password: data.password,
+        role: data.role,
+        otpCode: data.otp,
+        isPhoneVerified: true,
+        isFaceVerified: data.role === 'PROVIDER',
+        verified: data.role === 'PROVIDER',
+        extractionComplete: data.role === 'PROVIDER',
+        nationality: 'Ghanaian',
+        idType: 'GHANA_CARD'
+      };
+
+      // Handle provider verification
+      if (data.role === 'PROVIDER') {
+        const verificationData = await submitVerification();
+        const extractedData = verificationData.extractedData || {};
+        
+        Object.assign(registrationPayload, {
+          selfieImage: verificationData.selfieUrl,
+          idImage: verificationData.imageUrl,
+          faceConfidence: verificationData.matchConfidence,
+          idName: extractedData.idName,
+          idNumber: extractedData.idNumber || extractedData.personalIdNumber,
+          personalIdNumber: extractedData.personalIdNumber,
+          idDOB: extractedData.idDOB,
+          idExpiryDate: extractedData.idExpiryDate,
+          idIssueDate: extractedData.idIssueDate,
+          idIssuer: extractedData.idIssuer,
+          gender: extractedData.gender,
+          placeOfIssue: extractedData.placeOfIssue,
+          rawText: extractedData.rawText
         });
       }
-    } catch (err: any) {
-      console.error('Registration error:', err);
-      const errorMessage = err.response?.data?.error || 
-                        err.response?.data?.message || 
-                        err.message || 
-                        "Registration failed. Please try again.";
-      toast.error(errorMessage);
+
+      // Submit registration
+      const response = await axios.post('/api/register', registrationPayload);
+
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Registration failed');
+      }
+
+      // Handle successful registration
+      if (response.data.shouldAutoLogin) {
+        const loginResult = await signIn('credentials', {
+          email: data.email,
+          password: data.password,
+          redirect: false
+        });
+
+        if (loginResult?.error) {
+          throw new Error('Auto-login failed');
+        }
+
+        toast.success('Account created and logged in!');
+        router.push('/');
+      } else {
+        toast.success('Account created successfully!');
+        loginModal.onOpen();
+      }
+
+      registerModal.onClose();
+      reset();
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.error || 
+                     error.response?.data?.message || 
+                     error.message || 
+                     'Registration failed';
+      toast.error(errorMsg);
     } finally {
       setIsLoading(false);
     }
   };
 
   const toggle = useCallback(() => {
+    if (isLoading) return;
     loginModal.onOpen();
     registerModal.onClose();
-  }, [loginModal, registerModal]);
+  }, [isLoading, loginModal, registerModal]);
 
   const handleNext = async () => {
     const current = filteredSteps[currentStep];
     
-    // Handle phone verification step
+    // Special handling for phone verification step
     if (current.field === 'phoneVerification') {
       if (!isPhoneVerified) {
         toast.error('Please verify your phone number first');
         return;
       }
-      setCurrentStep((prev) => prev + 1);
+      setCurrentStep(prev => prev + 1);
       return;
     }
 
-    // Handle phone number step
-    if (current.field === 'contactPhone') {
-      const valid = await trigger(current.field);
-      if (valid) {
-        setCurrentStep((prev) => prev + 1);
-      }
-      return;
-    }
-
-    // If user selects customer, skip verification steps
-    if (current.field === 'role' && watchedValues.role === 'CUSTOMER') {
-      const valid = await trigger(current.field);
-      if (valid) {
-        // Jump directly to the end (submit step)
-        setCurrentStep(filteredSteps.length - 1);
-      }
-      return;
-    }
-
-    if (['selfieImage', 'idImage'].includes(current.field)) {
-      setCurrentStep((prev) => prev + 1);
-      return;
-    }
-
+    // Validate current step
     const valid = await trigger(current.field);
-    if (valid) {
-      setCurrentStep((prev) => prev + 1);
+    if (!valid) return;
+
+    // Skip verification steps for customers
+    if (current.field === 'role' && watchedValues.role === 'CUSTOMER') {
+      setCurrentStep(filteredSteps.length - 1);
+      return;
     }
+
+    // Proceed to next step
+    setCurrentStep(prev => prev + 1);
   };
 
   const handlePrev = () => {
     if (currentStep > 0) {
-      setCurrentStep((prev) => prev - 1);
+      setCurrentStep(prev => prev - 1);
     }
   };
 
@@ -354,7 +383,7 @@ const RegisterModal = () => {
             <p className="text-blue-100 text-xs sm:text-sm">Create your account in a few simple steps</p>
           </div>
 
-          {/* Progress Bar with clickable steps */}
+          {/* Progress Bar */}
           <div className="relative">
             <div className="flex justify-between text-xs mb-2">
               <span>Step {currentStep + 1} of {filteredSteps.length}</span>
@@ -367,7 +396,7 @@ const RegisterModal = () => {
               />
             </div>
             <div className="flex justify-between px-1">
-              {filteredSteps.map((step, index) => (
+              {filteredSteps.map((_, index) => (
                 <button
                   key={index}
                   onClick={() => jumpToStep(index)}
@@ -376,10 +405,7 @@ const RegisterModal = () => {
                     index <= currentStep || isStepValid(index)
                       ? 'bg-white cursor-pointer hover:bg-blue-200'
                       : 'bg-white/30 cursor-not-allowed'
-                  } ${
-                    index === currentStep ? 'ring-2 ring-blue-300' : ''
-                  }`}
-                  aria-label={`Go to step ${index + 1}: ${step.label}`}
+                  } ${index === currentStep ? 'ring-2 ring-blue-300' : ''}`}
                 />
               ))}
             </div>
@@ -410,14 +436,10 @@ const RegisterModal = () => {
                   <p className="font-medium text-blue-800">{watchedValues.contactPhone}</p>
                 </div>
 
-               <PhoneAuth 
-  phoneNumber={watchedValues.contactPhone}
-  onVerified={(phoneNumber, otp) => {
-    setIsPhoneVerified(true);
-    setValue('otp', otp); // Store OTP in form state
-    toast.success('Phone verified!');
-  }}
-/>
+                <PhoneAuth 
+                  phoneNumber={watchedValues.contactPhone}
+                  onVerified={handlePhoneVerified}
+                />
 
                 {isPhoneVerified && (
                   <div className="flex items-center gap-2 text-green-600 bg-green-50 p-2 sm:p-3 rounded-xl text-sm">
@@ -482,7 +504,7 @@ const RegisterModal = () => {
                   <input
                     type="file"
                     accept="image/*"
-                    onChange={(e) => setIdFile(e.target.files?.[0] || null)}
+                    onChange={(e) => e.target.files?.[0] && handleIdUpload(e.target.files[0])}
                     disabled={isLoading}
                     className="hidden"
                     id="id-upload"
@@ -495,7 +517,7 @@ const RegisterModal = () => {
                     Click to upload or take a photo of your Ghana Card
                   </label>
                   <p className="text-gray-500 text-xs sm:text-sm mt-1 sm:mt-2">
-                    PNG, JPG or JPEG (max. 2MB). You can take a photo with your camera.
+                    PNG, JPG or JPEG (max. 5MB). You can take a photo with your camera.
                   </p>
                 </div>
 
@@ -580,30 +602,24 @@ const RegisterModal = () => {
             )}
           </div>
 
-          {/* Match Status */}
-          {matchStatus && !matchStatus.success && (
+          {/* Verification Status */}
+          {verificationStatus && !verificationStatus.success && (
             <div className="mt-4 sm:mt-6 p-3 sm:p-4 bg-red-50 border border-red-200 rounded-xl">
               <div className="flex items-start gap-2 sm:gap-3">
-                <div className="flex-shrink-0 mt-0.5">
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
+                <FiAlertCircle className="text-red-500 text-xl mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="font-medium text-red-800 text-sm sm:text-base">Verification Failed</p>
-                  <p className="text-xs sm:text-sm text-red-600 mt-1">
-                    Face match score: {typeof matchStatus?.faceConfidence === 'number' 
-                      ? matchStatus.faceConfidence.toFixed(1) 
-                      : '0.0'}%
-                    <br />
-                    Minimum required score is 80%. Please try again with clearer photos.
+                  <p className="font-medium text-red-800">Verification Failed</p>
+                  <p className="text-sm text-red-600 mt-1">
+                    {verificationStatus.error}
+                    {verificationStatus.confidence && (
+                      <span> (Confidence: {verificationStatus.confidence.toFixed(1)}%)</span>
+                    )}
                   </p>
                   <button
                     onClick={() => {
                       setSelfieImageBlob(null);
                       setIdFile(null);
-                      setMatchStatus(null);
-                      setCurrentStep(steps.length - 2); // Go back to selfie step
+                      setVerificationStatus(null);
                     }}
                     className="mt-1 sm:mt-2 text-xs sm:text-sm font-medium text-red-600 hover:text-red-800 transition-colors"
                   >
@@ -656,8 +672,8 @@ const RegisterModal = () => {
               >
                 {isLoading ? (
                   <>
-                    <div className="w-3 h-3 sm:w-4 sm:h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Creating Account...
+                    <FiLoader className="animate-spin text-lg" />
+                    <span>Creating Account...</span>
                   </>
                 ) : (
                   <>
