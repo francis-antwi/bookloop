@@ -1,21 +1,21 @@
-import { NextResponse, NextRequest } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/auth/authOptions";
+import { getToken } from "next-auth/jwt";
+import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/app/libs/prismadb";
 import { UserRole } from "@prisma/client";
 
-export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+const secret = process.env.NEXTAUTH_SECRET;
 
-  if (!session?.user?.email) {
+export async function POST(req: NextRequest) {
+  const token = await getToken({ req, secret });
+
+  if (!token?.email) {
     return NextResponse.json(
       { error: "Unauthorized", message: "No session or email found" },
       { status: 401 }
     );
   }
 
-  const email = session.user.email;
-
+  const email = token.email;
   let body: { role?: string } = {};
 
   try {
@@ -28,7 +28,6 @@ export async function POST(req: NextRequest) {
   }
 
   const normalizedRole = body.role?.toUpperCase();
-
   if (!normalizedRole) {
     return NextResponse.json(
       { error: "Bad Request", message: "Role is required" },
@@ -47,13 +46,12 @@ export async function POST(req: NextRequest) {
     const user = await prisma.user.findUnique({ where: { email } });
 
     if (!user) {
-      // New Google user
       if (normalizedRole === "CUSTOMER") {
         const newUser = await prisma.user.create({
           data: {
             email,
-            name: session.user.name ?? "",
-            image: session.user.image ?? "",
+            name: token.name ?? "",
+            image: token.picture ?? "",
             isOtpVerified: true,
             isFaceVerified: false,
             role: "CUSTOMER",
@@ -66,7 +64,6 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // PROVIDER — do not create yet
       return NextResponse.json(
         {
           success: false,
@@ -78,7 +75,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // User already exists
     if (user.role === normalizedRole) {
       return NextResponse.json(
         { success: true, message: "Role already set", user },
@@ -86,7 +82,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Trying to change to PROVIDER
     if (
       normalizedRole === "PROVIDER" &&
       (!user.isFaceVerified || !user.selfieImage || !user.idImage)
@@ -101,7 +96,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Update role
     await prisma.user.update({
       where: { email },
       data: { role: normalizedRole as UserRole },
