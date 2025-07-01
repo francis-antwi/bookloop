@@ -7,133 +7,117 @@ import { UserRole } from "@prisma/client";
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
 
-  // 1. Authentication check
   if (!session?.user?.email) {
     return NextResponse.json(
-      { error: "Unauthorized", message: "Authentication required" },
+      { error: "Unauthorized", message: "No session or email found" },
       { status: 401 }
     );
   }
 
   const email = session.user.email;
 
-  // 2. Request body validation
-  let body: { role?: string };
+  let body: { role?: string } = {};
+
   try {
     body = await req.json();
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: "Invalid request", message: "Malformed JSON body" },
+      { error: "Bad Request", message: "Invalid JSON body" },
       { status: 400 }
     );
   }
 
-  // 3. Role validation
   const normalizedRole = body.role?.toUpperCase();
-  if (!normalizedRole || !["CUSTOMER", "PROVIDER"].includes(normalizedRole)) {
+
+  if (!normalizedRole) {
     return NextResponse.json(
-      { error: "Invalid role", message: "Role must be either CUSTOMER or PROVIDER" },
+      { error: "Bad Request", message: "Role is required" },
+      { status: 400 }
+    );
+  }
+
+  if (!["CUSTOMER", "PROVIDER"].includes(normalizedRole)) {
+    return NextResponse.json(
+      { error: "Bad Request", message: "Invalid role provided" },
       { status: 400 }
     );
   }
 
   try {
-    // 4. Check existing user
-    const existingUser = await prisma.user.findUnique({ 
-      where: { email },
-      select: {
-        id: true,
-        role: true,
-        isFaceVerified: true,
-        selfieImage: true,
-        idImage: true
-      }
-    });
+    const user = await prisma.user.findUnique({ where: { email } });
 
-    // 5. Handle new users (Google sign-ups without DB record)
-    if (!existingUser) {
+    if (!user) {
+      // New Google user
       if (normalizedRole === "CUSTOMER") {
         const newUser = await prisma.user.create({
           data: {
             email,
             name: session.user.name ?? "",
             image: session.user.image ?? "",
-            role: "CUSTOMER",
             isOtpVerified: true,
             isFaceVerified: false,
+            role: "CUSTOMER",
           },
         });
+
         return NextResponse.json(
           { success: true, message: "Customer account created", user: newUser },
           { status: 201 }
         );
       }
 
-      // For providers, we'll create the record after verification
+      // PROVIDER — do not create yet
       return NextResponse.json(
-        { 
-          success: true, 
-          message: "Complete verification to become a provider",
-          requiresVerification: true
+        {
+          success: false,
+          message:
+            "Provider role selected. User will be saved after verification.",
+          skipCreate: true,
         },
         { status: 200 }
       );
     }
 
-    // 6. Prevent role changes for existing users
-    if (existingUser.role && existingUser.role !== normalizedRole) {
+    // User already exists
+    if (user.role === normalizedRole) {
       return NextResponse.json(
-        { 
-          error: "Role change not allowed", 
-          message: "Your account role cannot be changed after initial selection"
+        { success: true, message: "Role already set", user },
+        { status: 200 }
+      );
+    }
+
+    // Trying to change to PROVIDER
+    if (
+      normalizedRole === "PROVIDER" &&
+      (!user.isFaceVerified || !user.selfieImage || !user.idImage)
+    ) {
+      return NextResponse.json(
+        {
+          error: "Verification required",
+          message:
+            "You must complete ID and face verification before becoming a provider.",
         },
         { status: 403 }
       );
     }
 
-    // 7. Handle existing users with matching role
-    if (existingUser.role === normalizedRole) {
-      return NextResponse.json(
-        { success: true, message: "Role already set" },
-        { status: 200 }
-      );
-    }
+    // Update role
+    await prisma.user.update({
+      where: { email },
+      data: { role: normalizedRole as UserRole },
+    });
 
-    // 8. Additional verification for providers
-    if (normalizedRole === "PROVIDER") {
-      if (!existingUser.isFaceVerified || !existingUser.selfieImage || !existingUser.idImage) {
-        return NextResponse.json(
-          {
-            error: "Verification required",
-            message: "Complete face and ID verification to become a provider",
-            requiresVerification: true
-          },
-          { status: 403 }
-        );
-      }
-
-      // Update to provider role
-      await prisma.user.update({
-        where: { email },
-        data: { role: "PROVIDER" },
-      });
-
-      return NextResponse.json(
-        { success: true, message: "You are now a verified provider" },
-        { status: 200 }
-      );
-    }
-
-    // This should theoretically never be reached due to previous checks
     return NextResponse.json(
-      { error: "Unexpected condition", message: "Please contact support" },
-      { status: 500 }
+      { success: true, message: "Role updated successfully" },
+      { status: 200 }
     );
-
-  } catch (error) {
-    console.error("[ROLE_SELECTION_ERROR]", error);
+  } catch (error: any) {
+    console.error("[ROLE_API_ERROR]", error);
     return NextResponse.json(
-      { error: "Server error", message: "Failed to process role selection" },
+      {
+        error: "Internal server error",
+        message: error?.message || "Something went wrong",
+      },
       { status: 500 }
     );
   }
