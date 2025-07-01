@@ -4,52 +4,53 @@ import type { NextRequest } from "next/server";
 import type { JWT } from "next-auth/jwt";
 import { UserRole } from "@prisma/client";
 
+declare module "next-auth/jwt" {
+  interface JWT {
+    role?: "CUSTOMER" | "PROVIDER" | "ADMIN";
+    isFaceVerified?: boolean;
+    isOtpVerified?: boolean;
+    userExists?: boolean;
+  }
+}
+
 export default withAuth(
   async function middleware(req: NextRequest) {
     const { pathname } = req.nextUrl;
     const token = req.auth?.token;
 
-    // Public routes (for unauthenticated access)
-    const publicPathsForUnauth = [
+    const isPublicPath = [
       "/",
       "/auth",
       "/auth/error",
       "/api/auth",
       "/_next",
       "/403",
-      "/role",  // Allow access initially
+      "/role",
       "/verify",
-    ];
+    ].some((p) => pathname.startsWith(p));
 
-    // Provider-only protected routes
-    const providerPaths = [
+    const isProviderRoute = [
       "/my-listings",
       "/approvals",
       "/bookings",
       "/favourites",
       "/notifications",
-    ];
+    ].some((p) => pathname.startsWith(p));
 
-    // =======================
-    // 🔐 Access Rules
-    // =======================
-
-    // 1. Unauthenticated user
+    // === 1. Not Logged In
     if (!token) {
-      if (publicPathsForUnauth.some(path => pathname.startsWith(path))) {
-        return NextResponse.next();
-      }
+      if (isPublicPath) return NextResponse.next();
       return NextResponse.redirect(new URL("/auth", req.url));
     }
 
-    // 2. Authenticated user
+    // === 2. Logged In
 
-    // Don't allow logged-in users on /auth pages (except error)
+    // Block all users from /auth pages except error
     if (pathname.startsWith("/auth") && pathname !== "/auth/error") {
       return NextResponse.redirect(new URL("/", req.url));
     }
 
-    // Allow ADMIN full access (but block /role and /verify)
+    // ADMIN: Full access except /role and /verify
     if (token.role === UserRole.ADMIN) {
       if (pathname === "/role" || pathname === "/verify") {
         return NextResponse.redirect(new URL("/", req.url));
@@ -57,39 +58,54 @@ export default withAuth(
       return NextResponse.next();
     }
 
-    // Block ALL logged-in users from /role if they already have a role
-    if (pathname === "/role" && token.role) {
+    // 🚫 Block EXISTING users from /role
+    if (pathname === "/role" && token.userExists) {
       return NextResponse.redirect(new URL("/", req.url));
     }
 
-    // Block ALL logged-in users from /verify unless they're unverified providers
+    // 🚫 Block EXISTING users from /verify unless PROVIDER and not verified
     if (pathname === "/verify") {
-      if (token.role !== UserRole.PROVIDER || token.isFaceVerified) {
+      if (
+        token.role !== UserRole.PROVIDER ||
+        token.isFaceVerified ||
+        !token.userExists
+      ) {
         return NextResponse.redirect(new URL("/", req.url));
       }
-      return NextResponse.next();
+      return NextResponse.next(); // ✅ Allow PROVIDERs who are unverified
     }
 
-    // PROVIDER must be face verified to access provider routes
-    if (token.role === UserRole.PROVIDER && !token.isFaceVerified && providerPaths.some(path => pathname.startsWith(path))) {
+    // 🔐 PROVIDER must be verified to access protected provider routes
+    if (
+      token.role === UserRole.PROVIDER &&
+      !token.isFaceVerified &&
+      isProviderRoute
+    ) {
       return NextResponse.redirect(new URL("/verify", req.url));
     }
 
-    // Non-provider accessing provider-only path → 403
-    if (token.role !== UserRole.PROVIDER && providerPaths.some(path => pathname.startsWith(path))) {
+    // 🚫 Non-provider trying to access provider-only routes
+    if (
+      token.role !== UserRole.PROVIDER &&
+      isProviderRoute
+    ) {
       return NextResponse.redirect(new URL("/403", req.url));
     }
 
-    // New users without roles should go to role selection
-    if (!token.role && !["/role", "/auth", "/api/auth"].some(path => pathname.startsWith(path))) {
+    // 🚧 New users without role should be forced to /role
+    if (
+      !token.role &&
+      !pathname.startsWith("/role") &&
+      !pathname.startsWith("/auth")
+    ) {
       return NextResponse.redirect(new URL("/role", req.url));
     }
 
-    return NextResponse.next();
+    return NextResponse.next(); // ✅ Allow
   },
   {
     callbacks: {
-      authorized: ({ token }) => !!token,
+      authorized: ({ token }) => !!token, // basic token presence
     },
   }
 );
