@@ -59,66 +59,73 @@ export const authOptions: AuthOptions = {
 
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60,
-    updateAge: 24 * 60 * 60,
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+    updateAge: 24 * 60 * 60, // 24 hours
   },
 
   jwt: {
-    maxAge: 30 * 24 * 60 * 60,
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   },
 
   secret: process.env.NEXTAUTH_SECRET,
   debug: process.env.NODE_ENV === "development",
   trustHost: true,
 
- cookies: {
-  sessionToken: {
-    name: `__Secure-next-auth.session-token`,
-    options: {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      secure: process.env.NODE_ENV === "production",
-      domain: process.env.NODE_ENV === "production" 
-        ? "bookloop-eight.vercel.app" 
-        : undefined,
+  cookies: {
+    sessionToken: {
+      name: `__Secure-next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+        domain: process.env.NODE_ENV === "production" 
+          ? "bookloop-eight.vercel.app" 
+          : undefined,
+      },
     },
   },
-},
+
   callbacks: {
-   async signIn({ user, account }) {
-  if (account?.provider === "google") {
-    const existingUser = await prisma.user.findUnique({
-      where: { email: user.email ?? "" },
-    });
+    async signIn({ user, account, profile }) {
+      if (account?.provider === "google") {
+        const existingUser = await prisma.user.findUnique({
+          where: { email: user.email ?? "" },
+        });
 
-    if (!existingUser) {
-      // Create a temporary user record immediately
-      const newUser = await prisma.user.create({
-        data: {
-          email: user.email ?? "",
-          name: user.name ?? "",
-          image: user.image ?? null,
+        if (!existingUser) {
+          // Create user with default CUSTOMER role
+          const newUser = await prisma.user.create({
+            data: {
+              email: user.email ?? "",
+              name: user.name ?? "",
+              image: user.image ?? null,
+              role: UserRole.CUSTOMER, // Default role
+              isOtpVerified: true,
+              isFaceVerified: false,
+              hashedPassword: null, // Explicitly set for Google users
+            },
+          });
+          
+          // Ensure user object has ID for JWT callback
+          user.id = newUser.id;
+          user.role = newUser.role;
+          
+          return '/role'; // Redirect to role selection
         }
-      });
-      
-      // Store the new user ID in the token
-      if (user) user.id = newUser.id;
-      
-      return '/role';
-    }
 
-    if (
-      existingUser.role === UserRole.PROVIDER &&
-      !existingUser.isFaceVerified
-    ) {
-      throw new Error("Face verification required.");
-    }
+        if (existingUser.role === UserRole.PROVIDER && !existingUser.isFaceVerified) {
+          throw new Error("Face verification required");
+        }
 
-    return true;
-  }
-  return true;
-},
+        // Ensure existing user data is passed to JWT callback
+        user.id = existingUser.id;
+        user.role = existingUser.role;
+        user.isOtpVerified = existingUser.isOtpVerified ?? true;
+        user.isFaceVerified = existingUser.isFaceVerified ?? false;
+      }
+      return true;
+    },
 
     async redirect({ url, baseUrl }) {
       if (url.startsWith("/")) return `${baseUrl}${url}`;
@@ -127,6 +134,7 @@ export const authOptions: AuthOptions = {
     },
 
     async jwt({ token, user, trigger, session }) {
+      // Handle role updates
       if (trigger === "update" && session?.role) {
         token.role = session.role;
         await prisma.user.update({
@@ -139,12 +147,13 @@ export const authOptions: AuthOptions = {
         }
       }
 
+      // Add user info to token on sign in
       if (user) {
         token.id = user.id;
         token.name = user.name;
         token.email = user.email;
         token.image = user.image;
-        token.role = user.role;
+        token.role = user.role ?? UserRole.CUSTOMER; // Ensure role is never undefined
         token.isOtpVerified = user.isOtpVerified ?? true;
         token.otpCode = user.otpCode ?? null;
         token.otpExpiresAt = user.otpExpiresAt?.toISOString() ?? null;
@@ -194,7 +203,6 @@ export const authOptions: AuthOptions = {
           }),
         };
       }
-
       return session;
     },
   },
