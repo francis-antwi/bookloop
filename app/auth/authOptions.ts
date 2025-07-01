@@ -54,7 +54,7 @@ export const authOptions: AuthOptions = {
   pages: {
     signIn: "/",
     error: "/auth/error",
-    newUser: "/role", // fallback if all else fails
+    newUser: "/role",
   },
 
   session: {
@@ -79,21 +79,26 @@ export const authOptions: AuthOptions = {
         sameSite: "lax",
         path: "/",
         secure: true,
-        domain: "bookloop-eight.vercel.app", // ✅ Update as needed
+        domain: "bookloop-eight.vercel.app", // adjust if needed
       },
     },
   },
 
   callbacks: {
-    async signIn({ user, account }) {
+    async signIn({ user, account, profile }) {
       if (account?.provider === "google") {
+        if (!user.email) {
+          console.error("Google signIn: No email found on user object");
+          return false;
+        }
+
         const existingUser = await prisma.user.findUnique({
-          where: { email: user.email ?? "" },
+          where: { email: user.email },
           select: { role: true, isFaceVerified: true },
         });
 
         if (!existingUser) {
-          return "/role"; // ✅ Redirect new users to /role
+          return "/role"; // New user -> go select role
         }
 
         if (
@@ -103,37 +108,25 @@ export const authOptions: AuthOptions = {
           throw new Error("Face verification required.");
         }
 
-        return true; // ✅ Allow existing users
+        return true;
       }
 
       return true;
     },
 
-    async redirect({ url, baseUrl }) {
-      if (url.startsWith("/")) return `${baseUrl}${url}`;
-      else if (new URL(url).origin === baseUrl) return url;
-      return baseUrl;
-    },
-
-    async jwt({ token, user, trigger, session }) {
-      if (trigger === "update" && session?.role) {
-        token.role = session.role;
-        await prisma.user.update({
-          where: { email: token.email ?? "" },
-          data: { role: session.role },
-        });
-
-        if (session.role === UserRole.PROVIDER) {
-          token.isFaceVerified = false;
-        }
+    async jwt({ token, user, account, profile, trigger, session }) {
+      if (!token.email && account?.provider === "google" && profile) {
+        token.email = profile.email ?? null;
+        token.name = profile.name ?? null;
+        token.image = profile.picture ?? null;
       }
 
       if (user) {
         token = {
           ...token,
           id: user.id,
-          name: user.name,
           email: user.email,
+          name: user.name,
           image: user.image,
           role: user.role,
           isOtpVerified: user.isOtpVerified ?? true,
@@ -155,6 +148,18 @@ export const authOptions: AuthOptions = {
         };
       }
 
+      if (trigger === "update" && session?.role) {
+        token.role = session.role;
+        await prisma.user.update({
+          where: { email: token.email ?? "" },
+          data: { role: session.role },
+        });
+
+        if (session.role === UserRole.PROVIDER) {
+          token.isFaceVerified = false;
+        }
+      }
+
       return token;
     },
 
@@ -163,8 +168,8 @@ export const authOptions: AuthOptions = {
         session.user = {
           ...session.user,
           id: token.id as string,
-          name: token.name ?? null,
           email: token.email ?? null,
+          name: token.name ?? null,
           image: token.image ?? null,
           role: token.role as UserRole,
           isOtpVerified: token.isOtpVerified,
@@ -186,7 +191,17 @@ export const authOptions: AuthOptions = {
         };
       }
 
+      if (process.env.NODE_ENV === "development") {
+        console.log("[SESSION CALLBACK]:", session);
+      }
+
       return session;
+    },
+
+    async redirect({ url, baseUrl }) {
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      else if (new URL(url).origin === baseUrl) return url;
+      return baseUrl;
     },
   },
 };
