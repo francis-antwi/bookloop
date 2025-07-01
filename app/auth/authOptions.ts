@@ -79,7 +79,7 @@ export const authOptions: AuthOptions = {
         sameSite: "lax",
         path: "/",
         secure: true,
-        domain: "bookloop-eight.vercel.app", // adjust if needed
+        domain: "bookloop-eight.vercel.app", // change if using a custom domain
       },
     },
   },
@@ -98,7 +98,7 @@ export const authOptions: AuthOptions = {
         });
 
         if (!existingUser) {
-          return "/role"; // New user -> go select role
+          return "/role";
         }
 
         if (
@@ -115,12 +115,48 @@ export const authOptions: AuthOptions = {
     },
 
     async jwt({ token, user, account, profile, trigger, session }) {
+      // Google profile fallback
       if (!token.email && account?.provider === "google" && profile) {
         token.email = profile.email ?? null;
         token.name = profile.name ?? null;
         token.image = profile.picture ?? null;
       }
 
+      // 🛠️ If user is missing but token exists, fetch user from DB
+      if (!user && token.email) {
+        const dbUser = await prisma.user.findUnique({
+          where: { email: token.email },
+        });
+
+        if (dbUser) {
+          token = {
+            ...token,
+            id: dbUser.id,
+            email: dbUser.email,
+            name: dbUser.name,
+            image: dbUser.image,
+            role: dbUser.role,
+            isOtpVerified: dbUser.isOtpVerified ?? true,
+            otpCode: dbUser.otpCode ?? null,
+            otpExpiresAt: dbUser.otpExpiresAt?.toISOString() ?? null,
+            isFaceVerified: dbUser.isFaceVerified ?? false,
+            ...(dbUser.role === UserRole.PROVIDER && {
+              selfieImage: dbUser.selfieImage ?? null,
+              idImage: dbUser.idImage ?? null,
+              faceConfidence: dbUser.faceConfidence ?? null,
+              idName: dbUser.idName ?? null,
+              idNumber: dbUser.idNumber ?? null,
+              idDOB: dbUser.idDOB?.toISOString() ?? null,
+              idExpiryDate: dbUser.idExpiryDate?.toISOString() ?? null,
+              idIssuer: dbUser.idIssuer ?? null,
+              personalIdNumber: dbUser.personalIdNumber ?? null,
+              idIssueDate: dbUser.idIssueDate?.toISOString() ?? null,
+            }),
+          };
+        }
+      }
+
+      // If user is provided (fresh login)
       if (user) {
         token = {
           ...token,
@@ -148,8 +184,10 @@ export const authOptions: AuthOptions = {
         };
       }
 
+      // Manual session update (e.g., role)
       if (trigger === "update" && session?.role) {
         token.role = session.role;
+
         await prisma.user.update({
           where: { email: token.email ?? "" },
           data: { role: session.role },
@@ -191,7 +229,7 @@ export const authOptions: AuthOptions = {
         };
       }
 
-      if (process.env.NODE_ENV === "development") {
+      if (process.env.NODE_ENV !== "production") {
         console.log("[SESSION CALLBACK]:", session);
       }
 

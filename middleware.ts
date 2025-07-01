@@ -26,49 +26,34 @@ export default withAuth(
     const token = req.auth?.token;
 
     const publicPathsForUnauth = [
-      "/",
-      "/auth",
-      "/auth/error",
-      "/api/auth",
-      "/_next",
-      "/403",
-      "/role",
-      "/verify",
+      "/", "/auth", "/auth/error", "/api/auth", "/_next", "/403", "/role", "/verify"
     ];
-
-    const isPublicForUnauth = publicPathsForUnauth.some((path) => pathname.startsWith(path));
+    const isPublicForUnauth = publicPathsForUnauth.some((path) =>
+      pathname === path || pathname.startsWith(path)
+    );
 
     const providerPaths = [
-      "/my-listings",
-      "/approvals",
-      "/bookings",
-      "/favourites",
-      "/notifications",
+      "/my-listings", "/approvals", "/bookings", "/favourites", "/notifications"
     ];
-    const isProviderProtectedPath = providerPaths.some((path) => pathname.startsWith(path));
+    const isProviderProtectedPath = providerPaths.some((path) =>
+      pathname.startsWith(path)
+    );
 
-    // 1. Not logged in
+    // 🟥 1. Not logged in
     if (!token) {
-      if (isPublicForUnauth) return NextResponse.next();
-      return NextResponse.redirect(new URL("/auth", req.url));
+      return isPublicForUnauth
+        ? NextResponse.next()
+        : NextResponse.redirect(new URL("/auth", req.url));
     }
 
-    // 2. Logged in
+    // 🟩 2. Logged in
 
-    // Prevent logged-in users from accessing /auth (except error page)
+    // Prevent logged-in users from visiting login/signup pages (except /auth/error)
     if (pathname.startsWith("/auth") && pathname !== "/auth/error") {
       return NextResponse.redirect(new URL("/", req.url));
     }
 
-    // Admins can go anywhere except /role and /verify
-    if (token.role === UserRole.ADMIN) {
-      if (pathname === "/role" || pathname === "/verify") {
-        return NextResponse.redirect(new URL("/", req.url));
-      }
-      return NextResponse.next();
-    }
-
-    // ✅ Updated: Allow /role only if user has no role yet
+    // 🟦 Allow /role ONLY if no role is set yet
     if (pathname === "/role") {
       const hasRole =
         token.role === UserRole.CUSTOMER ||
@@ -78,11 +63,10 @@ export default withAuth(
       if (hasRole) {
         return NextResponse.redirect(new URL("/", req.url));
       }
-
-      return NextResponse.next(); // allow new users without role
+      return NextResponse.next(); // allow user with no role
     }
 
-    // /verify logic
+    // 🟨 /verify logic
     if (pathname === "/verify") {
       if (token.role === UserRole.PROVIDER && token.isFaceVerified) {
         return NextResponse.redirect(new URL("/my-listings", req.url));
@@ -90,21 +74,31 @@ export default withAuth(
       if (token.role === UserRole.CUSTOMER && token.isOtpVerified) {
         return NextResponse.redirect(new URL("/", req.url));
       }
+      return NextResponse.next(); // allow if still needs verification
+    }
+
+    // 🟪 Admins: all access except /role or /verify
+    if (token.role === UserRole.ADMIN) {
+      if (pathname === "/role" || pathname === "/verify") {
+        return NextResponse.redirect(new URL("/", req.url));
+      }
       return NextResponse.next();
     }
 
-    // Provider-specific route protection
-    if (token.role === UserRole.PROVIDER && !token.isFaceVerified && isProviderProtectedPath) {
+    // 🟧 Provider routes
+    if (
+      token.role === UserRole.PROVIDER &&
+      !token.isFaceVerified &&
+      isProviderProtectedPath
+    ) {
       return NextResponse.redirect(new URL("/verify", req.url));
     }
 
-    if (token.role !== UserRole.PROVIDER && isProviderProtectedPath) {
+    if (
+      token.role !== UserRole.PROVIDER &&
+      isProviderProtectedPath
+    ) {
       return NextResponse.redirect(new URL("/403", req.url));
-    }
-
-    // Catch-all: redirect to home if not on a public route or protected route
-    if (token && pathname !== "/" && !publicPathsForUnauth.includes(pathname) && !isProviderProtectedPath) {
-      return NextResponse.redirect(new URL("/", req.url));
     }
 
     return NextResponse.next();
@@ -112,18 +106,11 @@ export default withAuth(
   {
     callbacks: {
       authorized: ({ token, req }) => {
-        const publicPathsForAuthCheck = [
-          "/",
-          "/auth",
-          "/auth/error",
-          "/api/auth",
-          "/_next",
-          "/403",
-          "/role",
-          "/verify",
+        const safePaths = [
+          "/", "/auth", "/auth/error", "/api/auth", "/_next", "/403", "/role", "/verify"
         ];
-        const isPublic = publicPathsForAuthCheck.some((path) =>
-          req.nextUrl.pathname.startsWith(path)
+        const isPublic = safePaths.some((path) =>
+          req.nextUrl.pathname === path || req.nextUrl.pathname.startsWith(path)
         );
         return isPublic || !!token;
       },
