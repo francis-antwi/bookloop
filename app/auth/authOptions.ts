@@ -1,4 +1,4 @@
-import NextAuth, { AuthOptions } from "next-auth";
+am i not doig that already import NextAuth, { AuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import prisma from "@/app/libs/prismadb";
@@ -36,11 +36,10 @@ export const authOptions: AuthOptions = {
         );
 
         if (!isCorrectPassword) throw new Error("Invalid credentials");
-        if (!user.role) throw new Error("Missing account role");
-
         if (user.role === UserRole.PROVIDER && !user.isFaceVerified) {
           throw new Error("Face verification required for providers");
         }
+        if (!user.role) throw new Error("Missing account role");
 
         return {
           ...user,
@@ -53,8 +52,8 @@ export const authOptions: AuthOptions = {
 
   pages: {
     signIn: "/",
-    error: "/auth/error",
-    newUser: "/role", // fallback if all else fails
+    error: "/auth/error", 
+    newUser: "/role",
   },
 
   session: {
@@ -79,41 +78,43 @@ export const authOptions: AuthOptions = {
         sameSite: "lax",
         path: "/",
         secure: true,
-        domain: "bookloop-eight.vercel.app", // ✅ Update as needed
+        domain: "bookloop-eight.vercel.app", // ✅ Update for prod
       },
     },
   },
 
   callbacks: {
-    async signIn({ user, account }) {
-      if (account?.provider === "google") {
-        const existingUser = await prisma.user.findUnique({
-          where: { email: user.email ?? "" },
-          select: { role: true, isFaceVerified: true },
-        });
+    callbacks: {
+  async signIn({ user, account }) {
+    if (account?.provider === "google") {
+      const existingUser = await prisma.user.findUnique({
+        where: { email: user.email ?? "" },
+        select: { role: true, isFaceVerified: true }
+      });
 
-        if (!existingUser) {
-          return "/role"; // ✅ Redirect new users to /role
-        }
-
-        if (
-          existingUser.role === UserRole.PROVIDER &&
-          !existingUser.isFaceVerified
-        ) {
-          throw new Error("Face verification required.");
-        }
-
-        return true; // ✅ Allow existing users
+      if (!existingUser) {
+        // New user - redirect to role selection
+        return '/role';
       }
 
-      return true;
-    },
+      // Existing user checks
+      if (existingUser.role === UserRole.PROVIDER && !existingUser.isFaceVerified) {
+        throw new Error("Face verification required.");
+      }
 
-    async redirect({ url, baseUrl }) {
-      if (url.startsWith("/")) return `${baseUrl}${url}`;
-      else if (new URL(url).origin === baseUrl) return url;
-      return baseUrl;
-    },
+      // Existing user with role - continue to callbackUrl (which defaults to home)
+      return true;
+    }
+    return true;
+  },
+  
+  async redirect({ url, baseUrl }) {
+    // Handle custom redirects
+    if (url.startsWith("/")) return `${baseUrl}${url}`;
+    else if (new URL(url).origin === baseUrl) return url;
+    return baseUrl;
+  },
+},
 
     async jwt({ token, user, trigger, session }) {
       if (trigger === "update" && session?.role) {
