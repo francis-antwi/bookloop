@@ -27,6 +27,7 @@ export async function POST(request: Request) {
     const session = await getServerSession(authOptions);
     const isGoogleAuth = !!(session?.user && !session.user.password);
     const googleUserEmail = session?.user?.email || null;
+    const googleUserName = session?.user?.name || null;
 
     const body = await request.json();
     console.log("📦 Registration payload:", JSON.stringify(body, null, 2));
@@ -34,14 +35,14 @@ export async function POST(request: Request) {
 
     const {
       email,
-      name,
+      name, // This comes from the registration form
       contactPhone,
       password,
       role = "CUSTOMER",
       selfieImage,
       idImage,
       faceConfidence,
-      idName,
+      idName, // This comes from ID document extraction
       idNumber,
       idDOB,
       idExpiryDate,
@@ -59,12 +60,15 @@ export async function POST(request: Request) {
       extractionComplete
     } = body;
 
+    // Determine the name to use - priority to Google name, then form name
+    const displayName = isGoogleAuth && googleUserName ? googleUserName : name;
+
     // Basic validation
-    if (!name || (!email && !isGoogleAuth)) {
+    if (!displayName || (!email && !isGoogleAuth)) {
       return NextResponse.json({
         error: "Missing required fields",
         missing: [
-          ...(!name ? ["name"] : []),
+          ...(!displayName ? ["name"] : []),
           ...(!email && !isGoogleAuth ? ["email"] : [])
         ]
       }, { status: 400 });
@@ -139,7 +143,7 @@ export async function POST(request: Request) {
     const user = await prisma.user.create({
       data: {
         email: email || googleUserEmail,
-        name,
+        name: displayName, // This uses the determined display name
         contactPhone: contactPhone || null,
         hashedPassword,
         role,
@@ -148,7 +152,7 @@ export async function POST(request: Request) {
         selfieImage: selfieImage || selfieUrl || null,
         idImage: idImage || imageUrl || null,
         faceConfidence: faceConfidence || null,
-        idName: idName || null,
+        idName: idName || null, // This stores the extracted ID name separately
         idNumber: idNumber || personalIdNumber || null,
         idDOB: parsedDOB,
         idExpiryDate: parsedExpiry,
@@ -164,7 +168,7 @@ export async function POST(request: Request) {
       select: {
         id: true,
         email: true,
-        name: true,
+        name: true, // This will return the display name
         role: true,
         contactPhone: true,
         isFaceVerified: true,
