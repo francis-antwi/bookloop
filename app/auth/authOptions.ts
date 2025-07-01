@@ -79,7 +79,10 @@ export const authOptions: AuthOptions = {
         sameSite: "lax",
         path: "/",
         secure: true,
-        domain: "bookloop-eight.vercel.app",
+        // Dynamically set the domain for the session cookie
+        // This is crucial for local development and Vercel preview deployments
+        // If VERCEL_URL is present, use its hostname. Otherwise, let NextAuth.js handle it (e.g., for localhost).
+        domain: process.env.VERCEL_URL ? new URL(`https://${process.env.VERCEL_URL}`).hostname : undefined,
       },
     },
   },
