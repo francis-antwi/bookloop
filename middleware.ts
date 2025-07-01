@@ -25,6 +25,20 @@ export default withAuth(
     const { pathname } = req.nextUrl;
     const token = req.auth?.token;
 
+    // --- DEBUG LOGGING START ---
+    if (process.env.NODE_ENV === "development") {
+      console.log(`[MIDDLEWARE] Pathname: ${pathname}`);
+      console.log(`[MIDDLEWARE] Token presence: ${!!token}`);
+      if (token) {
+        console.log(`[MIDDLEWARE] Token ID: ${token.id}`); // Log user ID for better tracking
+        console.log(`[MIDDLEWARE] Token email: ${token.email}`);
+        console.log(`[MIDDLEWARE] Token role: ${token.role}`);
+        console.log(`[MIDDLEWARE] Token isFaceVerified: ${token.isFaceVerified}`);
+        console.log(`[MIDDLEWARE] Token isOtpVerified: ${token.isOtpVerified}`);
+      }
+    }
+    // --- DEBUG LOGGING END ---
+
     const publicPathsForUnauth = [
       "/", "/auth", "/auth/error", "/api/auth", "/_next", "/403", "/role", "/verify"
     ];
@@ -41,6 +55,9 @@ export default withAuth(
 
     // 🟥 1. Not logged in
     if (!token) {
+      if (process.env.NODE_ENV === "development") {
+        console.log(`[MIDDLEWARE] No token. Is public path for unauth: ${isPublicForUnauth}`);
+      }
       return isPublicForUnauth
         ? NextResponse.next()
         : NextResponse.redirect(new URL("/auth", req.url));
@@ -48,22 +65,45 @@ export default withAuth(
 
     // 🟩 2. Logged in
 
+    // Check if user has a role. If not, force redirect to /role unless already on /role.
+    const hasRole =
+      token.role === UserRole.CUSTOMER ||
+      token.role === UserRole.PROVIDER ||
+      token.role === UserRole.ADMIN;
+
+    if (!hasRole && pathname !== "/role") {
+      if (process.env.NODE_ENV === "development") {
+        console.log(`[MIDDLEWARE] Logged in user with no role trying to access ${pathname}. Redirecting to /role`);
+      }
+      return NextResponse.redirect(new URL("/role", req.url));
+    }
+
+
     // Prevent logged-in users from visiting login/signup pages (except /auth/error)
+    // This rule should come AFTER the no-role check, so users without a role
+    // are still directed to /role even if they try to go to /auth.
     if (pathname.startsWith("/auth") && pathname !== "/auth/error") {
+      if (process.env.NODE_ENV === "development") {
+        console.log(`[MIDDLEWARE] Logged in user trying to access auth page. Redirecting to /`);
+      }
       return NextResponse.redirect(new URL("/", req.url));
     }
 
     // 🟦 Allow /role ONLY if no role is set yet
+    // This block is now simplified because the earlier check handles redirects away from /role
+    // if a role is present. Here, we just allow access if no role.
     if (pathname === "/role") {
-      const hasRole =
-        token.role === UserRole.CUSTOMER ||
-        token.role === UserRole.PROVIDER ||
-        token.role === UserRole.ADMIN;
-
-      if (hasRole) {
+      if (!hasRole) { // If no role, allow them to stay on /role
+        if (process.env.NODE_ENV === "development") {
+          console.log(`[MIDDLEWARE] On /role page. No role set. Allowing access.`);
+        }
+        return NextResponse.next();
+      } else { // If they have a role, redirect them away from /role
+        if (process.env.NODE_ENV === "development") {
+          console.log(`[MIDDLEWARE] On /role page. Role already set (${token.role}). Redirecting to /`);
+        }
         return NextResponse.redirect(new URL("/", req.url));
       }
-      return NextResponse.next(); // allow user with no role
     }
 
     // 🟨 /verify logic
@@ -107,12 +147,16 @@ export default withAuth(
     callbacks: {
       authorized: ({ token, req }) => {
         const safePaths = [
-          "/", "/auth", "/auth/error", "/api/auth", "/_next", "/403", "/role", "/verify"
+          "/", "/auth", "/auth/error", "/_next", "/403", "/role", "/verify"
         ];
         const isPublic = safePaths.some((path) =>
           req.nextUrl.pathname === path || req.nextUrl.pathname.startsWith(path)
         );
-        return isPublic || !!token;
+        // Crucial: Allow all NextAuth.js API routes to process without requiring a token
+        const isNextAuthApiRoute = req.nextUrl.pathname.startsWith("/api/auth");
+
+        // Allow access if it's a public path OR a NextAuth.js API route OR if there's a token
+        return isPublic || isNextAuthApiRoute || !!token;
       },
     },
     matcher: [
@@ -125,7 +169,7 @@ export default withAuth(
       "/role",
       "/verify",
       "/auth/:path*",
-      "/api/auth/:path*",
+      "/api/auth/:path*", // Keep this in matcher so middleware runs for auth routes
     ],
   }
 );
