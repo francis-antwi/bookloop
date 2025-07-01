@@ -1,4 +1,5 @@
 export function extractIDInfo(data: any) {
+    console.log("⚙️ [ID Extraction]: Starting ID info extraction from OCR response.");
   const rawText = data?.text?.text;
 
   if (typeof rawText !== "string") {
@@ -8,10 +9,13 @@ export function extractIDInfo(data: any) {
 
   const lines = rawText.split("\n").map((line: string) => line.trim()).filter(Boolean);
   const fullText = lines.join(" ");
+    console.log("⚙️ [ID Extraction]: Full text for extraction:", fullText);
 
   const getDate = (text: string) => {
     const match = text.match(/(\d{2})[\/\-](\d{2})[\/\-](\d{4})/);
+      console.warn(`⚠️ [ID Extraction - Date]: Could not parse date from text: "${text}"`);
     return match ? `${match[3]}-${match[2]}-${match[1]}` : null;
+
   };
 
   const extractMatch = (regex: RegExp, join = false) => {
@@ -22,18 +26,24 @@ export function extractIDInfo(data: any) {
   const surname = extractMatch(/Surname\/Nom\s+([A-Z]+)/i);
   const firstnames = extractMatch(/Firstnames\/Prénoms\s+([A-Z]+)/i);
   const idName = [firstnames, surname].filter(Boolean).join(" ");
+    console.log(`⚙️ [ID Extraction]: Extracted Name: "${idName}" (First: "${firstnames}", Last: "${surname}")`);
 
   const idDOB = getDate(extractMatch(/Date of Birth.*?(\d{2}\/\d{2}\/\d{4})/i) ?? "");
+   console.log(`⚙️ [ID Extraction]: Extracted DOB: "${idDOB}"`);
   const idIssueDate = getDate(extractMatch(/Date of Issuance.*?(\d{2}\/\d{2}\/\d{4})/i) ?? "");
+    console.log(`⚙️ [ID Extraction]: Extracted Issue Date: "${idIssueDate}"`);
   const idExpiryDate = getDate(extractMatch(/Date of Expiry.*?(\d{2}\/\d{2}\/\d{4})/i) ?? "");
+  console.log(`⚙️ [ID Extraction]: Extracted Expiry Date: "${idExpiryDate}"`);
 
   const idNumber =
     extractMatch(/Document Number.*?([A-Z0-9]+)/i) ??
     extractMatch(/([A-Z]{2}[0-9]{7,})/); // fallback
+     console.log(`⚙️ [ID Extraction]: Extracted ID Number: "${idNumber}"`);
 
   const idIssuer =
     extractMatch(/Place of Issuance.*?([A-Z]+)/i) ??
     extractMatch(/ACCRA|KUMASI|TAKORADI|TAMALE/i);
+      console.log(`⚙️ [ID Extraction]: Extracted Issuer: "${idIssuer}"`);
 
   const personalIdNumber = extractMatch(/(GHA-\d{12})/);
 
