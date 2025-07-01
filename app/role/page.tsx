@@ -1,74 +1,97 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { FiUserCheck, FiCheck, FiLoader } from 'react-icons/fi';
-import { useSession, update } from 'next-auth/react';
-import axios, { AxiosError } from 'axios';
-import toast from 'react-hot-toast';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react'
+import { FiUserCheck, FiCheck, FiLoader } from 'react-icons/fi'
+import { useSession } from 'next-auth/react'
+import axios, { AxiosError } from 'axios'
+import toast from 'react-hot-toast'
+import { useRouter } from 'next/navigation'
 
 interface RoleSelectorProps {
-  onRoleSelected?: (role: string) => void;
+  onRoleSelected?: (role: string) => void
 }
 
 const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
-  const { data: session, update: updateSession } = useSession();
-  const router = useRouter();
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<string | null>(session?.user?.role || null);
+  const { data: session, status, update: updateSession } = useSession()
+  const router = useRouter()
+  const [isLoading, setIsLoading] = useState(false)
+  const [selectedRole, setSelectedRole] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (status === 'authenticated' && session?.user?.role) {
+      setSelectedRole(session.user.role)
+    }
+  }, [status, session])
+
+  useEffect(() => {
+    if (status === 'loading') return
+    if (!session?.user?.email) {
+      toast.error('Session not found. Please log in again.')
+      router.replace('/')
+    }
+  }, [session, status, router])
 
   const handleRoleSelect = async (role: string) => {
-    if (selectedRole === role) return;
+    if (selectedRole === role) return
+    if (!session?.user?.email) return
 
-    setIsLoading(true);
+    setIsLoading(true)
 
     try {
-      setSelectedRole(role);
+      setSelectedRole(role)
 
-      // First update the role via API
-      const response = await axios.post('/api/role', { role }, { withCredentials: true });
+      // Update role via API
+      const response = await axios.post('/api/role', { role }, { withCredentials: true })
 
-      // Then update the session to ensure consistency
-      const updatedSession = await updateSession({
+      // Update session to reflect role
+      await updateSession({
         role: role,
         ...(role === 'PROVIDER' && { isFaceVerified: false }),
-      });
-
-      console.log('Updated session:', updatedSession);
+      })
 
       if (response.status >= 200 && response.status < 300) {
         if (response.data.success) {
-          onRoleSelected?.(role);
-          toast.success('Role selected successfully');
-          router.push(role === 'PROVIDER' ? '/verify' : '/');
+          onRoleSelected?.(role)
+          toast.success('Role selected successfully')
+          router.push(role === 'PROVIDER' ? '/verify' : '/')
         } else if (response.data.skipCreate) {
-          toast.success(response.data.message || 'Provider role selected. Proceeding to verification.');
-          router.push('/verify');
+          toast.success(response.data.message || 'Redirecting to verification.')
+          router.push('/verify')
         } else {
-          throw new Error(response.data.message || 'Role selection failed');
+          throw new Error(response.data.message || 'Role selection failed')
         }
       } else {
-        throw new Error(response.data.message || 'Unexpected response from server');
+        throw new Error(response.data.message || 'Unexpected server response')
       }
     } catch (err) {
-      const axiosError = err as AxiosError;
-      const status = axiosError.response?.status;
-      const message = (axiosError.response?.data as { message?: string })?.message || 
-                     axiosError.message || 
-                     'Failed to select role';
+      const axiosError = err as AxiosError
+      const status = axiosError.response?.status
+      const message =
+        (axiosError.response?.data as { message?: string })?.message ||
+        axiosError.message ||
+        'Failed to select role'
 
-      toast.error(message);
+      toast.error(message)
 
       if (status === 403 && (axiosError.response?.data as { error?: string })?.error === 'Verification required') {
         setTimeout(() => {
-          router.push('/verify');
-        }, 1000);
+          router.push('/verify')
+        }, 1000)
       }
-      setSelectedRole(session?.user?.role || null);
+
+      setSelectedRole(session?.user?.role || null)
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
+
+  if (status === 'loading') {
+    return (
+      <div className="flex justify-center items-center py-12 text-gray-600 text-sm">
+        Loading session...
+      </div>
+    )
+  }
 
   const roles = [
     {
@@ -91,7 +114,7 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
       selectedBg: 'bg-gradient-to-r from-emerald-50 to-teal-100',
       icon: '⚡',
     },
-  ];
+  ]
 
   return (
     <div className="max-w-md mx-auto space-y-6 p-6">
@@ -148,7 +171,7 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
         ))}
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default RoleSelector;
+export default RoleSelector
