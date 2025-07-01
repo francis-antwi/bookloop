@@ -1,37 +1,31 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { FiUserCheck, FiCheck, FiLoader } from 'react-icons/fi';
-import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useSession, update } from 'next-auth/react';
 import axios, { AxiosError } from 'axios';
 import toast from 'react-hot-toast';
+import { useRouter } from 'next/navigation';
 
 interface RoleSelectorProps {
   onRoleSelected?: (role: string) => void;
 }
 
 const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
-  const { data: session, status, update: updateSession } = useSession();
+  const { data: session, update: updateSession, status } = useSession();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [selectedRole, setSelectedRole] = useState<string | null>(session?.user?.role || null);
 
-  // ✅ Safer redirect logic
+  // ✅ Wait for session before deciding what to do
   useEffect(() => {
     if (status === 'loading') return;
 
     if (status === 'unauthenticated') {
       toast.error('Please log in first.');
       router.replace('/');
-      return;
     }
-
-    if (!session?.user?.email) {
-      console.warn('[RoleSelector] Authenticated, but no email in session:', session);
-      // Don't redirect, allow frontend to still try posting role
-    }
-  }, [status, session, router]);
+  }, [status, router]);
 
   const handleRoleSelect = async (role: string) => {
     if (selectedRole === role) return;
@@ -40,21 +34,21 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
     try {
       setSelectedRole(role);
 
-      // ✅ POST role to backend
+      // 1. Update via API
       const response = await axios.post('/api/role', { role }, { withCredentials: true });
 
-      // ✅ Update local session
+      // 2. Refresh session data
       const updatedSession = await updateSession({
-        role,
+        role: role,
         ...(role === 'PROVIDER' && { isFaceVerified: false }),
       });
 
-      console.log('[RoleSelector] Session after update:', updatedSession);
+      console.log('Updated session:', updatedSession);
 
       if (response.status >= 200 && response.status < 300) {
         if (response.data.success) {
-          toast.success('Role selected successfully');
           onRoleSelected?.(role);
+          toast.success('Role selected successfully');
           router.push(role === 'PROVIDER' ? '/verify' : '/');
         } else if (response.data.skipCreate) {
           toast.success(response.data.message || 'Provider role selected. Proceeding to verification.');
@@ -68,9 +62,10 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
     } catch (err) {
       const axiosError = err as AxiosError;
       const status = axiosError.response?.status;
-      const message = (axiosError.response?.data as { message?: string })?.message ||
-                      axiosError.message ||
-                      'Failed to select role';
+      const message =
+        (axiosError.response?.data as { message?: string })?.message ||
+        axiosError.message ||
+        'Failed to select role';
 
       toast.error(message);
 
@@ -108,6 +103,15 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
       icon: '⚡',
     },
   ];
+
+  // ✅ Loading session
+  if (status === 'loading') {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-lg">
+        Loading...
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-md mx-auto space-y-6 p-6">
