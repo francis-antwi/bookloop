@@ -12,6 +12,7 @@ interface RoleSelectorProps {
 
 const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
   const { data: session } = useSession();
+   console.log("Session from useSession():", session);
   const [isLoading, setIsLoading] = useState(false);
 
   const [selectedRole, setSelectedRole] = useState<string | null>(session?.user?.role || null);
