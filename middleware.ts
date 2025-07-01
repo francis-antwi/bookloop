@@ -2,9 +2,8 @@ import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import type { JWT } from "next-auth/jwt";
-import { UserRole } from "@prisma/client"; // Import UserRole
+import { UserRole } from "@prisma/client";
 
-// Extend the NextRequest type to include the 'auth' property provided by next-auth
 declare module "next/server" {
   interface NextRequest {
     auth?: {
@@ -12,7 +11,7 @@ declare module "next/server" {
         email?: string | null;
         name?: string | null;
         image?: string | null;
-        role?: "CUSTOMER" | "PROVIDER" | "ADMIN";
+        role?: UserRole;
         isFaceVerified?: boolean;
         isOtpVerified?: boolean;
       };
@@ -26,20 +25,19 @@ export default withAuth(
     const { pathname } = req.nextUrl;
     const token = req.auth?.token;
 
-    // Define paths that are publicly accessible (for unauthenticated users)
-    const publicPathsForUnauth = [
-      "/", // Home page
-      "/auth", // Authentication pages (login, register)
-      "/auth/error", // Authentication error page
-      "/api/auth", // NextAuth.js API routes
-      "/_next", // Next.js internal paths
-      "/403", // Access denied page
-      "/role", // Allow unauthenticated to access /role for initial setup (e.g., new Google users)
-      "/verify", // Allow unauthenticated to access /verify for initial setup
+    // Public paths that don't require authentication
+    const publicPaths = [
+      "/",
+      "/auth",
+      "/auth/error",
+      "/api/auth",
+      "/_next",
+      "/403",
+      "/role",
+      "/verify",
     ];
-    const isPublicForUnauth = publicPathsForUnauth.some((path) => pathname.startsWith(path));
 
-    // Define paths that are specific to providers (protected paths)
+    // Provider-specific protected paths
     const providerPaths = [
       "/my-listings",
       "/approvals",
@@ -47,138 +45,88 @@ export default withAuth(
       "/favourites",
       "/notifications",
     ];
-    const isProviderProtectedPath = providerPaths.some((path) =>
-      pathname.startsWith(path)
-    );
 
-    // --- Redirection Logic ---
+    // Admin-specific protected paths
+    const adminPaths = ["/admin"];
 
-    // 1. If user is NOT logged in (no token)
+    // Check if current path matches any of the defined path groups
+    const isPublicPath = publicPaths.some(path => pathname.startsWith(path));
+    const isProviderPath = providerPaths.some(path => pathname.startsWith(path));
+    const isAdminPath = adminPaths.some(path => pathname.startsWith(path));
+
+    // 1. Handle unauthenticated users
     if (!token) {
-      if (isPublicForUnauth) {
-        return NextResponse.next(); // Allow access to public paths for unauthenticated users
+      if (isPublicPath) {
+        return NextResponse.next();
       }
-      // For any other non-public path, redirect to login
       return NextResponse.redirect(new URL("/auth", req.url));
     }
 
-    // 2. If user IS logged in (token exists)
+    // 2. Handle authenticated users
 
-    // Logged-in users should not access authentication pages. Redirect to home.
+    // Prevent authenticated users from accessing auth pages
     if (pathname.startsWith("/auth") && pathname !== "/auth/error") {
       return NextResponse.redirect(new URL("/", req.url));
     }
 
-    // If user is an ADMIN, they have full access. If they try to go to /role or /verify, redirect them to home.
+    // Handle admin users
     if (token.role === UserRole.ADMIN) {
       if (pathname === "/role" || pathname === "/verify") {
-        return NextResponse.redirect(new URL("/", req.url));
+        return NextResponse.redirect(new URL("/admin", req.url));
       }
-      return NextResponse.next(); // Allow ADMINs to access any other path
-    }
-
-    // --- REMOVED THE PROBLEMTAIC BLOCK HERE ---
-    // The previous problematic block 'if (!token.role && pathname !== "/role")' is removed.
-    // The authOptions JWT callback now ensures `token.role` is always set for logged-in users.
-    // --- END REMOVED BLOCK ---
-
-    // If user is on /role page and they are logged in, redirect them to home.
-    // This assumes all existing users have roles and should not revisit this page.
-    if (pathname === "/role") {
-      return NextResponse.redirect(new URL("/", req.url));
-    }
-
-    // If user is on /verify page
-    if (pathname === "/verify") {
-      // If user is a PROVIDER and already face verified, redirect them away from /verify to their dashboard.
-      if (token.role === UserRole.PROVIDER && token.isFaceVerified) {
-        return NextResponse.redirect(new URL("/my-listings", req.url));
-      }
-      // If user is a CUSTOMER and already OTP verified, redirect them away from /verify to home.
-      if (token.role === UserRole.CUSTOMER && token.isOtpVerified) {
-        return NextResponse.redirect(new URL("/", req.url));
-      }
-      // If the user is genuinely unverified (based on their role) and on /verify, allow them to proceed.
       return NextResponse.next();
     }
 
-    // --- Protection for specific routes based on role/verification status ---
-
-    // If a PROVIDER is not face verified and tries to access a provider-specific path, force them to verify.
-    if (token.role === UserRole.PROVIDER && !token.isFaceVerified && isProviderProtectedPath) {
-      return NextResponse.redirect(new URL("/verify", req.url));
+    // Handle role selection flow
+    if (pathname === "/role") {
+      // Allow access only if user has no role (new Google-authenticated users)
+      if (!token.role) {
+        return NextResponse.next();
+      }
+      return NextResponse.redirect(new URL("/", req.url));
     }
 
-    // If a non-PROVIDER tries to access a provider-specific path, deny access.
-    if (token.role !== UserRole.PROVIDER && isProviderProtectedPath) {
+    // Handle verification flow
+    if (pathname === "/verify") {
+      // Providers must complete face verification
+      if (token.role === UserRole.PROVIDER && !token.isFaceVerified) {
+        return NextResponse.next();
+      }
+      // Customers must complete OTP verification
+      if (token.role === UserRole.CUSTOMER && !token.isOtpVerified) {
+        return NextResponse.next();
+      }
+      return NextResponse.redirect(
+        new URL(token.role === UserRole.PROVIDER ? "/my-listings" : "/", req.url)
+      );
+    }
+
+    // Protect provider-specific routes
+    if (isProviderPath) {
+      if (token.role !== UserRole.PROVIDER) {
+        return NextResponse.redirect(new URL("/403", req.url));
+      }
+      if (!token.isFaceVerified) {
+        return NextResponse.redirect(new URL("/verify", req.url));
+      }
+    }
+
+    // Protect admin routes
+    if (isAdminPath && token.role !== UserRole.ADMIN) {
       return NextResponse.redirect(new URL("/403", req.url));
     }
 
-    // --- Catch-all redirect to / for authenticated users ---
-    // If the user is logged in, not an ADMIN, not on /role or /verify (and not needing them),
-    // and not trying to access a protected path they are unauthorized for,
-    // and not currently on the root path or a public path they should stay on, redirect them to the root path.
-    if (token && pathname !== "/" && !publicPathsForUnauth.includes(pathname) && !isProviderProtectedPath) {
-        return NextResponse.redirect(new URL("/", req.url));
-    }
-    // --- END NEW LOGIC ---
-
-    // Default: Allow access if no specific redirection or protection rules are met
     return NextResponse.next();
   },
   {
     callbacks: {
-      authorized: ({ token, req }) => {
-        const publicPathsForAuthCheck = [
-          "/",
-          "/auth",
-          "/auth/error",
-          "/api/auth",
-          "/_next",
-          "/403",
-          "/role", // Include /role and /verify here to allow NextAuth to pass them to the middleware function
-          "/verify",
-        ];
-        const isPublicForAuthCheck = publicPathsForAuthCheck.some((path) =>
-          req.nextUrl.pathname.startsWith(path)
-        );
-
-        if (isPublicForAuthCheck) {
-          return true; // Always allow access to these paths (middleware will handle specific redirects)
-        }
-        return !!token; // For all other paths, require a token (user must be logged in)
-      },
+      authorized: ({ token }) => !!token,
     },
-    matcher: [
-      "/bookings/:path*",
-      "/favourites/:path*",
-      "/approvals/:path*",
-      "/my-listings/:path*",
-      "/notifications/:path*",
-      "/admin/:path*",
-      "/role",
-      "/verify",
-      "/auth/:path*",
-      "/api/auth/:path*",
-      "/",
-      "/403",
-    ],
   }
 );
 
 export const config = {
   matcher: [
-    "/bookings/:path*",
-    "/favourites/:path*",
-    "/approvals/:path*",
-    "/my-listings/:path*",
-    "/notifications/:path*",
-    "/admin/:path*",
-    "/role",
-    "/verify",
-    "/auth/:path*",
-    "/api/auth/:path*",
-    "/",
-    "/403",
+    "/((?!api|_next/static|_next/image|favicon.ico).*)",
   ],
 };
