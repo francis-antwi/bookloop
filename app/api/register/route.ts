@@ -61,10 +61,13 @@ export async function POST(request: Request) {
     } = body;
 
     // Basic validation
-    if (!name && !isGoogleAuth) {
+    if (!name || (!email && !isGoogleAuth)) {
       return NextResponse.json({
         error: "Missing required fields",
-        missing: ["name"]
+        missing: [
+          ...(!name ? ["name"] : []),
+          ...(!email && !isGoogleAuth ? ["email"] : [])
+        ]
       }, { status: 400 });
     }
 
@@ -155,7 +158,7 @@ export async function POST(request: Request) {
     const user = await prisma.user.create({
       data: {
         email: email || googleUserEmail,
-        name: isGoogleAuth ? (session?.user?.name?.trim() || name) : name,
+        name,
         contactPhone: contactPhone || null,
         hashedPassword,
         role,
