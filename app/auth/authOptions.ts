@@ -36,11 +36,10 @@ export const authOptions: AuthOptions = {
         );
 
         if (!isCorrectPassword) throw new Error("Invalid credentials");
-        if (!user.role) throw new Error("Missing account role");
-
         if (user.role === UserRole.PROVIDER && !user.isFaceVerified) {
           throw new Error("Face verification required for providers");
         }
+        if (!user.role) throw new Error("Missing account role");
 
         return {
           ...user,
@@ -53,18 +52,18 @@ export const authOptions: AuthOptions = {
 
   pages: {
     signIn: "/",
-    error: "/auth/error",
+    error: "/auth/error", 
     newUser: "/role",
   },
 
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 days
-    updateAge: 24 * 60 * 60, // 24 hours
+    maxAge: 30 * 24 * 60 * 60,
+    updateAge: 24 * 60 * 60,
   },
 
   jwt: {
-    maxAge: 30 * 24 * 60 * 60, // 30 days
+    maxAge: 30 * 24 * 60 * 60,
   },
 
   secret: process.env.NEXTAUTH_SECRET,
@@ -78,63 +77,41 @@ export const authOptions: AuthOptions = {
         httpOnly: true,
         sameSite: "lax",
         path: "/",
-        secure: process.env.NODE_ENV === "production",
-        domain: process.env.NODE_ENV === "production" 
-          ? "bookloop-eight.vercel.app" 
-          : undefined,
+        secure: true,
+        domain: "bookloop-eight.vercel.app", // ✅ Update for prod
       },
     },
   },
 
   callbacks: {
-    async signIn({ user, account, profile }) {
+    async signIn({ user, account }) {
       if (account?.provider === "google") {
         const existingUser = await prisma.user.findUnique({
           where: { email: user.email ?? "" },
         });
 
         if (!existingUser) {
-          // Create user with default CUSTOMER role
-          const newUser = await prisma.user.create({
-            data: {
-              email: user.email ?? "",
-              name: user.name ?? "",
-              image: user.image ?? null,
-              role: UserRole.CUSTOMER, // Default role
-              isOtpVerified: true,
-              isFaceVerified: false,
-              hashedPassword: null, // Explicitly set for Google users
-            },
-          });
-          
-          // Ensure user object has ID for JWT callback
-          user.id = newUser.id;
-          user.role = newUser.role;
-          
-          return '/role'; // Redirect to role selection
+          // ✅ Allow login — onboarding continues on /role
+          return true;
         }
 
-        if (existingUser.role === UserRole.PROVIDER && !existingUser.isFaceVerified) {
-          throw new Error("Face verification required");
+        // ✅ User exists, now check OTP and face verification
+
+        if (
+          existingUser.role === UserRole.PROVIDER &&
+          !existingUser.isFaceVerified
+        ) {
+          throw new Error("Face verification required.");
         }
 
-        // Ensure existing user data is passed to JWT callback
-        user.id = existingUser.id;
-        user.role = existingUser.role;
-        user.isOtpVerified = existingUser.isOtpVerified ?? true;
-        user.isFaceVerified = existingUser.isFaceVerified ?? false;
+        return true;
       }
+
       return true;
     },
-
-    async redirect({ url, baseUrl }) {
-      if (url.startsWith("/")) return `${baseUrl}${url}`;
-      else if (new URL(url).origin === baseUrl) return url;
-      return baseUrl;
-    },
+    
 
     async jwt({ token, user, trigger, session }) {
-      // Handle role updates
       if (trigger === "update" && session?.role) {
         token.role = session.role;
         await prisma.user.update({
@@ -147,30 +124,31 @@ export const authOptions: AuthOptions = {
         }
       }
 
-      // Add user info to token on sign in
       if (user) {
-        token.id = user.id;
-        token.name = user.name;
-        token.email = user.email;
-        token.image = user.image;
-        token.role = user.role ?? UserRole.CUSTOMER; // Ensure role is never undefined
-        token.isOtpVerified = user.isOtpVerified ?? true;
-        token.otpCode = user.otpCode ?? null;
-        token.otpExpiresAt = user.otpExpiresAt?.toISOString() ?? null;
-        token.isFaceVerified = user.isFaceVerified ?? false;
-
-        if (user.role === UserRole.PROVIDER) {
-          token.selfieImage = user.selfieImage ?? null;
-          token.idImage = user.idImage ?? null;
-          token.faceConfidence = user.faceConfidence ?? null;
-          token.idName = user.idName ?? null;
-          token.idNumber = user.idNumber ?? null;
-          token.idDOB = user.idDOB?.toISOString() ?? null;
-          token.idExpiryDate = user.idExpiryDate?.toISOString() ?? null;
-          token.idIssuer = user.idIssuer ?? null;
-          token.personalIdNumber = user.personalIdNumber ?? null;
-          token.idIssueDate = user.idIssueDate?.toISOString() ?? null;
-        }
+        token = {
+          ...token,
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          role: user.role,
+          isOtpVerified: user.isOtpVerified ?? true,
+          otpCode: user.otpCode ?? null,
+          otpExpiresAt: user.otpExpiresAt?.toISOString() ?? null,
+          isFaceVerified: user.isFaceVerified ?? false,
+          ...(user.role === UserRole.PROVIDER && {
+            selfieImage: user.selfieImage ?? null,
+            idImage: user.idImage ?? null,
+            faceConfidence: user.faceConfidence ?? null,
+            idName: user.idName ?? null,
+            idNumber: user.idNumber ?? null,
+            idDOB: user.idDOB?.toISOString() ?? null,
+            idExpiryDate: user.idExpiryDate?.toISOString() ?? null,
+            idIssuer: user.idIssuer ?? null,
+            personalIdNumber: user.personalIdNumber ?? null,
+            idIssueDate: user.idIssueDate?.toISOString() ?? null,
+          }),
+        };
       }
 
       return token;
@@ -203,6 +181,7 @@ export const authOptions: AuthOptions = {
           }),
         };
       }
+
       return session;
     },
   },
