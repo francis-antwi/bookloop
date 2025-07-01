@@ -97,9 +97,6 @@ export const authOptions: AuthOptions = {
         }
 
         // ✅ User exists, now check OTP and face verification
-        if (!existingUser.isOtpVerified) {
-          throw new Error("Phone verification required.");
-        }
 
         if (
           existingUser.role === UserRole.PROVIDER &&
