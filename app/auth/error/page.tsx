@@ -3,28 +3,29 @@
 import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function ClientErrorHandler() {
+export default function AuthErrorRedirectPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const error = searchParams?.get("error");
+  const params = useSearchParams();
+  const error = params.get("error");
 
   useEffect(() => {
     if (!error) return;
 
-    // Only handle verification errors
-    // Let middleware handle role selection automatically
-    if (error === "PROVIDER_VERIFICATION_REQUIRED" || error === "redirect-verify") {
+    const roleErrors = ["ROLE_SELECTION_REQUIRED", "redirect-role"];
+    const verifyErrors = ["PROVIDER_VERIFICATION_REQUIRED", "redirect-verify"];
+
+    if (roleErrors.includes(error)) {
+      router.replace("/role");
+    } else if (verifyErrors.includes(error)) {
       router.replace("/verify");
     } else {
-      router.replace("/");
+      router.replace("/"); // fallback
     }
-  }, [error, router]);
+  }, [error]); // ✅ only re-run if error changes
 
   return (
-    <div className="flex min-h-screen items-center justify-center text-lg text-gray-700">
-      {error === "PROVIDER_VERIFICATION_REQUIRED" || error === "redirect-verify"
-        ? "Redirecting to verification..."
-        : "Redirecting..."}
+    <div className="flex min-h-screen items-center justify-center text-lg">
+      Redirecting...
     </div>
   );
 }
