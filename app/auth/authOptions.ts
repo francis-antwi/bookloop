@@ -36,10 +36,11 @@ export const authOptions: AuthOptions = {
         );
 
         if (!isCorrectPassword) throw new Error("Invalid credentials");
+        if (!user.role) throw new Error("Missing account role");
+
         if (user.role === UserRole.PROVIDER && !user.isFaceVerified) {
           throw new Error("Face verification required for providers");
         }
-        if (!user.role) throw new Error("Missing account role");
 
         return {
           ...user,
@@ -52,8 +53,8 @@ export const authOptions: AuthOptions = {
 
   pages: {
     signIn: "/",
-    error: "/auth/error", 
-    newUser: "/role",
+    error: "/auth/error",
+    newUser: "/role", // fallback if all else fails
   },
 
   session: {
@@ -78,44 +79,41 @@ export const authOptions: AuthOptions = {
         sameSite: "lax",
         path: "/",
         secure: true,
-        domain: "bookloop-eight.vercel.app", // ✅ Update for prod
+        domain: "bookloop-eight.vercel.app", // ✅ Update as needed
       },
     },
   },
 
   callbacks: {
-    callbacks: {
-  async signIn({ user, account }) {
-    if (account?.provider === "google") {
-      const existingUser = await prisma.user.findUnique({
-        where: { email: user.email ?? "" },
-        select: { role: true, isFaceVerified: true }
-      });
+    async signIn({ user, account }) {
+      if (account?.provider === "google") {
+        const existingUser = await prisma.user.findUnique({
+          where: { email: user.email ?? "" },
+          select: { role: true, isFaceVerified: true },
+        });
 
-  if (!existingUser) {
-  // Let the session be created
-  return true;
-}
+        if (!existingUser) {
+          return "/role"; // ✅ Redirect new users to /role
+        }
 
+        if (
+          existingUser.role === UserRole.PROVIDER &&
+          !existingUser.isFaceVerified
+        ) {
+          throw new Error("Face verification required.");
+        }
 
-      // Existing user checks
-      if (existingUser.role === UserRole.PROVIDER && !existingUser.isFaceVerified) {
-        throw new Error("Face verification required.");
+        return true; // ✅ Allow existing users
       }
 
-      // Existing user with role - continue to callbackUrl (which defaults to home)
       return true;
-    }
-    return true;
-  },
-  
-  async redirect({ url, baseUrl }) {
-    // Handle custom redirects
-    if (url.startsWith("/")) return `${baseUrl}${url}`;
-    else if (new URL(url).origin === baseUrl) return url;
-    return baseUrl;
-  },
-},
+    },
+
+    async redirect({ url, baseUrl }) {
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      else if (new URL(url).origin === baseUrl) return url;
+      return baseUrl;
+    },
 
     async jwt({ token, user, trigger, session }) {
       if (trigger === "update" && session?.role) {

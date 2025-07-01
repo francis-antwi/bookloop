@@ -159,7 +159,7 @@ const LoginModal = () => {
                                         required: 'Password is required',
                                         minLength: {
                                             value: 6,
-                                            message: 'Password must be at least 6 characters'
+                                            message: 'Password must be at least 8 characters'
                                         }
                                     })}
                                     type={showPassword ? "text" : "password"}
@@ -245,7 +245,7 @@ const LoginModal = () => {
                         <button
   onClick={() => {
     setIsLoading(true);
-    signIn("google", { callbackUrl: "/auth/error" })
+    signIn("google")
       .catch(() => {
         setIsLoading(false);
         toast.error("Google sign-in failed. Please try again.");

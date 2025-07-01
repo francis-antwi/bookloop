@@ -9,10 +9,10 @@ export default function AuthErrorRedirectPage() {
   const error = params.get("error");
 
   useEffect(() => {
-    // If there's no error parameter, or if this page is reached without a specific error,
-    // redirect to a default safe page, like home, to prevent users from just sitting
-    // on a "Redirecting..." page indefinitely.
     if (!error) {
+      // If there's no error parameter, or if this page is reached without a specific error,
+      // you might want to redirect to a default safe page, like home,
+      // to prevent users from just sitting on a "Redirecting..." page.
       router.replace("/");
       return;
     }
@@ -21,14 +21,13 @@ export default function AuthErrorRedirectPage() {
     const verifyErrors = ["PROVIDER_VERIFICATION_REQUIRED", "redirect-verify"];
 
     if (roleErrors.includes(error)) {
-      // *** THIS IS THE CRITICAL CORRECTION ***
-      // If a role selection error, redirect to the actual role selection page.
+      // CORRECTED: Redirect to the actual role selection page
       router.replace("/role");
     } else if (verifyErrors.includes(error)) {
-      // If a verification error, redirect to the verification page.
+      // This seems correct: redirect to the verification page
       router.replace("/verify");
     } else {
-      // Fallback for any other unhandled errors (e.g., general auth errors from NextAuth.js).
+      // Fallback for any other unhandled errors (e.g., general auth errors from NextAuth.js)
       // You might also want to display a generic error message here before redirecting.
       router.replace("/");
     }
