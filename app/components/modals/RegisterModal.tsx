@@ -1,6 +1,6 @@
 'use client';
 
-import axios, { AxiosError } from 'axios'; // Import AxiosError
+import axios from 'axios';
 import { IoMdClose } from 'react-icons/io';
 import { useCallback, useState, useEffect } from 'react';
 import { signIn } from "next-auth/react";
@@ -12,13 +12,13 @@ import {
 import useRegisterModal from '@/app/hooks/useRegisterModal';
 import useLoginModal from '@/app/hooks/useLoginModal';
 import toast from 'react-hot-toast';
-import {
-  FiUser,
-  FiMail,
-  FiPhone,
-  FiLock,
-  FiEye,
-  FiEyeOff,
+import { 
+  FiUser, 
+  FiMail, 
+  FiPhone, 
+  FiLock, 
+  FiEye, 
+  FiEyeOff, 
   FiCheck,
   FiArrowRight,
   FiArrowLeft,
@@ -90,55 +90,55 @@ const RegisterModal = () => {
   };
 
   const steps = [
-    {
-      field: 'name',
-      label: 'Full Name',
-      icon: FiUser,
+    { 
+      field: 'name', 
+      label: 'Full Name', 
+      icon: FiUser, 
       placeholder: 'Enter your full name',
       description: 'Let us know what to call you'
     },
-    {
-      field: 'email',
-      label: 'Email Address',
-      icon: FiMail,
+    { 
+      field: 'email', 
+      label: 'Email Address', 
+      icon: FiMail, 
       placeholder: 'Enter your email address',
       description: 'We\'ll use this to send you updates'
     },
-    {
-      field: 'contactPhone',
-      label: 'Phone Number',
-      icon: FiPhone,
+    { 
+      field: 'contactPhone', 
+      label: 'Phone Number', 
+      icon: FiPhone, 
       placeholder: 'Enter your phone number',
       description: 'For account security and notifications'
     },
-    {
-      field: 'phoneVerification',
+    { 
+      field: 'phoneVerification', 
       label: 'Verify Phone Number',
       icon: FiShield,
       description: 'We\'ll send a verification code to your phone'
     },
-    {
-      field: 'password',
-      label: 'Password',
-      icon: FiLock,
+    { 
+      field: 'password', 
+      label: 'Password', 
+      icon: FiLock, 
       placeholder: 'Create a secure password',
       description: 'Minimum 6 characters recommended'
     },
-    {
-      field: 'role',
+    { 
+      field: 'role', 
       label: 'Account Type',
       icon: FiUserCheck,
       description: 'Choose how you\'ll use our platform'
     },
-    {
-      field: 'selfieImage',
+    { 
+      field: 'selfieImage', 
       label: 'Verify Identity',
       icon: FiCamera,
       description: 'Take a clear photo of yourself',
       providerOnly: true
     },
-    {
-      field: 'idImage',
+    { 
+      field: 'idImage', 
       label: 'Upload ID',
       icon: FiUpload,
       description: 'Upload a photo of your Ghana Card',
@@ -162,7 +162,7 @@ const RegisterModal = () => {
       try {
         await axios.post('/api/register', {
           ...data,
-          otp: data.otp, // Include the verified OTP
+           otp: data.otp, // Include the verified OTP
           isPhoneVerified: true,
           isFaceVerified: false, // Customers don't need face verification
         });
@@ -183,10 +183,10 @@ const RegisterModal = () => {
         }
       } catch (err: any) {
         console.error('Registration error:', err);
-        const errorMessage = err.response?.data?.error ||
-          err.response?.data?.message ||
-          err.message ||
-          "Registration failed. Please try again.";
+        const errorMessage = err.response?.data?.error || 
+                          err.response?.data?.message || 
+                          err.message || 
+                          "Registration failed. Please try again.";
         toast.error(errorMessage);
       } finally {
         setIsLoading(false);
@@ -197,61 +197,41 @@ const RegisterModal = () => {
     // For service providers, proceed with verification
     if (!selfieImageBlob || !idFile) {
       toast.error('Please capture a selfie and upload your Ghana Card.');
-      console.error('❌ [RegisterModal]: Missing selfieImageBlob or idFile before sending to /api/verify.');
       return;
     }
 
     if (idFile.size > 2 * 1024 * 1024) {
       toast.error("ID image is too large. Please upload one smaller than 2MB.");
-      console.error('❌ [RegisterModal]: ID file size exceeds 2MB limit.');
       return;
     }
 
     setIsLoading(true);
     const formData = new FormData();
-    // Ensure the names match what the backend expects ("selfie" and "idImage")
-    formData.append("selfie", new File([selfieImageBlob], "selfie.jpg", { type: "image/jpeg" }));
+    formData.append("selfieImage", new File([selfieImageBlob], "selfie.jpg", { type: "image/jpeg" }));
     formData.append("idImage", idFile);
-    formData.append("role", data.role); // Ensure role is sent
-    formData.append("shouldRegister", "true"); // Indicate this is a registration flow
-    formData.append("email", data.email); // Pass email from form data
-    formData.append("name", data.name); // Pass name from form data
-    formData.append("contactPhone", data.contactPhone); // Pass contactPhone from form data
-
 
     try {
       // Verify identity first
-      console.log('⚙️ [RegisterModal]: Sending verification request to /api/verify...');
-      const verifyRes = await axios.post<VerificationResponse>('/api/verify', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data', // Explicitly set content-type for FormData
-        },
-      });
-      console.log('✅ [RegisterModal]: /api/verify response received:', verifyRes.data);
-
+      const verifyRes = await axios.post<VerificationResponse>('/api/verify', formData);
       const { verification, document, selfie } = verifyRes.data;
       const confidence = verification.confidence || 0;
       const verified = verification.faceMatch && confidence >= verification.threshold;
 
       if (verified) {
         // Register user if verification succeeds
-        console.log('⚙️ [RegisterModal]: Face verification successful. Proceeding to /api/register...');
         await axios.post('/api/register', {
           ...data,
           selfieImage: selfie.imageUrl,
           idImage: document.imageUrl,
           faceConfidence: confidence,
           isFaceVerified: true,
-          isPhoneVerified: true, // Assuming phone is verified by this point
+          isPhoneVerified: true,
           idName: document.idName,
           idNumber: document.idNumber,
           idDOB: document.idDOB,
           idExpiryDate: document.idExpiryDate,
           idIssuer: document.idIssuer,
-          // Add other extracted fields as needed by /api/register
-          // personalIdNumber: document.personalIdNumber, // If your VerificationResponse includes it
-          // idType: document.idType,
-          // rawText: document.rawText,
+          
         });
 
         toast.success('Account created successfully!');
@@ -260,43 +240,18 @@ const RegisterModal = () => {
       } else {
         const score = confidence.toFixed(1);
         toast.error(`Face match failed (${score}%). Please try again.`);
-        setMatchStatus({
-          success: false,
-          faceConfidence: confidence
+        setMatchStatus({ 
+          success: false, 
+          faceConfidence: confidence 
         });
-        console.warn(`⚠️ [RegisterModal]: Face match failed with confidence: ${confidence}`);
       }
-    } catch (err) { // Catch block for axios.post('/api/verify')
-      console.error('❌ [RegisterModal]: Error during verification or registration process.');
-      const axiosError = err as AxiosError; // Cast to AxiosError for type safety
-
-      if (axiosError.response) {
-        // The request was made and the server responded with a status code
-        // that falls out of the range of 2xx
-        console.error("  Axios Response Error:", {
-          status: axiosError.response.status,
-          data: axiosError.response.data,
-          headers: axiosError.response.headers,
-        });
-        const errorMessage = (axiosError.response.data as { error?: string, message?: string })?.message ||
-                           (axiosError.response.data as { error?: string, message?: string })?.error ||
-                           axiosError.message ||
-                           "Verification failed. Please try again.";
-        toast.error(errorMessage);
-        // If it's a 400 for missing files, specifically log it
-        if (axiosError.response.status === 400 && errorMessage.includes("Missing files")) {
-            console.error("  Specific Error: Backend reported missing files. Check FormData construction.");
-        }
-      } else if (axiosError.request) {
-        // The request was made but no response was received
-        console.error("  Axios Request Error: No response received.", axiosError.request);
-        toast.error("Network error. Please check your internet connection.");
-      } else {
-        // Something happened in setting up the request that triggered an Error
-        console.error("  Axios Setup Error:", axiosError.message);
-        toast.error("An unexpected error occurred. Please try again.");
-      }
-      setMatchStatus({ success: false, faceConfidence: null }); // Reset match status on error
+    } catch (err: any) {
+      console.error('Registration error:', err);
+      const errorMessage = err.response?.data?.error || 
+                        err.response?.data?.message || 
+                        err.message || 
+                        "Registration failed. Please try again.";
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -309,7 +264,7 @@ const RegisterModal = () => {
 
   const handleNext = async () => {
     const current = filteredSteps[currentStep];
-
+    
     // Handle phone verification step
     if (current.field === 'phoneVerification') {
       if (!isPhoneVerified) {
@@ -340,15 +295,6 @@ const RegisterModal = () => {
     }
 
     if (['selfieImage', 'idImage'].includes(current.field)) {
-      // For file steps, just move to the next step if a file/blob exists
-      if (current.field === 'selfieImage' && !selfieImageBlob) {
-        toast.error('Please capture your selfie.');
-        return;
-      }
-      if (current.field === 'idImage' && !idFile) {
-        toast.error('Please upload your ID image.');
-        return;
-      }
       setCurrentStep((prev) => prev + 1);
       return;
     }
@@ -377,14 +323,10 @@ const RegisterModal = () => {
     if (field === 'selfieImage') return !!selfieImageBlob;
     if (field === 'idImage') return !!idFile;
     if (field === 'role') return !!watchedValues.role && !errors.role;
-    // For text inputs, check if value is not empty and no error
-    if (['name', 'email', 'contactPhone', 'password'].includes(field)) {
-      return watchedValues[field]?.trim().length > 0 && !errors[field];
-    }
-    return true; // Default to true for other fields if no specific validation
+    return watchedValues[field]?.trim().length > 0 && !errors[field];
   };
 
-  // Ensure all steps are valid before enabling the final submit button
+  const canProceed = isStepValid(currentStep);
   const allFieldsComplete = filteredSteps.every((_, i) => isStepValid(i));
 
   if (!registerModal.isOpen) return null;
@@ -396,17 +338,17 @@ const RegisterModal = () => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 overflow-y-auto">
       <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden transform transition-all duration-300 my-8">
-
+        
         {/* Header */}
         <div className="relative bg-gradient-to-r from-blue-600 to-purple-600 px-6 py-5 sm:px-8 sm:py-6 text-white">
-          <button
-            onClick={registerModal.onClose}
+          <button 
+            onClick={registerModal.onClose} 
             disabled={isLoading}
             className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/20 transition-colors duration-200"
           >
             <IoMdClose size={20} />
           </button>
-
+          
           <div className="mb-4">
             <h2 className="text-xl sm:text-2xl font-bold">Join Us</h2>
             <p className="text-blue-100 text-xs sm:text-sm">Create your account in a few simple steps</p>
@@ -419,7 +361,7 @@ const RegisterModal = () => {
               <span>{Math.round(progress)}% Complete</span>
             </div>
             <div className="w-full bg-white/20 rounded-full h-2 mb-1">
-              <div
+              <div 
                 className="bg-white h-2 rounded-full transition-all duration-500 ease-out"
                 style={{ width: `${progress}%` }}
               />
@@ -468,14 +410,14 @@ const RegisterModal = () => {
                   <p className="font-medium text-blue-800">{watchedValues.contactPhone}</p>
                 </div>
 
-               <PhoneAuth
-                  phoneNumber={watchedValues.contactPhone}
-                  onVerified={(phoneNumber, otp) => {
-                    setIsPhoneVerified(true);
-                    setValue('otp', otp); // Store OTP in form state
-                    toast.success('Phone verified!');
-                  }}
-                />
+               <PhoneAuth 
+  phoneNumber={watchedValues.contactPhone}
+  onVerified={(phoneNumber, otp) => {
+    setIsPhoneVerified(true);
+    setValue('otp', otp); // Store OTP in form state
+    toast.success('Phone verified!');
+  }}
+/>
 
                 {isPhoneVerified && (
                   <div className="flex items-center gap-2 text-green-600 bg-green-50 p-2 sm:p-3 rounded-xl text-sm">
@@ -489,7 +431,7 @@ const RegisterModal = () => {
                 <div className="grid grid-cols-1 gap-2 sm:gap-3">
                   {[
                     { value: 'CUSTOMER', label: 'Customer', desc: 'Looking for services' },
-                    { value: 'PROVIDER', label: 'Service Provider', desc: 'Offering services' }
+                    { value: 'PROVIDER', label: 'Provider', desc: 'Offering services' }
                   ].map((option) => (
                     <label
                       key={option.value}
@@ -568,16 +510,16 @@ const RegisterModal = () => {
               <div className="space-y-1 sm:space-y-2">
                 <div className="relative">
                   <div className={`flex items-center border-2 rounded-xl px-3 py-2 sm:px-4 sm:py-3 transition-all duration-200 ${
-                    errors[currentField.field]
-                      ? 'border-red-300 bg-red-50'
-                      : watchedValues[currentField.field]?.trim().length > 0
+                    errors[currentField.field] 
+                      ? 'border-red-300 bg-red-50' 
+                      : watchedValues[currentField.field]?.trim().length > 0 
                         ? 'border-green-300 bg-green-50'
                         : 'border-gray-200 hover:border-gray-300 focus-within:border-blue-500'
                   }`}>
                     <IconComponent className={`w-4 h-4 sm:w-5 sm:h-5 mr-2 sm:mr-3 ${
-                      errors[currentField.field]
-                        ? 'text-red-400'
-                        : watchedValues[currentField.field]?.trim().length > 0
+                      errors[currentField.field] 
+                        ? 'text-red-400' 
+                        : watchedValues[currentField.field]?.trim().length > 0 
                           ? 'text-green-500'
                           : 'text-gray-400'
                     }`} />
@@ -606,10 +548,10 @@ const RegisterModal = () => {
                         currentField.field === 'password' && !showPassword
                           ? 'password'
                           : currentField.field === 'email'
-                            ? 'email'
-                            : currentField.field === 'contactPhone'
-                              ? 'tel'
-                              : 'text'
+                          ? 'email'
+                          : currentField.field === 'contactPhone'
+                          ? 'tel'
+                          : 'text'
                       }
                       className="flex-1 bg-transparent outline-none text-gray-800 placeholder-gray-400 text-sm sm:text-base"
                       disabled={isLoading}
@@ -650,8 +592,8 @@ const RegisterModal = () => {
                 <div>
                   <p className="font-medium text-red-800 text-sm sm:text-base">Verification Failed</p>
                   <p className="text-xs sm:text-sm text-red-600 mt-1">
-                    Face match score: {typeof matchStatus?.faceConfidence === 'number'
-                      ? matchStatus.faceConfidence.toFixed(1)
+                    Face match score: {typeof matchStatus?.faceConfidence === 'number' 
+                      ? matchStatus.faceConfidence.toFixed(1) 
                       : '0.0'}%
                     <br />
                     Minimum required score is 80%. Please try again with clearer photos.
