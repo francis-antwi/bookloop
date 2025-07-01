@@ -32,15 +32,6 @@ export default withAuth(
     const { pathname } = req.nextUrl;
     const token = req.auth?.token;
 
-    // --- DEBUGGING LOGS START ---
-    console.log(`[Middleware] Pathname: ${pathname}`);
-    console.log(`[Middleware] Token exists: ${!!token}`);
-    if (token) {
-      console.log(`[Middleware] Token ID: ${token.id}`);
-      console.log(`[Middleware] Token Role (initial): ${token.role}`);
-    }
-    // --- DEBUGGING LOGS END ---
-
     // Path configuration
     const publicPaths = ["/", "/auth", "/auth/error", "/api/auth", "/_next", "/403"];
     const providerPaths = ["/my-listings", "/approvals", "/bookings", "/favourites", "/notifications"];
@@ -84,10 +75,6 @@ export default withAuth(
           select: { role: true }
         });
         currentEffectiveRole = user?.role || token.role; // Prioritize DB role, fallback to token
-        // --- DEBUGGING LOGS START ---
-        console.log(`[Middleware] DB Query for /role: User role from DB: ${user?.role}`);
-        console.log(`[Middleware] currentEffectiveRole after DB check: ${currentEffectiveRole}`);
-        // --- DEBUGGING LOGS END ---
       } catch (error) {
         console.error("Database query error for /role path, falling back to token role:", error);
         // Decide how to handle this error: redirect to an error page or proceed with token role.
@@ -96,16 +83,10 @@ export default withAuth(
       }
     }
 
-    // --- DEBUGGING LOGS START ---
-    console.log(`[Middleware] Final currentEffectiveRole: ${currentEffectiveRole}`);
-    console.log(`[Middleware] Condition for /role redirect: token=${!!token}, !currentEffectiveRole=${!currentEffectiveRole}, pathname !== roleSelectionPath=${pathname !== roleSelectionPath}, pathname !== verificationPath=${pathname !== verificationPath}`);
-    // --- DEBUGGING LOGS END ---
-
     // *** CRITICAL ADDITION: Redirect authenticated users without a role to the role selection page ***
     // This rule applies if they are logged in, have no role, AND are not already on the role selection
     // or verification page. It should allow redirection from public paths like '/'
     if (token && !currentEffectiveRole && pathname !== roleSelectionPath && pathname !== verificationPath) {
-      console.log("[Middleware] Redirecting to role selection page!"); // Debug log
       return NextResponse.redirect(new URL(roleSelectionPath, req.url));
     }
 
@@ -113,11 +94,9 @@ export default withAuth(
     // Role selection rules: Prevent users WITH a role from accessing the /role page
     if (isRoleSelection) {
       if (currentEffectiveRole) { // If a role is set (from DB or token)
-        console.log("[Middleware] User has role, redirecting away from /role."); // Debug log
         return NextResponse.redirect(new URL("/", req.url)); // Redirect to home or dashboard
       }
       // If no role, allow to proceed to /role
-      console.log("[Middleware] User has no role, allowing access to /role."); // Debug log
       return NextResponse.next();
     }
 
@@ -156,7 +135,6 @@ export default withAuth(
     }
 
     // Default: Allow request to proceed if no specific redirect rule applied
-    console.log("[Middleware] No specific redirect rule applied, proceeding."); // Debug log
     return NextResponse.next();
   },
   {

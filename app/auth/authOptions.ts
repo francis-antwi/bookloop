@@ -92,10 +92,11 @@ export const authOptions: AuthOptions = {
         select: { role: true, isFaceVerified: true }
       });
 
-      if (!existingUser) {
-        // New user - redirect to role selection
-        return '/role';
-      }
+  if (!existingUser) {
+  // Let the session be created
+  return true;
+}
+
 
       // Existing user checks
       if (existingUser.role === UserRole.PROVIDER && !existingUser.isFaceVerified) {
