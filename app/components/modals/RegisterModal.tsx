@@ -72,7 +72,6 @@ const RegisterModal = () => {
       contactPhone: '',
       password: '',
       role: '',
-      otp: '',
     },
   });
 
@@ -80,7 +79,6 @@ const RegisterModal = () => {
 
   const handlePhoneVerified = (phoneNumber: string, otp: string) => {
     setIsPhoneVerified(true);
-    setValue('otp', otp);
     toast.success('Phone number verified successfully!');
   };
 
@@ -231,7 +229,6 @@ const RegisterModal = () => {
         contactPhone: data.contactPhone,
         password: data.password,
         role: data.role,
-        otpCode: data.otp,
         isPhoneVerified: true,
         isFaceVerified: data.role === 'PROVIDER',
         verified: data.role === 'PROVIDER',
@@ -348,7 +345,7 @@ const RegisterModal = () => {
 
   const isStepValid = (stepIndex: number) => {
     const field = filteredSteps[stepIndex].field;
-    if (field === 'phoneVerification') return isPhoneVerified;
+    if (field === 'phoneVerification') return true
     if (field === 'selfieImage') return !!selfieImageBlob;
     if (field === 'idImage') return !!idFile;
     if (field === 'role') return !!watchedValues.role && !errors.role;

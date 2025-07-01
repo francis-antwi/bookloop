@@ -25,7 +25,7 @@ export async function POST(request: Request) {
 
   try {
     const session = await getServerSession(authOptions);
-    const isGoogleAuth = !!(session?.user && !session.user.password && !session.user.otpCode);
+    const isGoogleAuth = !!(session?.user && !session.user.password);
     const googleUserEmail = session?.user?.email || null;
 
     const body = await request.json();
@@ -38,7 +38,6 @@ export async function POST(request: Request) {
       contactPhone,
       password,
       role = "CUSTOMER",
-      otpCode,
       selfieImage,
       idImage,
       faceConfidence,
@@ -85,24 +84,6 @@ export async function POST(request: Request) {
     }
     if (existingPhone) {
       return NextResponse.json({ error: "Phone already registered" }, { status: 409 });
-    }
-
-    // OTP Verification for standard registrations
-    if (!isGoogleAuth && otpCode && contactPhone) {
-      const otpVerification = await prisma.oTPVerification.findFirst({
-        where: {
-          phoneNumber: contactPhone,
-          code: otpCode,
-          verified: true,
-          expiresAt: { gt: new Date() }
-        }
-      });
-
-      if (!otpVerification) {
-        return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 403 });
-      }
-
-      await prisma.oTPVerification.delete({ where: { id: otpVerification.id } });
     }
 
     // Parse dates
@@ -162,7 +143,6 @@ export async function POST(request: Request) {
         contactPhone: contactPhone || null,
         hashedPassword,
         role,
-        isOtpVerified: !isGoogleAuth,
         isFaceVerified: role === "PROVIDER",
         verified: role === "PROVIDER" ? true : !!verified,
         selfieImage: selfieImage || selfieUrl || null,
