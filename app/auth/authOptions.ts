@@ -188,6 +188,6 @@ export const authOptions: AuthOptions = {
 
       return session;
     },
-  },
+  }
 
 export default NextAuth(authOptions);
