@@ -43,7 +43,6 @@ export const authOptions: AuthOptions = {
           throw new Error("Invalid credentials");
         }
 
-        // Providers must be verified before login
         if (user.role === UserRole.PROVIDER && !user.isFaceVerified) {
           throw new Error("Face verification required for providers");
         }
@@ -55,7 +54,7 @@ export const authOptions: AuthOptions = {
 
   pages: {
     signIn: "/",         // Login page
-    newUser: "/role",    // New users go here to select role
+    newUser: "/role",    // Redirect new users to role selection
   },
 
   session: {
@@ -78,7 +77,7 @@ export const authOptions: AuthOptions = {
         });
 
         if (!existingUser) {
-          // Create but defer login until role is selected
+          // Create user with placeholder role (required for DB schema)
           await prisma.user.create({
             data: {
               email: user.email!,
@@ -86,18 +85,18 @@ export const authOptions: AuthOptions = {
               image: user.image ?? "",
               isOtpVerified: false,
               isFaceVerified: false,
-              role: UserRole.CUSTOMER,}
+              role: UserRole.CUSTOMER, // Temp default
+            },
           });
 
-          return "/role"; // Must select role before login
+          return "/role"; // Redirect to role selector
         }
 
-        // PROVIDER must complete face verification before login
         if (
           existingUser.role === UserRole.PROVIDER &&
           !existingUser.isFaceVerified
         ) {
-          throw new Error("Face verification required.");
+          return "/verify"; // Force verification for unverified providers
         }
 
         return true;
@@ -107,6 +106,7 @@ export const authOptions: AuthOptions = {
     },
 
     async jwt({ token, user, trigger, session }) {
+      // Populate token on first sign-in
       if (user) {
         token.id = user.id;
         token.name = user.name;
@@ -117,17 +117,15 @@ export const authOptions: AuthOptions = {
         token.isFaceVerified = user.isFaceVerified ?? false;
       }
 
-      // Allow role update during session update
+      // Allow dynamic role updates via session.update()
       if (trigger === "update" && session?.role) {
-        await prisma.user.update({
+        const updatedUser = await prisma.user.update({
           where: { email: token.email ?? "" },
           data: { role: session.role },
         });
 
-        token.role = session.role;
-        if (session.role === UserRole.PROVIDER) {
-          token.isFaceVerified = false;
-        }
+        token.role = updatedUser.role;
+        token.isFaceVerified = updatedUser.isFaceVerified;
       }
 
       return token;
