@@ -145,47 +145,49 @@ export const authOptions: AuthOptions = {
   secret: process.env.NEXTAUTH_SECRET, // Secret for signing/encrypting JWTs
   debug: process.env.NODE_ENV === "development", // Enable debug logs in development
 
-cookies: {
-  sessionToken: {
-    name: `__Secure-next-auth.session-token`,
-    options: {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      secure: process.env.NODE_ENV === "production", // ❗ secure only in prod
-      domain:
-        process.env.NODE_ENV === "production"
-          ? "bookloop-eight.vercel.app"
-          : undefined, // ❗ allow local dev
-    },
-  },
-},
-
   callbacks: {
     async signIn({ user, account }) {
-      // Logic specific to Google sign-in
-      if (account?.provider === "google") {
-        const existingUser = await prisma.user.findUnique({
-          where: { email: user.email ?? "" },
-          select: { role: true, isFaceVerified: true } // Select only necessary fields
-        });
+  if (account?.provider === "google") {
+    const email = user.email ?? "";
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+    });
 
-        if (!existingUser) {
-          // If it's a new Google user, redirect them to the role selection page
-          return '/role';
-        }
+    if (!existingUser) {
+      // Save user immediately with no role yet
+      await prisma.user.create({
+        data: {
+          email,
+          name: user.name ?? "",
+          image: user.image ?? "",
+          isOtpVerified: false,
+          isFaceVerified: false,
+          role: null, // No role yet
+        },
+      });
 
-        // If existing user is a PROVIDER and not face verified, prevent sign-in
-        if (existingUser.role === UserRole.PROVIDER && !existingUser.isFaceVerified) {
-          throw new Error("Face verification required."); // This error will be displayed
-        }
+      return "/role"; // Redirect to role selection
+    }
 
-        // Allow sign-in for existing users
-        return true;
-      }
-      // For other providers (e.g., Credentials), always allow sign-in if authorize succeeded
-      return true;
-    },
+    // If user exists but role is missing, force them to choose
+    if (!existingUser.role) {
+      return "/role";
+    }
+
+    // Block PROVIDERs who are not verified
+    if (
+      existingUser.role === UserRole.PROVIDER &&
+      !existingUser.isFaceVerified
+    ) {
+      throw new Error("Face verification required.");
+    }
+
+    return true; // Allow login
+  }
+
+  return true; // Credentials provider fallback
+},
+
 
     async redirect({ url, baseUrl }) {
       // Allow redirects to relative paths or same-origin URLs

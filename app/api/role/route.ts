@@ -1,126 +1,64 @@
-import { NextResponse, NextRequest } from "next/server";
-import { getServerSession } from "next-auth/next"; // 👈 Correct import for App Router
-import { authOptions } from "@/app/auth/authOptions";
+import { NextRequest, NextResponse } from "next/server";
+import { getToken } from "next-auth/jwt";
 import prisma from "@/app/libs/prismadb";
 import { UserRole } from "@prisma/client";
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession({ req, ...authOptions }); // ✅
-console.log("SESSION CHECK (/api/role):", session); // ✅ Add this
+  const token = await getToken({ req });
 
-
-  if (!session?.user?.email) {
+  if (!token?.email) {
     return NextResponse.json(
-      { error: "Unauthorized", message: "No session or email found" },
+      { error: "Unauthorized", message: "No token or email" },
       { status: 401 }
     );
   }
 
-  const email = session.user.email;
-
-  let body: { role?: string } = {};
-
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json(
-      { error: "Bad Request", message: "Invalid JSON body" },
-      { status: 400 }
-    );
-  }
-
-  const normalizedRole = body.role?.toUpperCase();
-
-  if (!normalizedRole) {
-    return NextResponse.json(
-      { error: "Bad Request", message: "Role is required" },
-      { status: 400 }
-    );
-  }
+  const { role } = await req.json();
+  const normalizedRole = role?.toUpperCase();
 
   if (!["CUSTOMER", "PROVIDER"].includes(normalizedRole)) {
     return NextResponse.json(
-      { error: "Bad Request", message: "Invalid role provided" },
+      { error: "Invalid role" },
       { status: 400 }
     );
   }
 
-  try {
-    const user = await prisma.user.findUnique({ where: { email } });
+  const user = await prisma.user.findUnique({
+    where: { email: token.email },
+  });
 
-    if (!user) {
-      // New Google user
-      if (normalizedRole === "CUSTOMER") {
-        const newUser = await prisma.user.create({
-          data: {
-            email,
-            name: session.user.name ?? "",
-            image: session.user.image ?? "",
-            isOtpVerified: true,
-            isFaceVerified: false,
-            role: "CUSTOMER",
-          },
-        });
-
-        return NextResponse.json(
-          { success: true, message: "Customer account created", user: newUser },
-          { status: 201 }
-        );
-      }
-
-      // PROVIDER — do not create yet
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Provider role selected. User will be saved after verification.",
-          skipCreate: true,
-        },
-        { status: 200 }
-      );
-    }
-
-    // User already exists
-    if (user.role === normalizedRole) {
-      return NextResponse.json(
-        { success: true, message: "Role already set", user },
-        { status: 200 }
-      );
-    }
-
-    // Trying to change to PROVIDER
-    if (
-      normalizedRole === "PROVIDER" &&
-      (!user.isFaceVerified || !user.selfieImage || !user.idImage)
-    ) {
-      return NextResponse.json(
-        {
-          error: "Verification required",
-          message:
-            "You must complete ID and face verification before becoming a provider.",
-        },
-        { status: 403 }
-      );
-    }
-
-    // Update role
-    await prisma.user.update({
-      where: { email },
-      data: { role: normalizedRole as UserRole },
-    });
-
+  if (!user) {
     return NextResponse.json(
-      { success: true, message: "Role updated successfully" },
-      { status: 200 }
-    );
-  } catch (error: any) {
-    console.error("[ROLE_API_ERROR]", error);
-    return NextResponse.json(
-      {
-        error: "Internal server error",
-        message: error?.message || "Something went wrong",
-      },
-      { status: 500 }
+      { error: "User not found" },
+      { status: 404 }
     );
   }
+
+  if (user.role === normalizedRole) {
+    return NextResponse.json(
+      { success: true, message: "Role already set", user },
+      { status: 200 }
+    );
+  }
+
+  // Prevent unverified PROVIDERs
+  if (
+    normalizedRole === "PROVIDER" &&
+    (!user.isFaceVerified || !user.selfieImage || !user.idImage)
+  ) {
+    return NextResponse.json(
+      { error: "Face/ID verification required" },
+      { status: 403 }
+    );
+  }
+
+  const updatedUser = await prisma.user.update({
+    where: { email: token.email },
+    data: { role: normalizedRole as UserRole },
+  });
+
+  return NextResponse.json(
+    { success: true, message: "Role updated", user: updatedUser },
+    { status: 200 }
+  );
 }
