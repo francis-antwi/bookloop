@@ -1,11 +1,11 @@
 import NextAuth, { AuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
-import prisma from "@/app/libs/prismadb";
 import bcrypt from "bcrypt";
+import prisma from "@/app/libs/prismadb";
 import { UserRole } from "@prisma/client";
 
-// Extend types
+// Extend NextAuth types
 declare module "next-auth" {
   interface Session {
     user: {
@@ -54,7 +54,7 @@ declare module "next-auth" {
   }
 }
 
-// Provider config
+// Auth options
 export const authOptions: AuthOptions = {
   providers: [
     GoogleProvider({
@@ -140,10 +140,11 @@ export const authOptions: AuthOptions = {
               image: user.image ?? "",
               isOtpVerified: false,
               isFaceVerified: false,
-              // DO NOT include 'role' field if undefined
+              role: UserRole.CUSTOMER, // TEMP default to pass Prisma non-null constraint
             },
           });
-          return "/role";
+
+          return "/role"; // Force role selection
         }
 
         if (!existingUser.role) {
@@ -172,10 +173,12 @@ export const authOptions: AuthOptions = {
     async jwt({ token, user, trigger, session }) {
       if (trigger === "update" && session?.role) {
         token.role = session.role;
+
         await prisma.user.update({
           where: { email: token.email ?? "" },
           data: { role: session.role },
         });
+
         if (session.role === UserRole.PROVIDER) {
           token.isFaceVerified = false;
         }

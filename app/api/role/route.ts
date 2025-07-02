@@ -16,9 +16,9 @@ export async function POST(req: NextRequest) {
   const { role } = await req.json();
   const normalizedRole = role?.toUpperCase();
 
-  if (!["CUSTOMER", "PROVIDER"].includes(normalizedRole)) {
+  if (!normalizedRole || !["CUSTOMER", "PROVIDER"].includes(normalizedRole)) {
     return NextResponse.json(
-      { error: "Invalid role" },
+      { error: "Invalid role", message: "Role must be CUSTOMER or PROVIDER" },
       { status: 400 }
     );
   }
@@ -34,6 +34,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Block PROVIDER upgrade if not verified
+  if (
+    normalizedRole === "PROVIDER" &&
+    (!user.isFaceVerified || !user.selfieImage || !user.idImage)
+  ) {
+    return NextResponse.json(
+      {
+        error: "Verification required",
+        message: "Face and ID verification must be completed before becoming a PROVIDER",
+      },
+      { status: 403 }
+    );
+  }
+
+  // If already set to same role, skip update
   if (user.role === normalizedRole) {
     return NextResponse.json(
       { success: true, message: "Role already set", user },
@@ -41,24 +56,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Prevent unverified PROVIDERs
-  if (
-    normalizedRole === "PROVIDER" &&
-    (!user.isFaceVerified || !user.selfieImage || !user.idImage)
-  ) {
-    return NextResponse.json(
-      { error: "Face/ID verification required" },
-      { status: 403 }
-    );
-  }
-
+  // Update role
   const updatedUser = await prisma.user.update({
     where: { email: token.email },
     data: { role: normalizedRole as UserRole },
   });
 
   return NextResponse.json(
-    { success: true, message: "Role updated", user: updatedUser },
+    { success: true, message: "Role updated successfully", user: updatedUser },
     { status: 200 }
   );
 }
