@@ -5,7 +5,7 @@ import bcrypt from "bcrypt";
 import prisma from "@/app/libs/prismadb";
 import { UserRole } from "@prisma/client";
 
-// Extend types
+// --- Extend NextAuth Types ---
 declare module "next-auth" {
   interface Session {
     user: {
@@ -18,7 +18,7 @@ declare module "next-auth" {
       otpCode: string | null;
       otpExpiresAt: string | null;
       isFaceVerified: boolean;
-      hasSelectedRole?: boolean;
+      hasSelectedRole?: boolean; // Indicates if the user has explicitly selected a role
       selfieImage?: string | null;
       idImage?: string | null;
       faceConfidence?: number | null;
@@ -56,7 +56,7 @@ declare module "next-auth" {
   }
 }
 
-// Auth options
+// --- Authentication Options ---
 export const authOptions: AuthOptions = {
   providers: [
     GoogleProvider({
@@ -71,7 +71,7 @@ export const authOptions: AuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error("Missing credentials");
+          throw new Error("Missing credentials. Please provide both email and password.");
         }
 
         const user = await prisma.user.findUnique({
@@ -79,7 +79,7 @@ export const authOptions: AuthOptions = {
         });
 
         if (!user || !user.hashedPassword) {
-          throw new Error("Invalid credentials");
+          throw new Error("Invalid credentials. User not found or password not set.");
         }
 
         const isCorrectPassword = await bcrypt.compare(
@@ -88,11 +88,12 @@ export const authOptions: AuthOptions = {
         );
 
         if (!isCorrectPassword) {
-          throw new Error("Invalid credentials");
+          throw new Error("Invalid credentials. Incorrect password.");
         }
 
+        // Enforce face verification for PROVIDER role
         if (user.role === UserRole.PROVIDER && !user.isFaceVerified) {
-          throw new Error("Face verification required for providers");
+          throw new Error("Face verification is required for Provider accounts. Please complete your verification.");
         }
 
         return user;
@@ -101,32 +102,36 @@ export const authOptions: AuthOptions = {
   ],
 
   pages: {
-    signIn: "/",
-    newUser: "/role",
+    signIn: "/", // Custom sign-in page
+    newUser: "/role", // Page for genuinely new users on their first sign-in
   },
 
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60,
-    updateAge: 24 * 60 * 60,
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+    updateAge: 24 * 60 * 60, // Refresh session every 24 hours
   },
 
   jwt: {
-    maxAge: 30 * 24 * 60 * 60,
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   },
 
   secret: process.env.NEXTAUTH_SECRET,
-  debug: process.env.NODE_ENV === "development",
+  debug: process.env.NODE_ENV === "development", // Enable debug mode in development
 
   callbacks: {
+    // --- Sign In Callback ---
     async signIn({ user, account }) {
       if (account?.provider === "google") {
         const email = user.email!;
-        const existingUser = await prisma.user.findUnique({
+        let existingUser = await prisma.user.findUnique({
           where: { email },
         });
 
         if (!existingUser) {
+          // Create new user if they don't exist
+          // Assign a default role (e.g., CUSTOMER) and mark hasSelectedRole as false.
+          // The user is now saved in the database.
           await prisma.user.create({
             data: {
               email,
@@ -134,62 +139,76 @@ export const authOptions: AuthOptions = {
               image: user.image ?? "",
               isOtpVerified: false,
               isFaceVerified: false,
-              role: UserRole.CUSTOMER, // TEMP to satisfy non-null
+              role: UserRole.CUSTOMER, // Default role for new Google sign-ups
+              hasSelectedRole: false, // User still needs to explicitly select their final role
             },
           });
-
-          return "/role"; // ✅ Prompt for role after sign-in
+          // Crucially, return `true` here to allow the sign-in process to complete
+          // and establish the session. Redirection will be handled by `pages.newUser`
+          // or a custom middleware/client-side check.
+          return true;
         }
 
-        // Force user to pick role if not already chosen
+        // If an existing user has no role set (e.g., from older data or initial Google signup
+        // before role was mandatory), allow them to sign in.
+        // The middleware or client-side logic will then redirect them to select a role.
         if (!existingUser.role) {
-          return "/role";
+          return true;
         }
 
-        // Prevent unverified PROVIDERs from logging in
+        // Prevent unverified PROVIDERs from logging in (this logic remains important for security)
         if (
           existingUser.role === UserRole.PROVIDER &&
           !existingUser.isFaceVerified
         ) {
-          throw new Error("Face verification required.");
+          throw new Error("Face verification is required for Provider accounts. Please complete your verification.");
         }
-
-        return true;
       }
 
+      // Allow all other sign-in attempts (e.g., credentials, or existing Google users who are fine)
+      // Returning `true` here ensures the user is logged in and a session is established.
       return true;
     },
 
+    // --- Redirect Callback ---
     async redirect({ url, baseUrl }) {
+      // Allows relative urls to be redirected to
       if (url.startsWith("/")) return `${baseUrl}${url}`;
+      // Allows callback URLs on the same origin
       if (new URL(url).origin === baseUrl) return url;
-      return baseUrl;
+      return baseUrl; // Fallback to base URL
     },
 
+    // --- JWT Callback ---
     async jwt({ token, user, trigger, session }) {
+      // Update the token if a session update trigger is detected and a role is provided
       if (trigger === "update" && session?.role) {
         token.role = session.role;
+        // Persist the role update to the database
         await prisma.user.update({
-          where: { email: token.email ?? "" },
+          where: { email: token.email as string }, // Ensure email is treated as string
           data: { role: session.role },
         });
+        // If the updated role is PROVIDER, reset face verification status
         if (session.role === UserRole.PROVIDER) {
           token.isFaceVerified = false;
         }
       }
 
+      // On initial sign-in or session fetch, populate the token with user data
       if (user) {
         token.id = user.id;
         token.name = user.name;
         token.email = user.email;
         token.image = user.image;
         token.role = user.role;
-        token.isOtpVerified = user.isOtpVerified ?? true;
+        token.isOtpVerified = user.isOtpVerified ?? false; // Default to false if null/undefined
         token.otpCode = user.otpCode ?? null;
         token.otpExpiresAt = user.otpExpiresAt?.toISOString() ?? null;
-        token.isFaceVerified = user.isFaceVerified ?? false;
-        token.hasSelectedRole = !!user.role;
+        token.isFaceVerified = user.isFaceVerified ?? false; // Default to false if null/undefined
+        token.hasSelectedRole = !!user.role; // Boolean representation of role selection
 
+        // Include PROVIDER-specific fields only if the user is a PROVIDER
         if (user.role === UserRole.PROVIDER) {
           token.selfieImage = user.selfieImage ?? null;
           token.idImage = user.idImage ?? null;
@@ -207,7 +226,9 @@ export const authOptions: AuthOptions = {
       return token;
     },
 
+    // --- Session Callback ---
     async session({ session, token }) {
+      // Populate session.user with data from the JWT token
       if (session.user) {
         session.user = {
           ...session.user,
@@ -221,6 +242,7 @@ export const authOptions: AuthOptions = {
           otpExpiresAt: token.otpExpiresAt,
           isFaceVerified: token.isFaceVerified,
           hasSelectedRole: token.hasSelectedRole,
+          // Conditionally add PROVIDER-specific fields to the session
           ...(token.role === UserRole.PROVIDER && {
             selfieImage: token.selfieImage,
             idImage: token.idImage,
