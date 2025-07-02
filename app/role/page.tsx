@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useSession } from 'next-auth/react';
+import { useState, useEffect } from 'react';
+import { useSession, signIn, update } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import axios, { AxiosError } from 'axios';
 import toast from 'react-hot-toast';
@@ -14,8 +14,15 @@ interface RoleSelectorProps {
 const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
   const { data: session, update: updateSession } = useSession();
   const router = useRouter();
-  const [selectedRole, setSelectedRole] = useState<string | null>(session?.user?.role || null);
+  const [selectedRole, setSelectedRole] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Set selectedRole on load when session is ready
+  useEffect(() => {
+    if (session?.user?.role) {
+      setSelectedRole(session.user.role);
+    }
+  }, [session]);
 
   const handleRoleSelect = async (role: string) => {
     if (!session?.user?.email) {
@@ -25,49 +32,36 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
     }
 
     if (selectedRole === role) {
-      toast('You\'ve already selected this role.', { icon: 'ℹ️' });
+      toast('You already selected this role.', { icon: 'ℹ️' });
       return;
     }
 
     setIsLoading(true);
-    setSelectedRole(role); // Optimistically update UI
 
     try {
-      // Send the selected role to your API endpoint
       const response = await axios.post('/api/role', { role }, { withCredentials: true });
 
       if (response.status >= 200 && response.status < 300) {
         toast.success('Role selected successfully!');
-        onRoleSelected?.(role); // Call optional callback
+        onRoleSelected?.(role);
+
+        // Refresh session from server to get latest user state
+        await updateSession();
 
         const updatedUser = response.data?.user;
 
-        // Manually update the session to reflect the new role and verification status
-        await updateSession({
-          ...session,
-          user: {
-            ...session.user,
-            role: updatedUser.role,
-            isFaceVerified: updatedUser.isFaceVerified,
-            selfieImage: updatedUser.selfieImage,
-            idImage: updatedUser.idImage,
-            hasSelectedRole: true, // Mark role as selected
-          },
-        });
-
-        // --- ⭐ REDIRECTION LOGIC HERE ⭐ ---
+        // Redirect based on role and verification
         if (
           role === 'PROVIDER' &&
           (!updatedUser?.isFaceVerified || !updatedUser?.selfieImage || !updatedUser?.idImage)
         ) {
-          router.replace('/verify'); // Redirect to verification for unverified providers
+          router.replace('/verify');
         } else {
-          router.replace('/'); // Redirect to home for customers or already verified providers
+          router.replace('/');
         }
       } else {
-        // Handle non-2xx responses from the API
-        toast.error(response.data?.message || 'Failed to update role due to an unexpected error.');
-        setSelectedRole(session.user.role || null); // Revert UI if API call failed
+        toast.error(response.data?.message || 'Failed to update role.');
+        setSelectedRole(session.user.role || null);
       }
     } catch (err) {
       const axiosError = err as AxiosError;
@@ -79,27 +73,33 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
 
       toast.error(errorMessage);
 
-      // --- ⭐ REDIRECTION ON API ERROR (e.g., 403 from backend) ⭐ ---
       if (
         axiosError.response?.status === 403 &&
         (axiosError.response?.data as { error?: string })?.error?.includes('verification')
       ) {
-        router.replace('/verify'); // Redirect if the backend explicitly says verification is needed
+        router.replace('/verify');
       }
 
-      setSelectedRole(session.user.role || null); // Revert UI on error
+      setSelectedRole(session.user.role || null);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // ... (rest of the component, including JSX)
+  // Guard if session or user is missing
+  if (!session?.user) {
+    return (
+      <div className="text-center text-sm text-gray-600 p-6">
+        Please sign in to continue.
+      </div>
+    );
+  }
 
-  // Guard to prevent verified providers from seeing role selection options
+  // Guard for already verified providers
   if (session.user.role === 'PROVIDER' && session.user.isFaceVerified) {
     return (
       <div className="text-center text-sm text-gray-600 p-6">
-        You are already **verified** as a Service Provider.
+        You are already <strong>verified</strong> as a Service Provider.
       </div>
     );
   }
@@ -120,8 +120,7 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
               ? 'bg-green-600 text-white border-green-600'
               : 'bg-white text-gray-800 border-gray-300 hover:border-green-500 hover:shadow-lg'
             }
-            ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}
-          `}
+            ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
         >
           {isLoading && selectedRole === 'CUSTOMER' ? (
             <FiLoader className="inline-block mr-3 animate-spin text-xl" />
@@ -141,8 +140,7 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
               ? 'bg-blue-600 text-white border-blue-600'
               : 'bg-white text-gray-800 border-gray-300 hover:border-blue-500 hover:shadow-lg'
             }
-            ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}
-          `}
+            ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
         >
           {isLoading && selectedRole === 'PROVIDER' ? (
             <FiLoader className="inline-block mr-3 animate-spin text-xl" />
