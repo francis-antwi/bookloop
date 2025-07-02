@@ -32,31 +32,9 @@ declare module "next-auth" {
     };
   }
 
-  interface JWT {
-    id: string;
-    name: string | null;
-    email: string | null;
-    image: string | null;
-    role: UserRole;
-    isOtpVerified: boolean;
-    otpCode: string | null;
-    otpExpiresAt: string | null;
-    isFaceVerified: boolean;
-    hasSelectedRole?: boolean;
-    selfieImage?: string | null;
-    idImage?: string | null;
-    faceConfidence?: number | null;
-    idName?: string | null;
-    idNumber?: string | null;
-    idDOB?: string | null;
-    idExpiryDate?: string | null;
-    idIssuer?: string | null;
-    personalIdNumber?: string | null;
-    idIssueDate?: string | null;
-  }
+  interface JWT extends Session["user"] {}
 }
 
-// Auth options
 export const authOptions: AuthOptions = {
   providers: [
     GoogleProvider({
@@ -134,23 +112,15 @@ export const authOptions: AuthOptions = {
               image: user.image ?? "",
               isOtpVerified: false,
               isFaceVerified: false,
+              role: null,
             },
           });
 
-          return "/role"; // ✅ Prompt for role after sign-in
-        }
-
-        // Force user to pick role if not already chosen
-        if (!existingUser.role) {
           return "/role";
         }
 
-        // Prevent unverified PROVIDERs from logging in
-        if (
-          existingUser.role === UserRole.PROVIDER &&
-          !existingUser.isFaceVerified
-        ) {
-          throw new Error("Face verification required.");
+        if (!existingUser.role) {
+          return "/role";
         }
 
         return true;
@@ -179,9 +149,9 @@ export const authOptions: AuthOptions = {
 
       if (user) {
         token.id = user.id;
-        token.name = user.name;
-        token.email = user.email;
-        token.image = user.image;
+        token.name = user.name ?? null;
+        token.email = user.email ?? null;
+        token.image = user.image ?? null;
         token.role = user.role;
         token.isOtpVerified = user.isOtpVerified ?? true;
         token.otpCode = user.otpCode ?? null;
@@ -207,33 +177,30 @@ export const authOptions: AuthOptions = {
     },
 
     async session({ session, token }) {
-      if (session.user) {
-        session.user = {
-          ...session.user,
-          id: token.id,
-          name: token.name ?? null,
-          email: token.email ?? null,
-          image: token.image ?? null,
-          role: token.role,
-          isOtpVerified: token.isOtpVerified,
-          otpCode: token.otpCode,
-          otpExpiresAt: token.otpExpiresAt,
-          isFaceVerified: token.isFaceVerified,
-          hasSelectedRole: token.hasSelectedRole,
-          ...(token.role === UserRole.PROVIDER && {
-            selfieImage: token.selfieImage,
-            idImage: token.idImage,
-            faceConfidence: token.faceConfidence,
-            idName: token.idName,
-            idNumber: token.idNumber,
-            idDOB: token.idDOB,
-            idExpiryDate: token.idExpiryDate, 
-            idIssuer: token.idIssuer,
-            personalIdNumber: token.personalIdNumber,
-            idIssueDate: token.idIssueDate,
-          }),
-        };
-      }
+      session.user = {
+        id: token.id,
+        name: token.name,
+        email: token.email,
+        image: token.image,
+        role: token.role,
+        isOtpVerified: token.isOtpVerified,
+        otpCode: token.otpCode,
+        otpExpiresAt: token.otpExpiresAt,
+        isFaceVerified: token.isFaceVerified,
+        hasSelectedRole: token.hasSelectedRole,
+        ...(token.role === UserRole.PROVIDER && {
+          selfieImage: token.selfieImage,
+          idImage: token.idImage,
+          faceConfidence: token.faceConfidence,
+          idName: token.idName,
+          idNumber: token.idNumber,
+          idDOB: token.idDOB,
+          idExpiryDate: token.idExpiryDate,
+          idIssuer: token.idIssuer,
+          personalIdNumber: token.personalIdNumber,
+          idIssueDate: token.idIssueDate,
+        }),
+      };
 
       return session;
     },
