@@ -1,11 +1,12 @@
 import { NextResponse, NextRequest } from "next/server";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "next-auth/next"; // 👈 Correct import for App Router
 import { authOptions } from "@/app/auth/authOptions";
 import prisma from "@/app/libs/prismadb";
 import { UserRole } from "@prisma/client";
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  // ✅ Pass req into getServerSession to read cookies/session properly
+  const session = await getServerSession({ req, ...authOptions });
 
   if (!session?.user?.email) {
     return NextResponse.json(
