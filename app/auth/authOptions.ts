@@ -5,7 +5,7 @@ import bcrypt from "bcrypt";
 import prisma from "@/app/libs/prismadb";
 import { UserRole } from "@prisma/client";
 
-// Extend NextAuth types
+// Extend types
 declare module "next-auth" {
   interface Session {
     user: {
@@ -18,6 +18,7 @@ declare module "next-auth" {
       otpCode: string | null;
       otpExpiresAt: string | null;
       isFaceVerified: boolean;
+      hasSelectedRole?: boolean;
       selfieImage?: string | null;
       idImage?: string | null;
       faceConfidence?: number | null;
@@ -41,6 +42,7 @@ declare module "next-auth" {
     otpCode: string | null;
     otpExpiresAt: string | null;
     isFaceVerified: boolean;
+    hasSelectedRole?: boolean;
     selfieImage?: string | null;
     idImage?: string | null;
     faceConfidence?: number | null;
@@ -93,15 +95,7 @@ export const authOptions: AuthOptions = {
           throw new Error("Face verification required for providers");
         }
 
-        if (!user.role) {
-          throw new Error("Missing account role");
-        }
-
-        return {
-          ...user,
-          isOtpVerified: user.isOtpVerified ?? true,
-          isFaceVerified: user.isFaceVerified ?? false,
-        };
+        return user;
       },
     }),
   ],
@@ -127,7 +121,7 @@ export const authOptions: AuthOptions = {
   callbacks: {
     async signIn({ user, account }) {
       if (account?.provider === "google") {
-        const email = user.email ?? "";
+        const email = user.email!;
         const existingUser = await prisma.user.findUnique({
           where: { email },
         });
@@ -140,17 +134,19 @@ export const authOptions: AuthOptions = {
               image: user.image ?? "",
               isOtpVerified: false,
               isFaceVerified: false,
-              role: UserRole.CUSTOMER, // TEMP default to pass Prisma non-null constraint
+              role: UserRole.CUSTOMER, // TEMP to satisfy non-null
             },
           });
 
-          return "/role"; // Force role selection
+          return "/role"; // ✅ Prompt for role after sign-in
         }
 
+        // Force user to pick role if not already chosen
         if (!existingUser.role) {
           return "/role";
         }
 
+        // Prevent unverified PROVIDERs from logging in
         if (
           existingUser.role === UserRole.PROVIDER &&
           !existingUser.isFaceVerified
@@ -173,12 +169,10 @@ export const authOptions: AuthOptions = {
     async jwt({ token, user, trigger, session }) {
       if (trigger === "update" && session?.role) {
         token.role = session.role;
-
         await prisma.user.update({
           where: { email: token.email ?? "" },
           data: { role: session.role },
         });
-
         if (session.role === UserRole.PROVIDER) {
           token.isFaceVerified = false;
         }
@@ -194,6 +188,7 @@ export const authOptions: AuthOptions = {
         token.otpCode = user.otpCode ?? null;
         token.otpExpiresAt = user.otpExpiresAt?.toISOString() ?? null;
         token.isFaceVerified = user.isFaceVerified ?? false;
+        token.hasSelectedRole = !!user.role;
 
         if (user.role === UserRole.PROVIDER) {
           token.selfieImage = user.selfieImage ?? null;
@@ -216,7 +211,7 @@ export const authOptions: AuthOptions = {
       if (session.user) {
         session.user = {
           ...session.user,
-          id: token.id as string,
+          id: token.id,
           name: token.name ?? null,
           email: token.email ?? null,
           image: token.image ?? null,
@@ -225,6 +220,7 @@ export const authOptions: AuthOptions = {
           otpCode: token.otpCode,
           otpExpiresAt: token.otpExpiresAt,
           isFaceVerified: token.isFaceVerified,
+          hasSelectedRole: token.hasSelectedRole,
           ...(token.role === UserRole.PROVIDER && {
             selfieImage: token.selfieImage,
             idImage: token.idImage,
