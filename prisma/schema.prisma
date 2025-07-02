@@ -37,7 +37,7 @@ model User {
   name              String
   contactPhone      String?  @unique
   hashedPassword    String?
-  role              UserRole @default(CUSTOMER)
+  role              UserRole 
   isOtpVerified     Boolean  @default(false)
   isFaceVerified    Boolean  @default(false)
   verified          Boolean  @default(false)
