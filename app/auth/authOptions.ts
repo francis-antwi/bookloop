@@ -86,8 +86,7 @@ export const authOptions: AuthOptions = {
               image: user.image ?? "",
               isOtpVerified: false,
               isFaceVerified: false,
-              role: null, // No default role
-            },
+              role: UserRole.CUSTOMER,  
           });
 
           return "/role"; // Must select role before login
