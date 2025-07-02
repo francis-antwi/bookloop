@@ -1,22 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import prisma from "@/app/libs/prismadb";
-import { UserRole } from "@prisma/client"; // Ensure UserRole enum is correctly imported
+import { UserRole } from "@prisma/client";
 
 /**
  * POST /api/role
- * Handles the selection or update of a user's role.
- * Requires an authenticated session (JWT token).
- *
- * @param req The NextRequest object containing the request details.
- * @returns NextResponse with success or error message and updated user data.
+ * Updates the authenticated user's role to either 'CUSTOMER' or 'PROVIDER'.
+ * Enforces verification rules for PROVIDERs and returns updated user info.
  */
 export async function POST(req: NextRequest) {
   try {
-    // 1. Authenticate user using the JWT token from the request
+    // 1. Authenticate the user using the JWT token
     const token = await getToken({ req });
 
-    // If no token or email in token, user is unauthorized
     if (!token || !token.email) {
       return NextResponse.json(
         { error: "Unauthorized", message: "Authentication required. Please sign in." },
@@ -24,24 +20,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Parse the request body to get the desired role
+    // 2. Extract and normalize role from request body
     const { role } = await req.json();
-    const normalizedRole = (role as string)?.toUpperCase(); // Normalize role to uppercase
+    const normalizedRole = role?.toString().trim().toUpperCase();
 
-    // 3. Validate the provided role
-    if (!normalizedRole || !Object.values(UserRole).includes(normalizedRole as UserRole)) {
+    // 3. Validate role against the UserRole enum
+    if (!normalizedRole || !(normalizedRole in UserRole)) {
       return NextResponse.json(
         { error: "Invalid role", message: "Role must be either 'CUSTOMER' or 'PROVIDER'." },
         { status: 400 }
       );
     }
 
-    // 4. Find the user in the database using the email from the token
+    // 4. Fetch user by email
     const user = await prisma.user.findUnique({
       where: { email: token.email },
     });
 
-    // If user not found, return 404
     if (!user) {
       return NextResponse.json(
         { error: "User not found", message: "The user associated with this session could not be found." },
@@ -49,56 +44,53 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 5. Special check for 'PROVIDER' role: enforce verification
-    // If the user tries to set their role to 'PROVIDER' but hasn't completed
-    // face and ID verification, block the update.
+    // 5. Enforce verification if role is PROVIDER
     if (
       normalizedRole === UserRole.PROVIDER &&
       (!user.isFaceVerified || !user.selfieImage || !user.idImage)
     ) {
+      console.warn(`[ROLE BLOCKED] ${user.email} attempted to select PROVIDER without verification.`);
       return NextResponse.json(
         {
           error: "Verification required",
           message: "Face and ID verification must be completed before becoming a Service Provider.",
         },
-        { status: 403 } // Forbidden status code
+        { status: 403 }
       );
     }
 
-    // 6. Check if the role is already set to the requested role
-    // If the user's current role is already the same as the requested role,
-    // skip the database update and return a success message.
+    // 6. No update needed if role already matches
     if (user.role === normalizedRole) {
       return NextResponse.json(
-        { success: true, message: `Role is already set to ${normalizedRole}.`, user },
+        {
+          success: true,
+          message: `Role is already set to ${normalizedRole}.`,
+          user,
+        },
         { status: 200 }
       );
     }
 
-    // 7. Update the user's role in the database
+    // 7. Update user role (and optionally mark role selected)
     const updatedUser = await prisma.user.update({
       where: { email: token.email },
       data: {
-        role: normalizedRole as UserRole, // Cast to UserRole enum for type safety
-        // If you had a separate `hasSelectedRole` field in your Prisma model,
-        // you would set it here: `hasSelectedRole: true,`
+        role: normalizedRole as UserRole,
+        hasSelectedRole: true, // Optional: if you track this separately
       },
     });
 
-    // 8. Return success response with the updated user data
-    // The `shouldRefreshSession` flag is a hint for the frontend to re-fetch the session
-    // (though the client-side `useSession().update()` handles this more directly now).
+    // 8. Return updated user
     return NextResponse.json(
       {
         success: true,
         message: `Your role has been successfully updated to ${normalizedRole}.`,
         user: updatedUser,
-        shouldRefreshSession: true,
+        shouldRefreshSession: true, // for frontend session rehydration
       },
       { status: 200 }
     );
   } catch (error: any) {
-    // 9. Handle any unexpected errors during the process
     console.error("API Error: Role update failed:", error);
     return NextResponse.json(
       {
