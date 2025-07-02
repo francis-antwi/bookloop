@@ -145,7 +145,7 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
           </button>
         ))}
       </div>
-    </div>z
+    </div>
   );
 };
 
