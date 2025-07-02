@@ -1,78 +1,71 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
-import prisma from "@/app/libs/prismadb";
-import { UserRole } from "@prisma/client";
+import { NextRequest, NextResponse } from 'next/server';
+import { getToken } from 'next-auth/jwt';
+import prisma from '@/app/libs/prismadb';
+import { UserRole } from '@prisma/client';
 
 /**
  * POST /api/role
- * Updates the authenticated user's role to either 'CUSTOMER' or 'PROVIDER'.
- * Enforces verification rules for PROVIDERs and returns updated user info.
+ * Allows an authenticated user to set their role to 'CUSTOMER' or 'PROVIDER'.
+ * PROVIDER role requires prior face + ID verification.
  */
 export async function POST(req: NextRequest) {
   try {
-    // 1. Get user token
+    // 1. Authenticate using token
     const token = await getToken({ req });
 
-    if (!token?.email) {
+    if (!token || !token.email) {
       return NextResponse.json(
-        { error: "Unauthorized", message: "Authentication required. Please sign in." },
+        { error: 'Unauthorized', message: 'Please sign in first.' },
         { status: 401 }
       );
     }
 
-    // 2. Extract and normalize role
-    const body = await req.json();
-    const rawRole: string | undefined = body.role;
-    const normalizedRole = rawRole?.trim().toUpperCase();
+    // 2. Parse role from request
+    const { role } = await req.json();
+    const normalizedRole = role?.toString().trim().toUpperCase();
 
-    // 3. Validate role
-    if (!normalizedRole || !Object.values(UserRole).includes(normalizedRole as UserRole)) {
+    if (!normalizedRole || !(normalizedRole in UserRole)) {
       return NextResponse.json(
-        { error: "Invalid role", message: "Role must be either 'CUSTOMER' or 'PROVIDER'." },
+        { error: 'Invalid role', message: "Role must be 'CUSTOMER' or 'PROVIDER'." },
         { status: 400 }
       );
     }
 
-    // 4. Get user from DB
+    // 3. Lookup user
     const user = await prisma.user.findUnique({
       where: { email: token.email },
     });
 
     if (!user) {
       return NextResponse.json(
-        { error: "User not found", message: "No user found for current session." },
+        { error: 'User not found', message: 'Could not find the signed-in user in the database.' },
         { status: 404 }
       );
     }
 
-    // 5. Block PROVIDER if not verified
+    // 4. Block PROVIDER role if not verified
     if (
       normalizedRole === UserRole.PROVIDER &&
       (!user.isFaceVerified || !user.selfieImage || !user.idImage)
     ) {
-      console.warn(`[ROLE BLOCKED] Unverified user (${user.email}) attempted PROVIDER role.`);
       return NextResponse.json(
         {
-          error: "Verification required",
-          message: "You must complete ID and face verification before selecting PROVIDER role.",
+          error: 'Verification required',
+          message: 'You must complete face and ID verification before selecting Service Provider.',
         },
         { status: 403 }
       );
     }
 
-    // 6. No change needed
+    // 5. Skip update if role is unchanged
     if (user.role === normalizedRole) {
       return NextResponse.json(
-        {
-          success: true,
-          message: `You already have the '${normalizedRole}' role.`,
-          user,
-        },
+        { success: true, message: `Role is already set to ${normalizedRole}.`, user },
         { status: 200 }
       );
     }
 
-    // 7. Update role
+    // 6. Update role
     const updatedUser = await prisma.user.update({
       where: { email: token.email },
       data: {
@@ -81,22 +74,21 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // 8. Return updated info
     return NextResponse.json(
       {
         success: true,
-        message: `Role updated to ${normalizedRole}.`,
+        message: `Your role has been updated to ${normalizedRole}.`,
         user: updatedUser,
         shouldRefreshSession: true,
       },
       { status: 200 }
     );
   } catch (error: any) {
-    console.error("❌ Role API error:", error);
+    console.error('[POST /api/role] Error:', error);
     return NextResponse.json(
       {
-        error: "Internal Server Error",
-        message: error.message || "An error occurred while updating role.",
+        error: 'Internal Server Error',
+        message: error.message || 'Something went wrong while updating your role.',
       },
       { status: 500 }
     );
