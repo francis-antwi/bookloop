@@ -145,20 +145,21 @@ export const authOptions: AuthOptions = {
   secret: process.env.NEXTAUTH_SECRET, // Secret for signing/encrypting JWTs
   debug: process.env.NODE_ENV === "development", // Enable debug logs in development
 
-  cookies: {
-    sessionToken: {
-      name: `__Secure-next-auth.session-token`,
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: true, // Crucial for production (HTTPS)
-        // IMPORTANT: Update this domain for your production environment!
-        // It should match your application's domain.
-        domain: "bookloop-eight.vercel.app",
-      },
+cookies: {
+  sessionToken: {
+    name: `__Secure-next-auth.session-token`,
+    options: {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      secure: process.env.NODE_ENV === "production", // ❗ secure only in prod
+      domain:
+        process.env.NODE_ENV === "production"
+          ? "bookloop-eight.vercel.app"
+          : undefined, // ❗ allow local dev
     },
   },
+},
 
   callbacks: {
     async signIn({ user, account }) {
