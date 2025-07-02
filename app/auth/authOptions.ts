@@ -5,11 +5,75 @@ import prisma from "@/app/libs/prismadb";
 import bcrypt from "bcrypt";
 import { UserRole } from "@prisma/client";
 
+// It's good practice to extend the NextAuth types for better type safety
+// You would typically put this in a file like 'next-auth.d.ts' in your project root
+declare module "next-auth" {
+  interface Session {
+    user: {
+      id: string;
+      name: string | null;
+      email: string | null;
+      image: string | null;
+      role: UserRole;
+      isOtpVerified: boolean;
+      otpCode: string | null;
+      otpExpiresAt: string | null;
+      isFaceVerified: boolean;
+      selfieImage?: string | null;
+      idImage?: string | null;
+      faceConfidence?: number | null;
+      idName?: string | null;
+      idNumber?: string | null;
+      idDOB?: string | null;
+      idExpiryDate?: string | null;
+      idIssuer?: string | null;
+      personalIdNumber?: string | null;
+      idIssueDate?: string | null;
+    } & DefaultSession["user"];
+  }
+
+  interface JWT {
+    id: string;
+    name: string | null;
+    email: string | null;
+    image: string | null;
+    role: UserRole;
+    isOtpVerified: boolean;
+    otpCode: string | null;
+    otpExpiresAt: string | null;
+    isFaceVerified: boolean;
+    selfieImage?: string | null;
+    idImage?: string | null;
+    faceConfidence?: number | null;
+    idName?: string | null;
+    idNumber?: string | null;
+    idDOB?: string | null;
+    idExpiryDate?: string | null;
+    idIssuer?: string | null;
+    personalIdNumber?: string | null;
+    idIssueDate?: string | null;
+  }
+}
+
+// Ensure environment variables are defined, or your app will crash in production.
+// It's highly recommended to validate these at application startup.
+if (!process.env.GOOGLE_CLIENT_ID) {
+  console.error("GOOGLE_CLIENT_ID is not defined in environment variables.");
+  // Consider throwing an error or exiting the process in a real application
+}
+if (!process.env.GOOGLE_CLIENT_SECRET) {
+  console.error("GOOGLE_CLIENT_SECRET is not defined in environment variables.");
+}
+if (!process.env.NEXTAUTH_SECRET) {
+  console.error("NEXTAUTH_SECRET is not defined in environment variables.");
+}
+
+
 export const authOptions: AuthOptions = {
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      clientId: process.env.GOOGLE_CLIENT_ID!, // '!' asserts non-null, but runtime check above is safer
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!, // '!' asserts non-null
     }),
     CredentialsProvider({
       name: "credentials",
@@ -18,55 +82,68 @@ export const authOptions: AuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
+        // Check for missing credentials
         if (!credentials?.email || !credentials?.password) {
-          throw new Error("Missing credentials");
+          throw new Error("Missing credentials"); // NextAuth will redirect to signIn page with error param
         }
 
+        // Find user by email
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
         });
 
+        // Check if user exists and has a hashed password
         if (!user || !user.hashedPassword) {
-          throw new Error("Invalid credentials");
+          throw new Error("Invalid credentials"); // Generic error for security (don't reveal if email exists)
         }
 
+        // Compare provided password with hashed password
         const isCorrectPassword = await bcrypt.compare(
           credentials.password,
           user.hashedPassword
         );
 
-        if (!isCorrectPassword) throw new Error("Invalid credentials");
-        if (user.role === UserRole.PROVIDER && !user.isFaceVerified) {
-          throw new Error("Face verification required for providers");
+        if (!isCorrectPassword) {
+          throw new Error("Invalid credentials"); // Generic error for security
         }
-        if (!user.role) throw new Error("Missing account role");
 
+        // Specific check for PROVIDER role requiring face verification
+        if (user.role === UserRole.PROVIDER && !user.isFaceVerified) {
+          throw new Error("Face verification required for providers"); // This error will be displayed
+        }
+
+        // Ensure user has a role assigned
+        if (!user.role) {
+          throw new Error("Missing account role");
+        }
+
+        // Return the user object, enriching it with default values for optional fields
         return {
           ...user,
-          isOtpVerified: user.isOtpVerified ?? true,
-          isFaceVerified: user.isFaceVerified ?? false,
+          isOtpVerified: user.isOtpVerified ?? true, // Default to true if not set
+          isFaceVerified: user.isFaceVerified ?? false, // Default to false if not set
         };
       },
     }),
   ],
 
   pages: {
-    signIn: "/",
-    newUser: "/role",
+    signIn: "/", // Custom sign-in page
+    newUser: "/role", // Page for new users to select their role
   },
 
   session: {
-    strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60,
-    updateAge: 24 * 60 * 60,
+    strategy: "jwt", // Use JWT for session management
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+    updateAge: 24 * 60 * 60, // 24 hours
   },
 
   jwt: {
-    maxAge: 30 * 24 * 60 * 60,
+    maxAge: 30 * 24 * 60 * 60, // 30 days, matches session maxAge
   },
 
-  secret: process.env.NEXTAUTH_SECRET,
-  debug: process.env.NODE_ENV === "development",
+  secret: process.env.NEXTAUTH_SECRET, // Secret for signing/encrypting JWTs
+  debug: process.env.NODE_ENV === "development", // Enable debug logs in development
 
   cookies: {
     sessionToken: {
@@ -75,94 +152,101 @@ export const authOptions: AuthOptions = {
         httpOnly: true,
         sameSite: "lax",
         path: "/",
-        secure: true,
-        domain: "bookloop-eight.vercel.app", // ✅ Update for prod
+        secure: true, // Crucial for production (HTTPS)
+        // IMPORTANT: Update this domain for your production environment!
+        // It should match your application's domain.
+        domain: "bookloop-eight.vercel.app",
       },
     },
   },
 
   callbacks: {
-  async signIn({ user, account }) {
-    if (account?.provider === "google") {
-      const existingUser = await prisma.user.findUnique({
-        where: { email: user.email ?? "" },
-        select: { role: true, isFaceVerified: true }
-      });
+    async signIn({ user, account }) {
+      // Logic specific to Google sign-in
+      if (account?.provider === "google") {
+        const existingUser = await prisma.user.findUnique({
+          where: { email: user.email ?? "" },
+          select: { role: true, isFaceVerified: true } // Select only necessary fields
+        });
 
-      if (!existingUser) {
-        // New user - redirect to role selection
-        return '/role';
+        if (!existingUser) {
+          // If it's a new Google user, redirect them to the role selection page
+          return '/role';
+        }
+
+        // If existing user is a PROVIDER and not face verified, prevent sign-in
+        if (existingUser.role === UserRole.PROVIDER && !existingUser.isFaceVerified) {
+          throw new Error("Face verification required."); // This error will be displayed
+        }
+
+        // Allow sign-in for existing users
+        return true;
       }
-
-      // Existing user checks
-      if (existingUser.role === UserRole.PROVIDER && !existingUser.isFaceVerified) {
-        throw new Error("Face verification required.");
-      }
-
-      // Existing user with role - continue to callbackUrl (which defaults to home)
+      // For other providers (e.g., Credentials), always allow sign-in if authorize succeeded
       return true;
-    }
-    return true;
-  },
-  
-  async redirect({ url, baseUrl }) {
-    // Handle custom redirects
-    if (url.startsWith("/")) return `${baseUrl}${url}`;
-    else if (new URL(url).origin === baseUrl) return url;
-    return baseUrl;
-  },
-},
+    },
 
- async jwt({ token, user, trigger, session }) {
-  // Update role if triggered by session update
-  if (trigger === "update" && session?.role) {
-    token.role = session.role;
+    async redirect({ url, baseUrl }) {
+      // Allow redirects to relative paths or same-origin URLs
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      else if (new URL(url).origin === baseUrl) return url;
+      // Fallback to base URL for external or malicious redirects
+      return baseUrl;
+    },
 
-    // Persist role update to database
-    await prisma.user.update({
-      where: { email: token.email ?? "" },
-      data: { role: session.role },
-    });
+    async jwt({ token, user, trigger, session }) {
+      // Update token properties if triggered by a session update (e.g., useSession().update())
+      if (trigger === "update" && session?.role) {
+        token.role = session.role;
 
-    if (session.role === UserRole.PROVIDER) {
-      token.isFaceVerified = false;
-    }
-  }
+        // Persist role update to the database
+        await prisma.user.update({
+          where: { email: token.email ?? "" },
+          data: { role: session.role },
+        });
 
-  // First time login: enrich token
-  if (user) {
-    token.id = user.id;
-    token.name = user.name;
-    token.email = user.email;
-    token.image = user.image;
-    token.role = user.role;
-    token.isOtpVerified = user.isOtpVerified ?? true;
-    token.otpCode = user.otpCode ?? null;
-    token.otpExpiresAt = user.otpExpiresAt?.toISOString() ?? null;
-    token.isFaceVerified = user.isFaceVerified ?? false;
+        // If role is updated to PROVIDER, reset face verification status
+        if (session.role === UserRole.PROVIDER) {
+          token.isFaceVerified = false;
+        }
+      }
 
-    if (user.role === UserRole.PROVIDER) {
-      token.selfieImage = user.selfieImage ?? null;
-      token.idImage = user.idImage ?? null;
-      token.faceConfidence = user.faceConfidence ?? null;
-      token.idName = user.idName ?? null;
-      token.idNumber = user.idNumber ?? null;
-      token.idDOB = user.idDOB?.toISOString() ?? null;
-      token.idExpiryDate = user.idExpiryDate?.toISOString() ?? null;
-      token.idIssuer = user.idIssuer ?? null;
-      token.personalIdNumber = user.personalIdNumber ?? null;
-      token.idIssueDate = user.idIssueDate?.toISOString() ?? null;
-    }
-  }
+      // Populate token with user data on initial sign-in
+      if (user) {
+        token.id = user.id;
+        token.name = user.name;
+        token.email = user.email;
+        token.image = user.image;
+        token.role = user.role;
+        token.isOtpVerified = user.isOtpVerified ?? true;
+        token.otpCode = user.otpCode ?? null;
+        // Convert Date objects to ISO strings for consistent storage in JWT
+        token.otpExpiresAt = user.otpExpiresAt?.toISOString() ?? null;
+        token.isFaceVerified = user.isFaceVerified ?? false;
 
-  return token;
-}
+        // Add provider-specific fields if the user is a PROVIDER
+        if (user.role === UserRole.PROVIDER) {
+          token.selfieImage = user.selfieImage ?? null;
+          token.idImage = user.idImage ?? null;
+          token.faceConfidence = user.faceConfidence ?? null;
+          token.idName = user.idName ?? null;
+          token.idNumber = user.idNumber ?? null;
+          token.idDOB = user.idDOB?.toISOString() ?? null;
+          token.idExpiryDate = user.idExpiryDate?.toISOString() ?? null;
+          token.idIssuer = user.idIssuer ?? null;
+          token.personalIdNumber = user.personalIdNumber ?? null;
+          token.idIssueDate = user.idIssueDate?.toISOString() ?? null;
+        }
+      }
 
+      return token;
+    },
 
     async session({ session, token }) {
+      // Map token properties to the session.user object, making them available client-side
       if (session.user) {
         session.user = {
-          ...session.user,
+          ...session.user, // Keep default NextAuth user properties
           id: token.id as string,
           name: token.name ?? null,
           email: token.email ?? null,
@@ -172,6 +256,7 @@ export const authOptions: AuthOptions = {
           otpCode: token.otpCode,
           otpExpiresAt: token.otpExpiresAt,
           isFaceVerified: token.isFaceVerified,
+          // Conditionally add provider-specific fields
           ...(token.role === UserRole.PROVIDER && {
             selfieImage: token.selfieImage,
             idImage: token.idImage,
@@ -189,6 +274,7 @@ export const authOptions: AuthOptions = {
 
       return session;
     },
-  }
+  },
+};
 
 export default NextAuth(authOptions);
