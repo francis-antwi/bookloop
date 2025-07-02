@@ -18,55 +18,59 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleRoleSelect = async (role: string) => {
-    if (!session?.user?.email) {
-      toast.error('Session not found. Please sign in again.');
-      return;
-    }
+  if (!session?.user?.email) {
+    toast.error('Session not found. Please sign in again.');
+    return;
+  }
 
-    if (selectedRole === role) return;
+  if (selectedRole === role) return;
 
-    setIsLoading(true);
-    setSelectedRole(role);
+  setIsLoading(true);
+  setSelectedRole(role);
 
-    try {
-      const response = await axios.post('/api/role', { role }, { withCredentials: true });
+  try {
+    const response = await axios.post('/api/role', { role }, { withCredentials: true });
 
-      if (response.status >= 200 && response.status < 300) {
-        toast.success('Role selected successfully');
-        onRoleSelected?.(role);
+    if (response.status >= 200 && response.status < 300) {
+      toast.success('Role selected successfully');
+      onRoleSelected?.(role);
 
-        // Refresh session after role update
-        await signIn('credentials', { redirect: false });
-
-        // Redirect to verification or homepage
-        router.replace(role === 'PROVIDER' ? '/verify' : '/');
-      } else {
-        toast.error(response.data?.message || 'Unexpected error');
-        setSelectedRole(session.user.role || null);
-      }
-    } catch (err) {
-      const axiosError = err as AxiosError;
-      const message =
-        (axiosError.response?.data as { message?: string })?.message ||
-        axiosError.message ||
-        'Failed to select role';
-
-      toast.error(message);
+      const updatedUser = response.data?.user;
 
       if (
-        axiosError.response?.status === 403 &&
-        (axiosError.response?.data as { error?: string })?.error?.includes('verification')
+        role === 'PROVIDER' &&
+        (!updatedUser?.isFaceVerified || !updatedUser?.selfieImage || !updatedUser?.idImage)
       ) {
-        setTimeout(() => {
-          router.replace('/verify');
-        }, 1000);
+        router.replace('/verify');
+      } else {
+        router.replace('/');
       }
-
+    } else {
+      toast.error(response.data?.message || 'Unexpected error');
       setSelectedRole(session.user.role || null);
-    } finally {
-      setIsLoading(false);
     }
-  };
+  } catch (err) {
+    const axiosError = err as AxiosError;
+    const message =
+      (axiosError.response?.data as { message?: string })?.message ||
+      axiosError.message ||
+      'Failed to select role';
+
+    toast.error(message);
+
+    if (
+      axiosError.response?.status === 403 &&
+      (axiosError.response?.data as { error?: string })?.error?.includes('verification')
+    ) {
+      router.replace('/verify');
+    }
+
+    setSelectedRole(session.user.role || null);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
 
   if (!session?.user?.email) {
     return (
