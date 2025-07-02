@@ -1,124 +1,109 @@
-import { NextResponse, NextRequest } from "next/server";
-import { getServerSession } from "next-auth/next"; // 👈 Correct import for App Router
-import { authOptions } from "@/app/auth/authOptions";
+import { NextRequest, NextResponse } from "next/server";
+import { getToken } from "next-auth/jwt";
 import prisma from "@/app/libs/prismadb";
-import { UserRole } from "@prisma/client";
+import { UserRole } from "@prisma/client"; // Ensure UserRole enum is correctly imported
 
+/**
+ * POST /api/role
+ * Handles the selection or update of a user's role.
+ * Requires an authenticated session (JWT token).
+ *
+ * @param req The NextRequest object containing the request details.
+ * @returns NextResponse with success or error message and updated user data.
+ */
 export async function POST(req: NextRequest) {
-  const session = await getServerSession({ req, ...authOptions }); // ✅
-console.log("SESSION CHECK (/api/role):", session); // ✅ Add this
-
-
-  if (!session?.user?.email) {
-    return NextResponse.json(
-      { error: "Unauthorized", message: "No session or email found" },
-      { status: 401 }
-    );
-  }
-
-  const email = session.user.email;
-
-  let body: { role?: string } = {};
-
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json(
-      { error: "Bad Request", message: "Invalid JSON body" },
-      { status: 400 }
-    );
-  }
+    // 1. Authenticate user using the JWT token from the request
+    const token = await getToken({ req });
 
-  const normalizedRole = body.role?.toUpperCase();
+    // If no token or email in token, user is unauthorized
+    if (!token || !token.email) {
+      return NextResponse.json(
+        { error: "Unauthorized", message: "Authentication required. Please sign in." },
+        { status: 401 }
+      );
+    }
 
-  if (!normalizedRole) {
-    return NextResponse.json(
-      { error: "Bad Request", message: "Role is required" },
-      { status: 400 }
-    );
-  }
+    // 2. Parse the request body to get the desired role
+    const { role } = await req.json();
+    const normalizedRole = (role as string)?.toUpperCase(); // Normalize role to uppercase
 
-  if (!["CUSTOMER", "PROVIDER"].includes(normalizedRole)) {
-    return NextResponse.json(
-      { error: "Bad Request", message: "Invalid role provided" },
-      { status: 400 }
-    );
-  }
+    // 3. Validate the provided role
+    if (!normalizedRole || !Object.values(UserRole).includes(normalizedRole as UserRole)) {
+      return NextResponse.json(
+        { error: "Invalid role", message: "Role must be either 'CUSTOMER' or 'PROVIDER'." },
+        { status: 400 }
+      );
+    }
 
-  try {
-    const user = await prisma.user.findUnique({ where: { email } });
+    // 4. Find the user in the database using the email from the token
+    const user = await prisma.user.findUnique({
+      where: { email: token.email },
+    });
 
+    // If user not found, return 404
     if (!user) {
-      // New Google user
-      if (normalizedRole === "CUSTOMER") {
-        const newUser = await prisma.user.create({
-          data: {
-            email,
-            name: session.user.name ?? "",
-            image: session.user.image ?? "",
-            isOtpVerified: true,
-            isFaceVerified: false,
-            role: "CUSTOMER",
-          },
-        });
-
-        return NextResponse.json(
-          { success: true, message: "Customer account created", user: newUser },
-          { status: 201 }
-        );
-      }
-
-      // PROVIDER — do not create yet
       return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Provider role selected. User will be saved after verification.",
-          skipCreate: true,
-        },
-        { status: 200 }
+        { error: "User not found", message: "The user associated with this session could not be found." },
+        { status: 404 }
       );
     }
 
-    // User already exists
-    if (user.role === normalizedRole) {
-      return NextResponse.json(
-        { success: true, message: "Role already set", user },
-        { status: 200 }
-      );
-    }
-
-    // Trying to change to PROVIDER
+    // 5. Special check for 'PROVIDER' role: enforce verification
+    // If the user tries to set their role to 'PROVIDER' but hasn't completed
+    // face and ID verification, block the update.
     if (
-      normalizedRole === "PROVIDER" &&
+      normalizedRole === UserRole.PROVIDER &&
       (!user.isFaceVerified || !user.selfieImage || !user.idImage)
     ) {
       return NextResponse.json(
         {
           error: "Verification required",
-          message:
-            "You must complete ID and face verification before becoming a provider.",
+          message: "Face and ID verification must be completed before becoming a Service Provider.",
         },
-        { status: 403 }
+        { status: 403 } // Forbidden status code
       );
     }
 
-    // Update role
-    await prisma.user.update({
-      where: { email },
-      data: { role: normalizedRole as UserRole },
+    // 6. Check if the role is already set to the requested role
+    // If the user's current role is already the same as the requested role,
+    // skip the database update and return a success message.
+    if (user.role === normalizedRole) {
+      return NextResponse.json(
+        { success: true, message: `Role is already set to ${normalizedRole}.`, user },
+        { status: 200 }
+      );
+    }
+
+    // 7. Update the user's role in the database
+    const updatedUser = await prisma.user.update({
+      where: { email: token.email },
+      data: {
+        role: normalizedRole as UserRole, // Cast to UserRole enum for type safety
+        // If you had a separate `hasSelectedRole` field in your Prisma model,
+        // you would set it here: `hasSelectedRole: true,`
+      },
     });
 
+    // 8. Return success response with the updated user data
+    // The `shouldRefreshSession` flag is a hint for the frontend to re-fetch the session
+    // (though the client-side `useSession().update()` handles this more directly now).
     return NextResponse.json(
-      { success: true, message: "Role updated successfully" },
+      {
+        success: true,
+        message: `Your role has been successfully updated to ${normalizedRole}.`,
+        user: updatedUser,
+        shouldRefreshSession: true,
+      },
       { status: 200 }
     );
   } catch (error: any) {
-    console.error("[ROLE_API_ERROR]", error);
+    // 9. Handle any unexpected errors during the process
+    console.error("API Error: Role update failed:", error);
     return NextResponse.json(
       {
-        error: "Internal server error",
-        message: error?.message || "Something went wrong",
+        error: "Internal Server Error",
+        message: error.message || "An unexpected error occurred while updating your role.",
       },
       { status: 500 }
     );

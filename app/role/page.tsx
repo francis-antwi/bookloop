@@ -1,150 +1,166 @@
 'use client';
 
 import { useState } from 'react';
-import { FiUserCheck, FiCheck, FiLoader } from 'react-icons/fi';
 import { useSession } from 'next-auth/react';
-import axios, { AxiosError } from 'axios'; // Import AxiosError for better type safety
+import { useRouter } from 'next/navigation';
+import axios, { AxiosError } from 'axios';
 import toast from 'react-hot-toast';
+import { FiUserCheck, FiCheck, FiLoader } from 'react-icons/fi';
 
 interface RoleSelectorProps {
-  onRoleSelected?: (role: string) => void; // Made optional as it's used with ?.
+  onRoleSelected?: (role: string) => void;
 }
 
 const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
-  const { data: session } = useSession();
+  const { data: session, update: updateSession } = useSession();
+  const router = useRouter();
+  const [selectedRole, setSelectedRole] = useState<string | null>(session?.user?.role || null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Initialize selectedRole based on the current session's user role, if available.
-  // This helps if the component is re-rendered or accessed when a role is already set.
-  const [selectedRole, setSelectedRole] = useState<string | null>(session?.user?.role || null);
-
   const handleRoleSelect = async (role: string) => {
-    // Prevent re-selecting the same role if it's already active/selected
-    if (selectedRole === role) return;
+    if (!session?.user?.email) {
+      toast.error('No active session found. Please sign in again.');
+      router.push('/');
+      return;
+    }
+
+    if (selectedRole === role) {
+      toast('You\'ve already selected this role.', { icon: 'ℹ️' });
+      return;
+    }
 
     setIsLoading(true);
+    setSelectedRole(role); // Optimistically update UI
 
     try {
-      // Set the selected role immediately for UI feedback
-      setSelectedRole(role); // Moved this here for immediate visual feedback
-
+      // Send the selected role to your API endpoint
       const response = await axios.post('/api/role', { role }, { withCredentials: true });
 
       if (response.status >= 200 && response.status < 300) {
-        // No need to setSelectedRole here again as it's done above
-        onRoleSelected?.(role); // Call the optional callback
+        toast.success('Role selected successfully!');
+        onRoleSelected?.(role); // Call optional callback
 
-        toast.success('Role selected successfully');
+        const updatedUser = response.data?.user;
 
-        // Redirect based on the selected role
-        // A full page reload (window.location.href) is often good after role selection
-        // to ensure middleware re-evaluates correctly with the new session data.
-        window.location.href = role === 'PROVIDER' ? '/verify' : '/';
+        // Manually update the session to reflect the new role and verification status
+        await updateSession({
+          ...session,
+          user: {
+            ...session.user,
+            role: updatedUser.role,
+            isFaceVerified: updatedUser.isFaceVerified,
+            selfieImage: updatedUser.selfieImage,
+            idImage: updatedUser.idImage,
+            hasSelectedRole: true, // Mark role as selected
+          },
+        });
+
+        // --- ⭐ REDIRECTION LOGIC HERE ⭐ ---
+        if (
+          role === 'PROVIDER' &&
+          (!updatedUser?.isFaceVerified || !updatedUser?.selfieImage || !updatedUser?.idImage)
+        ) {
+          router.replace('/verify'); // Redirect to verification for unverified providers
+        } else {
+          router.replace('/'); // Redirect to home for customers or already verified providers
+        }
       } else {
-        // Handle non-2xx responses from the server
-        const message = response?.data?.message || 'Unexpected response from server';
-        toast.error(message);
+        // Handle non-2xx responses from the API
+        toast.error(response.data?.message || 'Failed to update role due to an unexpected error.');
+        setSelectedRole(session.user.role || null); // Revert UI if API call failed
       }
-    } catch (err) { // `err` is implicitly `unknown` here
-      const axiosError = err as AxiosError; // Explicitly cast to AxiosError for type safety
+    } catch (err) {
+      const axiosError = err as AxiosError;
+      const errorMessage =
+        (axiosError.response?.data as { message?: string })?.message ||
+        (axiosError.response?.data as { error?: string })?.error ||
+        axiosError.message ||
+        'An error occurred while selecting your role.';
 
-      // Extract error details
-      const status = axiosError.response?.status;
-      const message = (axiosError.response?.data as { message?: string })?.message || axiosError.message || 'Failed to select role';
+      toast.error(errorMessage);
 
-      toast.error(message);
-
-      // Specific handling for verification required error (if your API sends it)
-      if (status === 403 && (axiosError.response?.data as { error?: string })?.error === 'Verification required') {
-        setTimeout(() => {
-          window.location.href = '/verify';
-        }, 1000); // Redirect after a short delay
+      // --- ⭐ REDIRECTION ON API ERROR (e.g., 403 from backend) ⭐ ---
+      if (
+        axiosError.response?.status === 403 &&
+        (axiosError.response?.data as { error?: string })?.error?.includes('verification')
+      ) {
+        router.replace('/verify'); // Redirect if the backend explicitly says verification is needed
       }
-      // If the selection failed, revert the visual selection
-      setSelectedRole(session?.user?.role || null);
+
+      setSelectedRole(session.user.role || null); // Revert UI on error
     } finally {
       setIsLoading(false);
     }
   };
 
-  const roles = [
-    {
-      value: 'CUSTOMER',
-      label: 'Customer',
-      desc: 'Looking for services',
-      gradient: 'from-blue-50 to-indigo-50',
-      border: 'border-blue-200',
-      selectedBorder: 'border-blue-500',
-      selectedBg: 'bg-gradient-to-r from-blue-50 to-indigo-100',
-      icon: '🛍️',
-    },
-    {
-      value: 'PROVIDER',
-      label: 'Service Provider',
-      desc: 'Offering services',
-      gradient: 'from-emerald-50 to-teal-50',
-      border: 'border-emerald-200',
-      selectedBorder: 'border-emerald-500',
-      selectedBg: 'bg-gradient-to-r from-emerald-50 to-teal-100',
-      icon: '⚡',
-    },
-  ];
+  // ... (rest of the component, including JSX)
+
+  // Guard to prevent verified providers from seeing role selection options
+  if (session.user.role === 'PROVIDER' && session.user.isFaceVerified) {
+    return (
+      <div className="text-center text-sm text-gray-600 p-6">
+        You are already **verified** as a Service Provider.
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-md mx-auto space-y-6 p-6">
-      <div className="text-center space-y-2">
-        <div className="inline-flex items-center justify-center w-12 h-12 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full mb-3">
-          <FiUserCheck className="text-white text-xl" />
-        </div>
-        <h2 className="text-2xl font-bold text-gray-900">Choose Your Role</h2>
-        <p className="text-gray-600 text-sm">Select how you'll be using our platform</p>
+    <div className="flex flex-col items-center justify-center gap-6 p-8 bg-white rounded-lg shadow-lg">
+      <h2 className="text-2xl font-bold text-gray-800">Select Your Role</h2>
+      <p className="text-gray-600 text-center">
+        Choose the role that best describes how you'll use our platform.
+      </p>
+
+      <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
+        <button
+          disabled={isLoading}
+          onClick={() => handleRoleSelect('CUSTOMER')}
+          className={`flex-1 flex items-center justify-center px-6 py-4 rounded-lg shadow-md border-2 transition-all duration-300 ease-in-out
+            ${selectedRole === 'CUSTOMER'
+              ? 'bg-green-600 text-white border-green-600'
+              : 'bg-white text-gray-800 border-gray-300 hover:border-green-500 hover:shadow-lg'
+            }
+            ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}
+          `}
+        >
+          {isLoading && selectedRole === 'CUSTOMER' ? (
+            <FiLoader className="inline-block mr-3 animate-spin text-xl" />
+          ) : selectedRole === 'CUSTOMER' ? (
+            <FiCheck className="inline-block mr-3 text-xl" />
+          ) : (
+            <FiUserCheck className="inline-block mr-3 text-xl" />
+          )}
+          <span className="font-semibold text-lg">Customer</span>
+        </button>
+
+        <button
+          disabled={isLoading}
+          onClick={() => handleRoleSelect('PROVIDER')}
+          className={`flex-1 flex items-center justify-center px-6 py-4 rounded-lg shadow-md border-2 transition-all duration-300 ease-in-out
+            ${selectedRole === 'PROVIDER'
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'bg-white text-gray-800 border-gray-300 hover:border-blue-500 hover:shadow-lg'
+            }
+            ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}
+          `}
+        >
+          {isLoading && selectedRole === 'PROVIDER' ? (
+            <FiLoader className="inline-block mr-3 animate-spin text-xl" />
+          ) : selectedRole === 'PROVIDER' ? (
+            <FiCheck className="inline-block mr-3 text-xl" />
+          ) : (
+            <FiUserCheck className="inline-block mr-3 text-xl" />
+          )}
+          <span className="font-semibold text-lg">Service Provider</span>
+        </button>
       </div>
 
-      <div className="space-y-3">
-        {roles.map((role) => (
-          <button
-            key={role.value}
-            onClick={() => handleRoleSelect(role.value)}
-            disabled={isLoading} // Disable all buttons when loading
-            className={`
-              relative w-full p-5 rounded-xl text-left transition-all duration-300
-              transform hover:scale-[1.02] active:scale-[0.98]
-              border-2 shadow-sm hover:shadow-md
-              ${selectedRole === role.value
-                ? `${role.selectedBorder} ${role.selectedBg} shadow-lg`
-                : `${role.border} bg-white hover:${role.gradient}`
-              }
-              ${isLoading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}
-              group
-            `}
-          >
-            <div className="flex items-start justify-between">
-              <div className="flex items-start space-x-3">
-                <div className="text-2xl mt-1">{role.icon}</div>
-                <div>
-                  <div className="font-semibold text-gray-900 text-lg">{role.label}</div>
-                  <div className="text-gray-600 text-sm mt-1">{role.desc}</div>
-                </div>
-              </div>
-              <div className="flex items-center">
-                {isLoading && selectedRole === role.value ? (
-                  <FiLoader className="text-blue-500 animate-spin" />
-                ) : selectedRole === role.value ? (
-                  <div className="flex items-center justify-center w-6 h-6 bg-blue-500 rounded-full">
-                    <FiCheck className="text-white text-sm" />
-                  </div>
-                ) : (
-                  <div className="w-6 h-6 border-2 border-gray-300 rounded-full group-hover:border-gray-400 transition-colors" />
-                )}
-              </div>
-            </div>
-            {/* Conditional bottom border for visual feedback on selection */}
-            {selectedRole === role.value && (
-              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-b-xl" />
-            )}
-          </button>
-        ))}
-      </div>
+      {isLoading && (
+        <div className="mt-5 flex items-center text-sm text-gray-500">
+          <FiLoader className="mr-2 animate-spin" />
+          Saving your role and updating your profile...
+        </div>
+      )}
     </div>
   );
 };
