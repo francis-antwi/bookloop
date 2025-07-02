@@ -52,7 +52,6 @@ export const authOptions: AuthOptions = {
 
   pages: {
     signIn: "/",
-    error: "/auth/error", 
     newUser: "/role",
   },
 
@@ -68,7 +67,6 @@ export const authOptions: AuthOptions = {
 
   secret: process.env.NEXTAUTH_SECRET,
   debug: process.env.NODE_ENV === "development",
-  trustHost: true,
 
   cookies: {
     sessionToken: {
@@ -115,48 +113,51 @@ export const authOptions: AuthOptions = {
   },
 },
 
-    async jwt({ token, user, trigger, session }) {
-      if (trigger === "update" && session?.role) {
-        token.role = session.role;
-        await prisma.user.update({
-          where: { email: token.email ?? "" },
-          data: { role: session.role },
-        });
+ async jwt({ token, user, trigger, session }) {
+  // Update role if triggered by session update
+  if (trigger === "update" && session?.role) {
+    token.role = session.role;
 
-        if (session.role === UserRole.PROVIDER) {
-          token.isFaceVerified = false;
-        }
-      }
+    // Persist role update to database
+    await prisma.user.update({
+      where: { email: token.email ?? "" },
+      data: { role: session.role },
+    });
 
-      if (user) {
-        token = {
-          ...token,
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          image: user.image,
-          role: user.role,
-          isOtpVerified: user.isOtpVerified ?? true,
-          otpCode: user.otpCode ?? null,
-          otpExpiresAt: user.otpExpiresAt?.toISOString() ?? null,
-          isFaceVerified: user.isFaceVerified ?? false,
-          ...(user.role === UserRole.PROVIDER && {
-            selfieImage: user.selfieImage ?? null,
-            idImage: user.idImage ?? null,
-            faceConfidence: user.faceConfidence ?? null,
-            idName: user.idName ?? null,
-            idNumber: user.idNumber ?? null,
-            idDOB: user.idDOB?.toISOString() ?? null,
-            idExpiryDate: user.idExpiryDate?.toISOString() ?? null,
-            idIssuer: user.idIssuer ?? null,
-            personalIdNumber: user.personalIdNumber ?? null,
-            idIssueDate: user.idIssueDate?.toISOString() ?? null,
-          }),
-        };
-      }
+    if (session.role === UserRole.PROVIDER) {
+      token.isFaceVerified = false;
+    }
+  }
 
-      return token;
-    },
+  // First time login: enrich token
+  if (user) {
+    token.id = user.id;
+    token.name = user.name;
+    token.email = user.email;
+    token.image = user.image;
+    token.role = user.role;
+    token.isOtpVerified = user.isOtpVerified ?? true;
+    token.otpCode = user.otpCode ?? null;
+    token.otpExpiresAt = user.otpExpiresAt?.toISOString() ?? null;
+    token.isFaceVerified = user.isFaceVerified ?? false;
+
+    if (user.role === UserRole.PROVIDER) {
+      token.selfieImage = user.selfieImage ?? null;
+      token.idImage = user.idImage ?? null;
+      token.faceConfidence = user.faceConfidence ?? null;
+      token.idName = user.idName ?? null;
+      token.idNumber = user.idNumber ?? null;
+      token.idDOB = user.idDOB?.toISOString() ?? null;
+      token.idExpiryDate = user.idExpiryDate?.toISOString() ?? null;
+      token.idIssuer = user.idIssuer ?? null;
+      token.personalIdNumber = user.personalIdNumber ?? null;
+      token.idIssueDate = user.idIssueDate?.toISOString() ?? null;
+    }
+  }
+
+  return token;
+}
+
 
     async session({ session, token }) {
       if (session.user) {
