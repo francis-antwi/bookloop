@@ -134,7 +134,6 @@ export const authOptions: AuthOptions = {
               image: user.image ?? "",
               isOtpVerified: false,
               isFaceVerified: false,
-              role: UserRole.CUSTOMER, // TEMP to satisfy non-null
             },
           });
 
