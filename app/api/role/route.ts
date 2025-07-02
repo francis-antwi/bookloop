@@ -10,92 +10,93 @@ import { UserRole } from "@prisma/client";
  */
 export async function POST(req: NextRequest) {
   try {
-    // 1. Authenticate the user using the JWT token
+    // 1. Get user token
     const token = await getToken({ req });
 
-    if (!token || !token.email) {
+    if (!token?.email) {
       return NextResponse.json(
         { error: "Unauthorized", message: "Authentication required. Please sign in." },
         { status: 401 }
       );
     }
 
-    // 2. Extract and normalize role from request body
-    const { role } = await req.json();
-    const normalizedRole = role?.toString().trim().toUpperCase();
+    // 2. Extract and normalize role
+    const body = await req.json();
+    const rawRole: string | undefined = body.role;
+    const normalizedRole = rawRole?.trim().toUpperCase();
 
-    // 3. Validate role against the UserRole enum
-    if (!normalizedRole || !(normalizedRole in UserRole)) {
+    // 3. Validate role
+    if (!normalizedRole || !Object.values(UserRole).includes(normalizedRole as UserRole)) {
       return NextResponse.json(
         { error: "Invalid role", message: "Role must be either 'CUSTOMER' or 'PROVIDER'." },
         { status: 400 }
       );
     }
 
-    // 4. Fetch user by email
+    // 4. Get user from DB
     const user = await prisma.user.findUnique({
       where: { email: token.email },
     });
 
     if (!user) {
       return NextResponse.json(
-        { error: "User not found", message: "The user associated with this session could not be found." },
+        { error: "User not found", message: "No user found for current session." },
         { status: 404 }
       );
     }
 
-    // 5. Enforce verification if role is PROVIDER
+    // 5. Block PROVIDER if not verified
     if (
       normalizedRole === UserRole.PROVIDER &&
       (!user.isFaceVerified || !user.selfieImage || !user.idImage)
     ) {
-      console.warn(`[ROLE BLOCKED] ${user.email} attempted to select PROVIDER without verification.`);
+      console.warn(`[ROLE BLOCKED] Unverified user (${user.email}) attempted PROVIDER role.`);
       return NextResponse.json(
         {
           error: "Verification required",
-          message: "Face and ID verification must be completed before becoming a Service Provider.",
+          message: "You must complete ID and face verification before selecting PROVIDER role.",
         },
         { status: 403 }
       );
     }
 
-    // 6. No update needed if role already matches
+    // 6. No change needed
     if (user.role === normalizedRole) {
       return NextResponse.json(
         {
           success: true,
-          message: `Role is already set to ${normalizedRole}.`,
+          message: `You already have the '${normalizedRole}' role.`,
           user,
         },
         { status: 200 }
       );
     }
 
-    // 7. Update user role (and optionally mark role selected)
+    // 7. Update role
     const updatedUser = await prisma.user.update({
       where: { email: token.email },
       data: {
         role: normalizedRole as UserRole,
-        hasSelectedRole: true, // Optional: if you track this separately
+        hasSelectedRole: true,
       },
     });
 
-    // 8. Return updated user
+    // 8. Return updated info
     return NextResponse.json(
       {
         success: true,
-        message: `Your role has been successfully updated to ${normalizedRole}.`,
+        message: `Role updated to ${normalizedRole}.`,
         user: updatedUser,
-        shouldRefreshSession: true, // for frontend session rehydration
+        shouldRefreshSession: true,
       },
       { status: 200 }
     );
   } catch (error: any) {
-    console.error("API Error: Role update failed:", error);
+    console.error("❌ Role API error:", error);
     return NextResponse.json(
       {
         error: "Internal Server Error",
-        message: error.message || "An unexpected error occurred while updating your role.",
+        message: error.message || "An error occurred while updating role.",
       },
       { status: 500 }
     );

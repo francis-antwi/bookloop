@@ -27,15 +27,14 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingUser, setIsFetchingUser] = useState(true);
 
-  // Fetch current user info from your token-backed endpoint
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const res = await axios.get('/api/me'); // ← Replace with your actual endpoint
+        const res = await axios.get('/api/me');
         setUser(res.data.user);
         setSelectedRole(res.data.user.role || null);
       } catch (err) {
-        console.error('Failed to load user info:', err);
+        console.error('Failed to load user:', err);
         toast.error('You must be signed in to continue.');
         router.replace('/');
       } finally {
@@ -54,24 +53,23 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
     }
 
     if (selectedRole === role) {
-      toast('You\'ve already selected this role.', { icon: 'ℹ️' });
+      toast('You have already selected this role.', { icon: 'ℹ️' });
       return;
     }
 
     setIsLoading(true);
-    setSelectedRole(role); // Optimistically update UI
+    setSelectedRole(role); // Optimistic update
 
     try {
-      const response = await axios.post('/api/role', { role }, { withCredentials: true });
+      const response = await axios.post('/api/role', { role });
 
       if (response.status >= 200 && response.status < 300) {
+        const updatedUser = response.data.user;
         toast.success('Role selected successfully!');
         onRoleSelected?.(role);
+        setUser(updatedUser);
 
-        const updatedUser = response.data?.user;
-        setUser(updatedUser); // Update local user state
-
-        // Redirect logic
+        // Redirect based on role and verification
         if (
           role === 'PROVIDER' &&
           (!updatedUser?.isFaceVerified || !updatedUser?.selfieImage || !updatedUser?.idImage)
@@ -87,16 +85,17 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
     } catch (err) {
       const axiosError = err as AxiosError;
       const errorMessage =
-        (axiosError.response?.data as { message?: string })?.message ||
-        (axiosError.response?.data as { error?: string })?.error ||
+        (axiosError.response?.data as any)?.message ||
+        (axiosError.response?.data as any)?.error ||
         axiosError.message ||
         'An error occurred while selecting your role.';
 
       toast.error(errorMessage);
 
+      // If verification is needed
       if (
         axiosError.response?.status === 403 &&
-        (axiosError.response?.data as { error?: string })?.error?.includes('verification')
+        (axiosError.response?.data as any)?.error?.toLowerCase().includes('verification')
       ) {
         router.replace('/verify');
       }
@@ -115,7 +114,7 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
     return <div className="text-center py-10 text-red-500">User not found or unauthorized.</div>;
   }
 
-  if (user.role === 'PROVIDER' && user.isFaceVerified) {
+  if (user.hasSelectedRole && user.role === 'PROVIDER' && user.isFaceVerified) {
     return (
       <div className="text-center text-sm text-gray-600 p-6">
         You are already <strong>verified</strong> as a Service Provider.
@@ -135,17 +134,21 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
           const isSelected = selectedRole === role;
           const isBtnLoading = isLoading && isSelected;
           const isProvider = role === 'PROVIDER';
-          const color = isProvider ? 'blue' : 'green';
+
+          const baseStyle = 'flex-1 flex items-center justify-center px-6 py-4 rounded-lg shadow-md border-2 transition-all duration-300';
+          const selectedStyle = isProvider
+            ? 'bg-blue-600 text-white border-blue-600'
+            : 'bg-green-600 text-white border-green-600';
+          const defaultStyle = 'bg-white text-gray-800 border-gray-300 hover:border-opacity-70 hover:shadow-lg';
 
           return (
             <button
               key={role}
               disabled={isLoading}
               onClick={() => handleRoleSelect(role)}
-              className={`flex-1 flex items-center justify-center px-6 py-4 rounded-lg shadow-md border-2 transition-all duration-300
-                ${isSelected ? `bg-${color}-600 text-white border-${color}-600` : 'bg-white text-gray-800 border-gray-300 hover:border-opacity-70 hover:shadow-lg'}
-                ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}
-              `}
+              className={`${baseStyle} ${isSelected ? selectedStyle : defaultStyle} ${
+                isLoading ? 'opacity-70 cursor-not-allowed' : ''
+              }`}
             >
               {isBtnLoading ? (
                 <FiLoader className="inline-block mr-3 animate-spin text-xl" />
@@ -154,7 +157,9 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
               ) : (
                 <FiUserCheck className="inline-block mr-3 text-xl" />
               )}
-              <span className="font-semibold text-lg">{isProvider ? 'Service Provider' : 'Customer'}</span>
+              <span className="font-semibold text-lg">
+                {isProvider ? 'Service Provider' : 'Customer'}
+              </span>
             </button>
           );
         })}
