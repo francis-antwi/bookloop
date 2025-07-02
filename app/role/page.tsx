@@ -30,7 +30,7 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const res = await axios.get('/api/me');
+        const res = await axios.get('/api/role');
         setUser(res.data.user);
         setSelectedRole(res.data.user.role || null);
       } catch (err) {
