@@ -5,8 +5,9 @@ import prisma from "@/app/libs/prismadb";
 import { UserRole } from "@prisma/client";
 
 export async function POST(req: NextRequest) {
-  // ✅ Pass req into getServerSession to read cookies/session properly
-  const session = await getServerSession({ req, ...authOptions });
+  const session = await getServerSession({ req, ...authOptions }); // ✅
+console.log("SESSION CHECK (/api/role):", session); // ✅ Add this
+
 
   if (!session?.user?.email) {
     return NextResponse.json(
