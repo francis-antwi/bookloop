@@ -78,7 +78,10 @@ export const authOptions: AuthOptions = {
           throw new Error("Invalid credentials");
         }
 
-        const isCorrectPassword = await bcrypt.compare(credentials.password, user.hashedPassword);
+        const isCorrectPassword = await bcrypt.compare(
+          credentials.password,
+          user.hashedPassword
+        );
 
         if (!isCorrectPassword) {
           throw new Error("Invalid credentials");
@@ -91,7 +94,7 @@ export const authOptions: AuthOptions = {
 
   pages: {
     signIn: "/",
-    newUser: "/role", // Not strictly necessary since we redirect manually
+    newUser: "/role",
   },
 
   session: {
@@ -111,10 +114,11 @@ export const authOptions: AuthOptions = {
     async signIn({ user, account }) {
       if (account?.provider === "google") {
         const email = user.email!;
-        let existingUser = await prisma.user.findUnique({ where: { email } });
+        let existingUser = await prisma.user.findUnique({
+          where: { email },
+        });
 
         if (!existingUser) {
-          // Save new Google user
           existingUser = await prisma.user.create({
             data: {
               email,
@@ -122,16 +126,13 @@ export const authOptions: AuthOptions = {
               image: user.image ?? "",
               isOtpVerified: false,
               isFaceVerified: false,
-              role: null, // 👈 will select later
+              role: null, // User selects role later
             },
           });
-          return "/role"; // Redirect to select role
         }
 
-        // Redirect users who haven't selected a role
-        if (!existingUser.role) {
-          return "/role";
-        }
+        // ✅ Attach all DB fields to `user` so `jwt()` gets them
+        Object.assign(user, existingUser);
 
         return true;
       }
@@ -146,20 +147,12 @@ export const authOptions: AuthOptions = {
     },
 
     async jwt({ token, user, trigger, session }) {
-      if (trigger === "update" && session?.role) {
-        token.role = session.role as UserRole;
-        await prisma.user.update({
-          where: { email: token.email ?? "" },
-          data: { role: session.role as UserRole },
-        });
-      }
-
       if (user) {
         token.id = user.id;
-        token.name = user.name;
-        token.email = user.email;
-        token.image = user.image;
-        token.role = user.role;
+        token.name = user.name ?? null;
+        token.email = user.email ?? null;
+        token.image = user.image ?? null;
+        token.role = user.role ?? null;
         token.isOtpVerified = user.isOtpVerified ?? false;
         token.isFaceVerified = user.isFaceVerified ?? false;
         token.hasSelectedRole = !!user.role;
@@ -178,13 +171,20 @@ export const authOptions: AuthOptions = {
         }
       }
 
+      if (trigger === "update" && session?.role) {
+        token.role = session.role as UserRole;
+        await prisma.user.update({
+          where: { email: token.email ?? "" },
+          data: { role: session.role as UserRole },
+        });
+      }
+
       return token;
     },
 
     async session({ session, token }) {
       if (session.user) {
         session.user = {
-          ...session.user,
           id: token.id,
           name: token.name ?? null,
           email: token.email ?? null,
