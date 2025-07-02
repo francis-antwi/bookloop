@@ -3,161 +3,118 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import type { JWT } from "next-auth/jwt";
 
-// IMPORTANT: Configure Prisma Client for Edge compatibility if deploying to Vercel/Edge.
-// (Keep your existing Prisma setup as discussed, only for the /role specific check)
+// Optional: Prisma import only for /role path checks
 import { PrismaClient } from "@prisma/client";
-const prisma = new PrismaClient(); // For Node.js runtime or local development
-
-
-// Extend types to match your Prisma schema
-declare module "next/server" {
-  interface NextRequest {
-    auth?: {
-      user: {
-        id: string;
-        email: string;
-        name: string;
-        role: 'CUSTOMER' | 'PROVIDER' | 'ADMIN';
-        isFaceVerified: boolean;
-        isOtpVerified: boolean;
-        verified: boolean;
-      };
-      token?: JWT;
-    };
-  }
-}
+const prisma = new PrismaClient();
 
 export default withAuth(
-  async function middleware(req: NextRequest) { // Make the function async for Prisma query
+  async function middleware(req: NextRequest) {
     const { pathname } = req.nextUrl;
     const token = req.auth?.token;
 
-    // Path configuration
+    // Public/static paths
     const publicPaths = ["/", "/auth", "/auth/error", "/api/auth", "/_next", "/403"];
     const providerPaths = ["/my-listings", "/approvals", "/bookings", "/favourites", "/notifications"];
     const adminPaths = ["/admin"];
     const roleSelectionPath = "/role";
     const verificationPath = "/verify";
 
-    // Check path categories
-    const isPublicPath = publicPaths.some(path => pathname.startsWith(path));
-    const isProviderPath = providerPaths.some(path => pathname.startsWith(path));
-    const isAdminPath = adminPaths.some(path => pathname.startsWith(path));
+    const isPublicPath = publicPaths.some((path) => pathname.startsWith(path));
+    const isProviderPath = providerPaths.some((path) => pathname.startsWith(path));
+    const isAdminPath = adminPaths.some((path) => pathname.startsWith(path));
     const isRoleSelection = pathname === roleSelectionPath;
     const isVerification = pathname === verificationPath;
 
-    // 1. Handle unauthenticated users
+    // 1. If not logged in, allow public + role + verify pages only
     if (!token) {
-      if (isPublicPath || isRoleSelection || isVerification) {
-        return NextResponse.next();
-      }
+      if (isPublicPath || isRoleSelection || isVerification) return NextResponse.next();
       return NextResponse.redirect(new URL("/auth", req.url));
     }
 
-    // 2. Handle authenticated users
-
-    // Block auth pages for logged-in users
+    // 2. Authenticated but visiting /auth → redirect to home
     if (pathname.startsWith("/auth") && pathname !== "/auth/error") {
       return NextResponse.redirect(new URL("/", req.url));
     }
 
-    // Determine the user's current role:
-    // For the /role page specifically, we check the database for the freshest role.
-    // For all other pages, we rely on the token.role for performance.
-    let currentEffectiveRole: string | undefined | null = token.role;
+    // 3. Ensure role is selected
+    let effectiveRole = token.role;
 
-    // Only query the database if the user is trying to access the /role page
-    // and they are authenticated with an ID.
+    // Fetch fresh role from DB only on /role page
     if (isRoleSelection && token.id) {
       try {
-        const user = await prisma.user.findUnique({
+        const dbUser = await prisma.user.findUnique({
           where: { id: token.id as string },
-          select: { role: true }
+          select: { role: true },
         });
-        currentEffectiveRole = user?.role || token.role; // Prioritize DB role, fallback to token
-      } catch (error) {
-        console.error("Database query error for /role path, falling back to token role:", error);
-        // Decide how to handle this error: redirect to an error page or proceed with token role.
-        // For now, it will proceed with token.role if DB fails, or you can uncomment the redirect below.
-        // return NextResponse.redirect(new URL("/auth/error", req.url));
+        effectiveRole = dbUser?.role ?? token.role;
+      } catch (err) {
+        console.error("Error checking role in DB:", err);
       }
     }
 
-    // *** CRITICAL ADDITION: Redirect authenticated users without a role to the role selection page ***
-    // This rule applies if they are logged in, have no role, AND are not already on the role selection
-    // or verification page. It should allow redirection from public paths like '/'
-    if (token && !currentEffectiveRole && pathname !== roleSelectionPath && pathname !== verificationPath) {
+    // ❌ No role set → force user to /role
+    if (!effectiveRole && !isRoleSelection && !isVerification) {
       return NextResponse.redirect(new URL(roleSelectionPath, req.url));
     }
 
-
-    // Role selection rules: Prevent users WITH a role from accessing the /role page
-    if (isRoleSelection) {
-      if (currentEffectiveRole) { // If a role is set (from DB or token)
-        return NextResponse.redirect(new URL("/", req.url)); // Redirect to home or dashboard
-      }
-      // If no role, allow to proceed to /role
-      return NextResponse.next();
+    // ✅ If role is already selected, block /role page
+    if (isRoleSelection && effectiveRole) {
+      return NextResponse.redirect(new URL("/", req.url));
     }
 
-    // Admin rules (these will continue to use `token.role`)
-    if (token.role === 'ADMIN') {
-      if (!isAdminPath && pathname !== "/") {
-        return NextResponse.redirect(new URL("/admin", req.url));
-      }
-      return NextResponse.next();
+    // ✅ Admin routes
+    if (isAdminPath && token.role !== "ADMIN") {
+      return NextResponse.redirect(new URL("/403", req.url));
     }
 
-    // Verification rules (these will continue to use `token.role`)
+    // ✅ Allow ADMIN full access
+    if (token.role === "ADMIN") return NextResponse.next();
+
+    // ✅ Verification page logic
     if (isVerification) {
-      if (token.role === 'PROVIDER' && (token.isFaceVerified || token.verified)) {
+      if (token.role === "PROVIDER" && token.isFaceVerified) {
         return NextResponse.redirect(new URL("/my-listings", req.url));
       }
-      if (token.role === 'CUSTOMER' && (token.isOtpVerified || token.verified)) {
+      if (token.role === "CUSTOMER" && token.isOtpVerified) {
         return NextResponse.redirect(new URL("/", req.url));
       }
       return NextResponse.next();
     }
 
-    // Provider path protection (these will continue to use `token.role`)
+    // ✅ Provider protection
     if (isProviderPath) {
-      if (token.role !== 'PROVIDER') {
+      if (token.role !== "PROVIDER") {
         return NextResponse.redirect(new URL("/403", req.url));
       }
-      if (!token.isFaceVerified && !token.verified) {
+      if (!token.isFaceVerified) {
         return NextResponse.redirect(new URL(verificationPath, req.url));
       }
     }
 
-    // Admin path protection (final check for non-admin roles trying to hit admin paths)
-    if (isAdminPath && token.role !== 'ADMIN') {
-      return NextResponse.redirect(new URL("/403", req.url));
-    }
-
-    // Default: Allow request to proceed if no specific redirect rule applied
+    // ✅ Final fallback: allow access
     return NextResponse.next();
   },
   {
     callbacks: {
       authorized: ({ token, req }) => {
-        const { pathname } = req.nextUrl;
-        const publicPathsForAuth = ["/", "/auth", "/auth/error", "/api/auth", "/_next", "/403"];
-        const isPublicOrEntryPath = publicPathsForAuth.some(path => pathname.startsWith(path)) ||
-                                     pathname === "/role" ||
-                                     pathname === "/verify";
+        const pathname = req.nextUrl.pathname;
+        const isPublicOrEntry =
+          pathname === "/" ||
+          pathname === "/role" ||
+          pathname === "/verify" ||
+          pathname.startsWith("/auth") ||
+          pathname.startsWith("/_next") ||
+          pathname === "/403";
 
-        if (!token && isPublicOrEntryPath) {
-          return true;
-        }
+        // If not logged in, allow only public or auth paths
+        if (!token && isPublicOrEntry) return true;
 
-        return !!token;
+        return !!token; // Must be logged in otherwise
       },
     },
   }
 );
 
 export const config = {
-  matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico).*)",
-  ],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
 };

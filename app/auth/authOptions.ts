@@ -5,7 +5,7 @@ import bcrypt from "bcrypt";
 import prisma from "@/app/libs/prismadb";
 import { UserRole } from "@prisma/client";
 
-// Extend types
+// --- Extend types ---
 declare module "next-auth" {
   interface Session {
     user: {
@@ -13,10 +13,8 @@ declare module "next-auth" {
       name: string | null;
       email: string | null;
       image: string | null;
-      role: UserRole;
+      role: UserRole | null;
       isOtpVerified: boolean;
-      otpCode: string | null;
-      otpExpiresAt: string | null;
       isFaceVerified: boolean;
       hasSelectedRole?: boolean;
       selfieImage?: string | null;
@@ -32,9 +30,29 @@ declare module "next-auth" {
     };
   }
 
-  interface JWT extends Session["user"] {}
+  interface JWT {
+    id: string;
+    name: string | null;
+    email: string | null;
+    image: string | null;
+    role: UserRole | null;
+    isOtpVerified: boolean;
+    isFaceVerified: boolean;
+    hasSelectedRole?: boolean;
+    selfieImage?: string | null;
+    idImage?: string | null;
+    faceConfidence?: number | null;
+    idName?: string | null;
+    idNumber?: string | null;
+    idDOB?: string | null;
+    idExpiryDate?: string | null;
+    idIssuer?: string | null;
+    personalIdNumber?: string | null;
+    idIssueDate?: string | null;
+  }
 }
 
+// --- Auth Options ---
 export const authOptions: AuthOptions = {
   providers: [
     GoogleProvider({
@@ -60,17 +78,10 @@ export const authOptions: AuthOptions = {
           throw new Error("Invalid credentials");
         }
 
-        const isCorrectPassword = await bcrypt.compare(
-          credentials.password,
-          user.hashedPassword
-        );
+        const isCorrectPassword = await bcrypt.compare(credentials.password, user.hashedPassword);
 
         if (!isCorrectPassword) {
           throw new Error("Invalid credentials");
-        }
-
-        if (user.role === UserRole.PROVIDER && !user.isFaceVerified) {
-          throw new Error("Face verification required for providers");
         }
 
         return user;
@@ -80,7 +91,7 @@ export const authOptions: AuthOptions = {
 
   pages: {
     signIn: "/",
-    newUser: "/role",
+    newUser: "/role", // Not strictly necessary since we redirect manually
   },
 
   session: {
@@ -100,25 +111,24 @@ export const authOptions: AuthOptions = {
     async signIn({ user, account }) {
       if (account?.provider === "google") {
         const email = user.email!;
-        const existingUser = await prisma.user.findUnique({
-          where: { email },
-        });
+        let existingUser = await prisma.user.findUnique({ where: { email } });
 
         if (!existingUser) {
-          await prisma.user.create({
+          // Save new Google user
+          existingUser = await prisma.user.create({
             data: {
               email,
               name: user.name ?? "",
               image: user.image ?? "",
               isOtpVerified: false,
               isFaceVerified: false,
-              role: null,
+              role: null, // 👈 will select later
             },
           });
-
-          return "/role";
+          return "/role"; // Redirect to select role
         }
 
+        // Redirect users who haven't selected a role
         if (!existingUser.role) {
           return "/role";
         }
@@ -137,25 +147,20 @@ export const authOptions: AuthOptions = {
 
     async jwt({ token, user, trigger, session }) {
       if (trigger === "update" && session?.role) {
-        token.role = session.role;
+        token.role = session.role as UserRole;
         await prisma.user.update({
           where: { email: token.email ?? "" },
-          data: { role: session.role },
+          data: { role: session.role as UserRole },
         });
-        if (session.role === UserRole.PROVIDER) {
-          token.isFaceVerified = false;
-        }
       }
 
       if (user) {
         token.id = user.id;
-        token.name = user.name ?? null;
-        token.email = user.email ?? null;
-        token.image = user.image ?? null;
+        token.name = user.name;
+        token.email = user.email;
+        token.image = user.image;
         token.role = user.role;
-        token.isOtpVerified = user.isOtpVerified ?? true;
-        token.otpCode = user.otpCode ?? null;
-        token.otpExpiresAt = user.otpExpiresAt?.toISOString() ?? null;
+        token.isOtpVerified = user.isOtpVerified ?? false;
         token.isFaceVerified = user.isFaceVerified ?? false;
         token.hasSelectedRole = !!user.role;
 
@@ -177,30 +182,31 @@ export const authOptions: AuthOptions = {
     },
 
     async session({ session, token }) {
-      session.user = {
-        id: token.id,
-        name: token.name,
-        email: token.email,
-        image: token.image,
-        role: token.role,
-        isOtpVerified: token.isOtpVerified,
-        otpCode: token.otpCode,
-        otpExpiresAt: token.otpExpiresAt,
-        isFaceVerified: token.isFaceVerified,
-        hasSelectedRole: token.hasSelectedRole,
-        ...(token.role === UserRole.PROVIDER && {
-          selfieImage: token.selfieImage,
-          idImage: token.idImage,
-          faceConfidence: token.faceConfidence,
-          idName: token.idName,
-          idNumber: token.idNumber,
-          idDOB: token.idDOB,
-          idExpiryDate: token.idExpiryDate,
-          idIssuer: token.idIssuer,
-          personalIdNumber: token.personalIdNumber,
-          idIssueDate: token.idIssueDate,
-        }),
-      };
+      if (session.user) {
+        session.user = {
+          ...session.user,
+          id: token.id,
+          name: token.name ?? null,
+          email: token.email ?? null,
+          image: token.image ?? null,
+          role: token.role ?? null,
+          isOtpVerified: token.isOtpVerified,
+          isFaceVerified: token.isFaceVerified,
+          hasSelectedRole: token.hasSelectedRole,
+          ...(token.role === UserRole.PROVIDER && {
+            selfieImage: token.selfieImage,
+            idImage: token.idImage,
+            faceConfidence: token.faceConfidence,
+            idName: token.idName,
+            idNumber: token.idNumber,
+            idDOB: token.idDOB,
+            idExpiryDate: token.idExpiryDate,
+            idIssuer: token.idIssuer,
+            personalIdNumber: token.personalIdNumber,
+            idIssueDate: token.idIssueDate,
+          }),
+        };
+      }
 
       return session;
     },
