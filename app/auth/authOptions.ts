@@ -110,7 +110,8 @@ export const authOptions: AuthOptions = {
 
         // Specific check for PROVIDER role requiring face verification
         if (user.role === UserRole.PROVIDER && !user.isFaceVerified) {
-          throw new new Error("Face verification required for providers"); // This error will be displayed
+          // Corrected: Removed the extra 'new' keyword
+          throw new Error("Face verification required for providers"); // This error will be displayed
         }
 
         // Ensure user has a role assigned

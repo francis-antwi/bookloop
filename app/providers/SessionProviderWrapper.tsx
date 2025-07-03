@@ -1,13 +1,23 @@
-'use client';
+// app/providers/SessionProviderWrapper.tsx
+'use client'; // This is a client component
 
-import { SessionProvider } from 'next-auth/react';
-import type { Session } from 'next-auth';
+import { SessionProvider as NextAuthSessionProvider } from 'next-auth/react';
+import { Session } from 'next-auth'; // Import Session type for better typing
 
-interface Props {
+interface SessionProviderWrapperProps {
   children: React.ReactNode;
-  session: Session | null;
+  session: Session | null; // Expect a Session object or null
 }
 
-export default function SessionProviderWrapper({ children, session }: Props) {
-  return <SessionProvider session={session}>{children}</SessionProvider>;
+/**
+ * SessionProviderWrapper is a client component that wraps the NextAuth SessionProvider.
+ * This is necessary in the App Router to make the session available to client components
+ * using the useSession hook, as getServerSession is a server-side function.
+ */
+export default function SessionProviderWrapper({ children, session }: SessionProviderWrapperProps) {
+  return (
+    <NextAuthSessionProvider session={session}>
+      {children}
+    </NextAuthSessionProvider>
+  );
 }
