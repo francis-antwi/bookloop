@@ -1,4 +1,4 @@
-import NextAuth, { AuthOptions } from "next-auth";
+import NextAuth, { AuthOptions, DefaultSession, User as NextAuthUser } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import prisma from "@/app/libs/prismadb";
@@ -81,7 +81,8 @@ export const authOptions: AuthOptions = {
         email: { label: "Email", type: "text" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
+      // Added 'req' parameter to the signature and explicitly defined the return type
+      async authorize(credentials, req): Promise<NextAuthUser | null> {
         // Check for missing credentials
         if (!credentials?.email || !credentials?.password) {
           throw new Error("Missing credentials"); // NextAuth will redirect to signIn page with error param
@@ -109,7 +110,7 @@ export const authOptions: AuthOptions = {
 
         // Specific check for PROVIDER role requiring face verification
         if (user.role === UserRole.PROVIDER && !user.isFaceVerified) {
-          throw new Error("Face verification required for providers"); // This error will be displayed
+          throw new new Error("Face verification required for providers"); // This error will be displayed
         }
 
         // Ensure user has a role assigned
@@ -117,11 +118,29 @@ export const authOptions: AuthOptions = {
           throw new Error("Missing account role");
         }
 
-        // Return the user object, enriching it with default values for optional fields
+        // Return a new object with only the properties expected by NextAuth's User interface
+        // and your custom extended Session['user'] type.
+        // DO NOT return sensitive fields like hashedPassword directly.
         return {
-          ...user,
-          isOtpVerified: user.isOtpVerified ?? true, // Default to true if not set
-          isFaceVerified: user.isFaceVerified ?? false, // Default to false if not set
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image as string | null, // Explicitly cast image to string | null
+          role: user.role,
+          isOtpVerified: user.isOtpVerified ?? true,
+          otpCode: user.otpCode ?? null,
+          otpExpiresAt: user.otpExpiresAt?.toISOString() ?? null,
+          isFaceVerified: user.isFaceVerified ?? false,
+          selfieImage: user.selfieImage ?? null,
+          idImage: user.idImage ?? null,
+          faceConfidence: user.faceConfidence ?? null,
+          idName: user.idName ?? null,
+          idNumber: user.idNumber ?? null,
+          idDOB: user.idDOB?.toISOString() ?? null,
+          idExpiryDate: user.idExpiryDate?.toISOString() ?? null,
+          idIssuer: user.idIssuer ?? null,
+          personalIdNumber: user.personalIdNumber ?? null,
+          idIssueDate: user.idIssueDate?.toISOString() ?? null,
         };
       },
     }),
@@ -145,21 +164,21 @@ export const authOptions: AuthOptions = {
   secret: process.env.NEXTAUTH_SECRET, // Secret for signing/encrypting JWTs
   debug: process.env.NODE_ENV === "development", // Enable debug logs in development
 
-cookies: {
-  sessionToken: {
-    name: `__Secure-next-auth.session-token`,
-    options: {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      secure: process.env.NODE_ENV === "production", // ❗ secure only in prod
-      domain:
-        process.env.NODE_ENV === "production"
-          ? "bookloop-eight.vercel.app"
-          : undefined, // ❗ allow local dev
+  cookies: {
+    sessionToken: {
+      name: `__Secure-next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production", // ❗ secure only in prod
+        domain:
+          process.env.NODE_ENV === "production"
+            ? "bookloop-eight.vercel.app"
+            : undefined, // ❗ allow local dev
+      },
     },
   },
-},
 
   callbacks: {
     async signIn({ user, account }) {
@@ -217,7 +236,7 @@ cookies: {
         token.id = user.id;
         token.name = user.name;
         token.email = user.email;
-        token.image = user.image;
+        token.image = user.image as string | null; // Explicitly cast image to string | null
         token.role = user.role;
         token.isOtpVerified = user.isOtpVerified ?? true;
         token.otpCode = user.otpCode ?? null;
