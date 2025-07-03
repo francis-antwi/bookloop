@@ -3,177 +3,156 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import axios, { AxiosError } from 'axios';
-import { signIn } from 'next-auth/react';
 import toast from 'react-hot-toast';
-import { FiUserCheck, FiCheck, FiLoader } from 'react-icons/fi';
-
-interface RoleSelectorProps {
-  onRoleSelected?: (role: string) => void;
-}
+import { FiUserCheck, FiCheck, FiLoader, FiAlertCircle } from 'react-icons/fi';
 
 interface UserData {
+  id: string;
   email: string;
-  role: string | null;
+  role: 'CUSTOMER' | 'PROVIDER' | 'ADMIN' | null;
   isFaceVerified: boolean;
   selfieImage: string | null;
   idImage: string | null;
-  hasSelectedRole?: boolean;
 }
 
-const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
+const RoleSelector = () => {
   const router = useRouter();
-
   const [user, setUser] = useState<UserData | null>(null);
-  const [selectedRole, setSelectedRole] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isFetchingUser, setIsFetchingUser] = useState(true);
+  const [selectedRole, setSelectedRole] = useState<'CUSTOMER' | 'PROVIDER' | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const res = await axios.get('/api/role');
-        setUser(res.data.user);
-        setSelectedRole(res.data.user.role || null);
-      } catch (err) {
-        console.error('Failed to load user:', err);
-        toast.error('You must be signed in to continue.');
-        router.replace('/');
-      } finally {
-        setIsFetchingUser(false);
-      }
-    };
-
-    fetchUser();
-  }, [router]);
-
-  const handleRoleSelect = async (role: string) => {
-    if (!user?.email) {
-      toast.error('No user session found.');
-      router.push('/');
-      return;
-    }
-
-    if (selectedRole === role) {
-      toast('You have already selected this role.', { icon: 'ℹ️' });
-      return;
-    }
-
-    setIsLoading(true);
-    setSelectedRole(role);
-
+  // Fetch user data with JWT
+  const fetchUser = async () => {
     try {
-      const response = await axios.post('/api/role', { role });
-
-      if (response.status >= 200 && response.status < 300) {
-        const updatedUser = response.data.user;
-        toast.success('Role selected successfully!');
-        setUser(updatedUser);
-        onRoleSelected?.(role);
-
-        // 🔁 Refresh session to get new role in JWT
-        await signIn('google', { redirect: false });
-
-        // Redirect
-        if (
-          role === 'PROVIDER' &&
-          (!updatedUser?.isFaceVerified || !updatedUser?.selfieImage || !updatedUser?.idImage)
-        ) {
-          router.replace('/verify');
-        } else {
-          router.replace('/');
+      const { data } = await axios.get('/api/user/me', {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
-      } else {
-        toast.error(response.data?.message || 'Failed to update role.');
-        setSelectedRole(user.role || null);
-      }
+      });
+      setUser(data);
+      setSelectedRole(data.role);
     } catch (err) {
-      const axiosError = err as AxiosError;
-      const errorMessage =
-        (axiosError.response?.data as any)?.message ||
-        (axiosError.response?.data as any)?.error ||
-        axiosError.message ||
-        'An error occurred while selecting your role.';
-
-      toast.error(errorMessage);
-
-      if (
-        axiosError.response?.status === 403 &&
-        (axiosError.response?.data as any)?.error?.toLowerCase().includes('verification')
-      ) {
-        router.replace('/verify');
-      }
-
-      setSelectedRole(user.role || null);
+      console.error('Failed to load user:', err);
+      toast.error('Authentication required');
+      router.replace('/');
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (isFetchingUser) {
-    return <div className="text-center py-10 text-gray-500">Loading your account...</div>;
+  useEffect(() => {
+    fetchUser();
+  }, [router]);
+
+  const handleRoleSelect = async (role: 'CUSTOMER' | 'PROVIDER') => {
+    if (!user?.id) {
+      toast.error('Authentication required');
+      router.replace('/');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const { data } = await axios.patch(
+        '/api/role',
+        { role },
+        {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        }
+      );
+
+      // Update local state
+      setUser(data.user);
+      setSelectedRole(role);
+      
+      // Update token if returned new one
+      if (data.token) {
+        localStorage.setItem('token', data.token);
+      }
+
+      toast.success('Role updated successfully');
+      
+      // Redirect based on role and verification status
+      if (role === 'PROVIDER' && (!data.user.isFaceVerified || !data.user.idImage)) {
+        router.replace('/verify');
+      } else {
+        router.replace('/dashboard');
+      }
+
+    } catch (err) {
+      const error = err as AxiosError<{ message?: string }>;
+      toast.error(error.response?.data?.message || 'Failed to update role');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <FiLoader className="animate-spin text-2xl" />
+      </div>
+    );
   }
 
   if (!user) {
-    return <div className="text-center py-10 text-red-500">User not found or unauthorized.</div>;
+    return (
+      <div className="text-center p-8 text-red-500">
+        <FiAlertCircle className="inline-block mr-2" />
+        User not authenticated
+      </div>
+    );
   }
 
-  if (user.hasSelectedRole && user.role === 'PROVIDER' && user.isFaceVerified) {
+  if (user.role) {
     return (
-      <div className="text-center text-sm text-gray-600 p-6">
-        You are already <strong>verified</strong> as a Service Provider.
+      <div className="p-4 bg-green-50 text-green-800 rounded text-center">
+        You're already registered as a {user.role.toLowerCase()}
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col items-center justify-center gap-6 p-8 bg-white rounded-lg shadow-lg">
-      <h2 className="text-2xl font-bold text-gray-800">Select Your Role</h2>
-      <p className="text-gray-600 text-center">
-        Choose the role that best describes how you'll use our platform.
-      </p>
-
-      <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
-        {['CUSTOMER', 'PROVIDER'].map((role) => {
-          const isSelected = selectedRole === role;
-          const isBtnLoading = isLoading && isSelected;
-          const isProvider = role === 'PROVIDER';
-
-          const baseStyle =
-            'flex-1 flex items-center justify-center px-6 py-4 rounded-lg shadow-md border-2 transition-all duration-300';
-          const selectedStyle = isProvider
-            ? 'bg-blue-600 text-white border-blue-600'
-            : 'bg-green-600 text-white border-green-600';
-          const defaultStyle =
-            'bg-white text-gray-800 border-gray-300 hover:border-opacity-70 hover:shadow-lg';
-
-          return (
-            <button
-              key={role}
-              disabled={isLoading}
-              onClick={() => handleRoleSelect(role)}
-              className={`${baseStyle} ${isSelected ? selectedStyle : defaultStyle} ${
-                isLoading ? 'opacity-70 cursor-not-allowed' : ''
-              }`}
-            >
-              {isBtnLoading ? (
-                <FiLoader className="inline-block mr-3 animate-spin text-xl" />
-              ) : isSelected ? (
-                <FiCheck className="inline-block mr-3 text-xl" />
-              ) : (
-                <FiUserCheck className="inline-block mr-3 text-xl" />
-              )}
-              <span className="font-semibold text-lg">
-                {isProvider ? 'Service Provider' : 'Customer'}
-              </span>
-            </button>
-          );
-        })}
+    <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow">
+      <h2 className="text-xl font-bold mb-4 text-center">Select Your Role</h2>
+      
+      <div className="space-y-4">
+        {(['CUSTOMER', 'PROVIDER'] as const).map((role) => (
+          <button
+            key={role}
+            disabled={isSubmitting}
+            onClick={() => handleRoleSelect(role)}
+            className={`w-full p-4 rounded-lg border flex items-center justify-between
+              ${selectedRole === role 
+                ? role === 'PROVIDER' 
+                  ? 'bg-blue-50 border-blue-500' 
+                  : 'bg-green-50 border-green-500'
+                : 'bg-white border-gray-200 hover:border-gray-300'
+              }
+              ${isSubmitting ? 'opacity-70 cursor-not-allowed' : ''}
+            `}
+          >
+            <span className="font-medium">
+              {role === 'PROVIDER' ? 'Service Provider' : 'Customer'}
+            </span>
+            {selectedRole === role && (
+              isSubmitting 
+                ? <FiLoader className="animate-spin" /> 
+                : <FiCheck />
+            )}
+          </button>
+        ))}
       </div>
 
-      {isLoading && (
-        <div className="mt-5 flex items-center text-sm text-gray-500">
-          <FiLoader className="mr-2 animate-spin" />
-          Saving your role and updating your profile...
+      {isSubmitting && (
+        <div className="mt-4 text-sm text-gray-500 text-center">
+          <FiLoader className="inline-block animate-spin mr-2" />
+          Updating your account...
         </div>
       )}
     </div>

@@ -4,37 +4,26 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcrypt";
 import prisma from "@/app/libs/prismadb";
 import { UserRole } from "@prisma/client";
+import jwt from 'jsonwebtoken';
 
-// --- Extend types ---
+// --- JWT Configuration ---
+const JWT_SECRET = process.env.JWT_SECRET!;
+const JWT_EXPIRES_IN = '15m'; // Short-lived token
+
+// --- Type Extensions ---
 declare module "next-auth" {
-  interface Session {
-    user: {
-      id: string;
-      name: string | null;
-      email: string | null;
-      image: string | null;
-      role: UserRole | null;
-      isOtpVerified: boolean;
-      isFaceVerified: boolean;
-      requiresRoleSelection: boolean; // New field to track if role selection is needed
-      // ... other fields remain the same
-    };
-  }
-
-  interface JWT {
+  interface User {
     id: string;
-    name: string | null;
-    email: string | null;
-    image: string | null;
     role: UserRole | null;
     isOtpVerified: boolean;
     isFaceVerified: boolean;
-    requiresRoleSelection: boolean; // New field
-    // ... other fields remain the same
+    requiresRoleSelection?: boolean;
   }
+  
+  interface Account {}
+  interface Profile {}
 }
 
-// --- Auth Options ---
 export const authOptions: AuthOptions = {
   providers: [
     GoogleProvider({
@@ -47,7 +36,7 @@ export const authOptions: AuthOptions = {
         email: { label: "Email", type: "text" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password) {
           throw new Error("Missing credentials");
         }
@@ -69,18 +58,37 @@ export const authOptions: AuthOptions = {
           throw new Error("Invalid credentials");
         }
 
-        return user;
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          isOtpVerified: user.isOtpVerified,
+          isFaceVerified: user.isFaceVerified,
+          requiresRoleSelection: !user.role
+        };
       },
     }),
   ],
 
-  pages: {
-    signIn: "/",
-    // Remove newUser redirect as we'll handle it in callbacks
-  },
-
   session: {
     strategy: "jwt",
+    maxAge: 15 * 60, // 15 minutes (matches JWT expiry)
+  },
+
+  jwt: {
+    secret: JWT_SECRET,
+    maxAge: 15 * 60, // 15 minutes
+    async encode({ secret, token }) {
+      return jwt.sign(token!, secret, { expiresIn: JWT_EXPIRES_IN });
+    },
+    async decode({ secret, token }) {
+      try {
+        return jwt.verify(token!, secret) as any;
+      } catch (e) {
+        return null;
+      }
+    },
   },
 
   callbacks: {
@@ -99,18 +107,73 @@ export const authOptions: AuthOptions = {
               image: user.image ?? "",
               isOtpVerified: false,
               isFaceVerified: false,
-              role: null, // User selects role later
+              role: null,
             },
           });
         }
 
-        // Attach all DB fields to `user` so `jwt()` gets them
-        Object.assign(user, existingUser);
+        Object.assign(user, {
+          id: existingUser.id,
+          role: existingUser.role,
+          isOtpVerified: existingUser.isOtpVerified,
+          isFaceVerified: existingUser.isFaceVerified,
+          requiresRoleSelection: !existingUser.role
+        });
+      }
+      return true;
+    },
 
-        // No return redirect here - we'll handle it in redirect callback
+    async jwt({ token, user, trigger, session }) {
+      // Initial sign in
+      if (user) {
+        token.id = user.id;
+        token.email = user.email;
+        token.name = user.name;
+        token.role = user.role;
+        token.isOtpVerified = user.isOtpVerified;
+        token.isFaceVerified = user.isFaceVerified;
+        token.requiresRoleSelection = user.requiresRoleSelection;
       }
 
-      return true;
+      // Handle role updates
+      if (trigger === "update" && session?.role) {
+        token.role = session.role as UserRole;
+        token.requiresRoleSelection = false;
+        
+        await prisma.user.update({
+          where: { id: token.id as string },
+          data: { role: session.role as UserRole },
+        });
+      }
+
+      return token;
+    },
+
+    async session({ session, token }) {
+      // Send minimal required properties to the client
+      session.user = {
+        id: token.id as string,
+        email: token.email as string,
+        name: token.name as string | null,
+        role: token.role as UserRole | null,
+        isOtpVerified: token.isOtpVerified as boolean,
+        isFaceVerified: token.isFaceVerified as boolean,
+        requiresRoleSelection: token.requiresRoleSelection as boolean,
+      };
+      
+      // Add the JWT token to the session
+      session.token = jwt.sign(
+        {
+          sub: token.id,
+          email: token.email,
+          role: token.role,
+          requiresRoleSelection: token.requiresRoleSelection
+        },
+        JWT_SECRET,
+        { expiresIn: JWT_EXPIRES_IN }
+      );
+
+      return session;
     },
 
     async redirect({ url, baseUrl, token }) {
@@ -124,52 +187,11 @@ export const authOptions: AuthOptions = {
       if (new URL(url).origin === baseUrl) return url;
       return baseUrl;
     },
+  },
 
-    async jwt({ token, user, trigger, session }) {
-      // Initial sign in
-      if (user) {
-        token.id = user.id;
-        token.name = user.name ?? null;
-        token.email = user.email ?? null;
-        token.image = user.image ?? null;
-        token.role = user.role ?? null;
-        token.isOtpVerified = user.isOtpVerified ?? false;
-        token.isFaceVerified = user.isFaceVerified ?? false;
-        token.requiresRoleSelection = !user.role; // Set flag based on whether role is set
-        
-        // ... (keep your existing provider-specific fields)
-      }
-
-      // Handle role updates
-      if (trigger === "update" && session?.role) {
-        token.role = session.role as UserRole;
-        token.requiresRoleSelection = false; // Role selected, no longer requires selection
-        
-        await prisma.user.update({
-          where: { email: token.email ?? "" },
-          data: { role: session.role as UserRole },
-        });
-      }
-
-      return token;
-    },
-
-    async session({ session, token }) {
-      if (session.user) {
-        session.user = {
-          id: token.id,
-          name: token.name ?? null,
-          email: token.email ?? null,
-          image: token.image ?? null,
-          role: token.role ?? null,
-          isOtpVerified: token.isOtpVerified,
-          isFaceVerified: token.isFaceVerified,
-          requiresRoleSelection: token.requiresRoleSelection,
-          // ... (keep your existing provider-specific fields)
-        };
-      }
-
-      return session;
+  events: {
+    async signOut() {
+      // Add any cleanup logic for JWT tokens here
     },
   },
 };
