@@ -2,16 +2,35 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import prisma from '@/app/libs/prismadb';
 import { UserRole } from '@prisma/client';
-import { signIn } from "next-auth/react";
-await signIn('google', { redirect: false })
-/**
- * POST /api/role
- * Allows an authenticated user to set their role to 'CUSTOMER' or 'PROVIDER'.
- * PROVIDER role requires prior face + ID verification.
- */
+
+export async function GET(req: NextRequest) {
+  const token = await getToken({ req });
+
+  if (!token?.email) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { email: token.email },
+    select: {
+      email: true,
+      role: true,
+      isFaceVerified: true,
+      selfieImage: true,
+      idImage: true,
+      hasSelectedRole: true,
+    },
+  });
+
+  if (!user) {
+    return NextResponse.json({ error: 'User not found' }, { status: 404 });
+  }
+
+  return NextResponse.json({ user }, { status: 200 });
+}
+
 export async function POST(req: NextRequest) {
   try {
-    // 1. Authenticate using token
     const token = await getToken({ req });
 
     if (!token || !token.email) {
@@ -21,7 +40,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Parse role from request
     const { role } = await req.json();
     const normalizedRole = role?.toString().trim().toUpperCase();
 
@@ -32,7 +50,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 3. Lookup user
     const user = await prisma.user.findUnique({
       where: { email: token.email },
     });
@@ -44,7 +61,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 4. Block PROVIDER role if not verified
     if (
       normalizedRole === UserRole.PROVIDER &&
       (!user.isFaceVerified || !user.selfieImage || !user.idImage)
@@ -58,7 +74,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 5. Skip update if role is unchanged
     if (user.role === normalizedRole) {
       return NextResponse.json(
         { success: true, message: `Role is already set to ${normalizedRole}.`, user },
@@ -66,7 +81,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 6. Update role
     const updatedUser = await prisma.user.update({
       where: { email: token.email },
       data: {

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import axios, { AxiosError } from 'axios';
+import { signIn } from 'next-auth/react';
 import toast from 'react-hot-toast';
 import { FiUserCheck, FiCheck, FiLoader } from 'react-icons/fi';
 
@@ -58,7 +59,7 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
     }
 
     setIsLoading(true);
-    setSelectedRole(role); // Optimistic update
+    setSelectedRole(role);
 
     try {
       const response = await axios.post('/api/role', { role });
@@ -66,10 +67,13 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
       if (response.status >= 200 && response.status < 300) {
         const updatedUser = response.data.user;
         toast.success('Role selected successfully!');
-        onRoleSelected?.(role);
         setUser(updatedUser);
+        onRoleSelected?.(role);
 
-        // Redirect based on role and verification
+        // 🔁 Refresh session to get new role in JWT
+        await signIn('google', { redirect: false });
+
+        // Redirect
         if (
           role === 'PROVIDER' &&
           (!updatedUser?.isFaceVerified || !updatedUser?.selfieImage || !updatedUser?.idImage)
@@ -92,7 +96,6 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
 
       toast.error(errorMessage);
 
-      // If verification is needed
       if (
         axiosError.response?.status === 403 &&
         (axiosError.response?.data as any)?.error?.toLowerCase().includes('verification')
@@ -135,11 +138,13 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
           const isBtnLoading = isLoading && isSelected;
           const isProvider = role === 'PROVIDER';
 
-          const baseStyle = 'flex-1 flex items-center justify-center px-6 py-4 rounded-lg shadow-md border-2 transition-all duration-300';
+          const baseStyle =
+            'flex-1 flex items-center justify-center px-6 py-4 rounded-lg shadow-md border-2 transition-all duration-300';
           const selectedStyle = isProvider
             ? 'bg-blue-600 text-white border-blue-600'
             : 'bg-green-600 text-white border-green-600';
-          const defaultStyle = 'bg-white text-gray-800 border-gray-300 hover:border-opacity-70 hover:shadow-lg';
+          const defaultStyle =
+            'bg-white text-gray-800 border-gray-300 hover:border-opacity-70 hover:shadow-lg';
 
           return (
             <button
