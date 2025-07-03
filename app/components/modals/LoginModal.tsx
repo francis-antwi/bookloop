@@ -243,14 +243,21 @@ const LoginModal = () => {
 
                         {/* Google sign-in button */}
                         <button
-  onClick={() => {
-    setIsLoading(true);
-    signIn("google")
-      .catch(() => {
-        setIsLoading(false);
-        toast.error("Google sign-in failed. Please try again.");
-      });
-  }}
+onClick={async () => {
+  setIsLoading(true);
+
+  try {
+    // Trigger Google sign-in (redirects to provider)
+    await signIn("google", {
+      callbackUrl: "/role", // ✅ send user to role selection after first login
+    });
+  } catch (error) {
+    console.error("Google sign-in error:", error);
+    toast.error("Google sign-in failed. Please try again.");
+    setIsLoading(false); // restore loading state if signIn fails synchronously
+  }
+}}
+
   disabled={isLoading}
   className="
     w-full py-3 px-6 rounded-xl font-semibold
