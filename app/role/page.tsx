@@ -5,7 +5,11 @@ import { useRouter } from 'next/navigation';
 import axios, { AxiosError } from 'axios';
 import toast from 'react-hot-toast';
 import { FiUserCheck, FiCheck, FiLoader, FiAlertCircle } from 'react-icons/fi';
+// Import useSession from next-auth/react
+import { useSession } from 'next-auth/react';
 
+// Define the UserData interface to match your NextAuth session user type
+// Ensure this matches the extended Session['user'] type in your next-auth.d.ts
 interface UserData {
   id: string;
   email: string;
@@ -13,42 +17,65 @@ interface UserData {
   isFaceVerified: boolean;
   selfieImage: string | null;
   idImage: string | null;
+  // Add other fields from your Session['user'] if needed by this component
 }
 
 const RoleSelector = () => {
   const router = useRouter();
-  const [user, setUser] = useState<UserData | null>(null);
+  // Use the useSession hook to get session data and status
+  const { data: session, status, update } = useSession(); // 'update' is used to trigger session refresh
+  
+  // Use local state to manage the user data displayed in the component
+  // Initialize with session.user if available, or null
+  const [user, setUser] = useState<UserData | null>(session?.user as UserData || null);
   const [selectedRole, setSelectedRole] = useState<'CUSTOMER' | 'PROVIDER' | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Fetch user data with JWT
-  const fetchUser = async () => {
-    try {
-      const { data } = await axios.get('/api/user/me', {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      setUser(data);
-      setSelectedRole(data.role);
-    } catch (err) {
-      console.error('Failed to load user:', err);
+  // useEffect to handle initial session loading and user data population
+  useEffect(() => {
+    // When session status changes to 'authenticated' and user data is available
+    if (status === 'authenticated' && session?.user) {
+      setUser(session.user as UserData); // Cast to UserData
+      setSelectedRole(session.user.role as 'CUSTOMER' | 'PROVIDER' || null); // Initialize selected role
+    } else if (status === 'unauthenticated') {
+      // If unauthenticated, redirect to sign-in page
       toast.error('Authentication required');
       router.replace('/');
-    } finally {
-      setIsLoading(false);
     }
-  };
+    // No need for a separate fetchUser function if using useSession
+  }, [status, session, router]); // Depend on status, session, and router
 
-  useEffect(() => {
-    fetchUser();
-  }, [router]);
+  // Show loading state while session is loading
+  if (status === 'loading') {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <FiLoader className="animate-spin text-2xl" />
+      </div>
+    );
+  }
+
+  // If status is unauthenticated and user is still null after initial load
+  if (status === 'unauthenticated' && !user) {
+    return (
+      <div className="text-center p-8 text-red-500">
+        <FiAlertCircle className="inline-block mr-2" />
+        User not authenticated
+      </div>
+    );
+  }
+
+  // If user already has a role, display a message
+  if (user?.role) {
+    return (
+      <div className="p-4 bg-green-50 text-green-800 rounded text-center">
+        You're already registered as a {user.role.toLowerCase()}
+      </div>
+    );
+  }
 
   const handleRoleSelect = async (role: 'CUSTOMER' | 'PROVIDER') => {
     if (!user?.id) {
-      toast.error('Authentication required');
+      toast.error('User data not available. Please try logging in again.');
       router.replace('/');
       return;
     }
@@ -56,29 +83,23 @@ const RoleSelector = () => {
     setIsSubmitting(true);
 
     try {
+      // Send the role update to your API
+      // axios will automatically send the NextAuth.js session cookie with this request
       const { data } = await axios.patch(
         '/api/role',
-        { role },
-        {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        }
+        { role }
       );
 
-      // Update local state
-      setUser(data.user);
-      setSelectedRole(role);
-      
-      // Update token if returned new one
-      if (data.token) {
-        localStorage.setItem('token', data.token);
-      }
+      // After a successful role update, you should ideally trigger a session update
+      // This will re-fetch the session from the server and update the client-side session state
+      // The 'update' function from useSession() is perfect for this.
+      await update({ role: role }); // Pass the updated role to trigger a session refresh
 
       toast.success('Role updated successfully');
       
-      // Redirect based on role and verification status
-      if (role === 'PROVIDER' && (!data.user.isFaceVerified || !data.user.idImage)) {
+      // Redirect based on role and verification status from the updated session
+      // Access updated user data from the session object after the 'update' call
+      if (role === 'PROVIDER' && (!session?.user?.isFaceVerified || !session?.user?.idImage)) {
         router.replace('/verify');
       } else {
         router.replace('/dashboard');
@@ -91,31 +112,6 @@ const RoleSelector = () => {
       setIsSubmitting(false);
     }
   };
-
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <FiLoader className="animate-spin text-2xl" />
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="text-center p-8 text-red-500">
-        <FiAlertCircle className="inline-block mr-2" />
-        User not authenticated
-      </div>
-    );
-  }
-
-  if (user.role) {
-    return (
-      <div className="p-4 bg-green-50 text-green-800 rounded text-center">
-        You're already registered as a {user.role.toLowerCase()}
-      </div>
-    );
-  }
 
   return (
     <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow">
