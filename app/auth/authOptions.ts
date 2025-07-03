@@ -1,34 +1,79 @@
 import NextAuth, { AuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
-import bcrypt from "bcrypt";
 import prisma from "@/app/libs/prismadb";
+import bcrypt from "bcrypt";
 import { UserRole } from "@prisma/client";
-import jwt from 'jsonwebtoken';
 
-// --- JWT Configuration ---
-const JWT_SECRET = process.env.JWT_SECRET!;
-const JWT_EXPIRES_IN = '15m'; // Short-lived token
-
-// --- Type Extensions ---
+// It's good practice to extend the NextAuth types for better type safety
+// You would typically put this in a file like 'next-auth.d.ts' in your project root
 declare module "next-auth" {
-  interface User {
-    id: string;
-    role: UserRole | null;
-    isOtpVerified: boolean;
-    isFaceVerified: boolean;
-    requiresRoleSelection?: boolean;
+  interface Session {
+    user: {
+      id: string;
+      name: string | null;
+      email: string | null;
+      image: string | null;
+      role: UserRole;
+      isOtpVerified: boolean;
+      otpCode: string | null;
+      otpExpiresAt: string | null;
+      isFaceVerified: boolean;
+      selfieImage?: string | null;
+      idImage?: string | null;
+      faceConfidence?: number | null;
+      idName?: string | null;
+      idNumber?: string | null;
+      idDOB?: string | null;
+      idExpiryDate?: string | null;
+      idIssuer?: string | null;
+      personalIdNumber?: string | null;
+      idIssueDate?: string | null;
+    } & DefaultSession["user"];
   }
-  
-  interface Account {}
-  interface Profile {}
+
+  interface JWT {
+    id: string;
+    name: string | null;
+    email: string | null;
+    image: string | null;
+    role: UserRole;
+    isOtpVerified: boolean;
+    otpCode: string | null;
+    otpExpiresAt: string | null;
+    isFaceVerified: boolean;
+    selfieImage?: string | null;
+    idImage?: string | null;
+    faceConfidence?: number | null;
+    idName?: string | null;
+    idNumber?: string | null;
+    idDOB?: string | null;
+    idExpiryDate?: string | null;
+    idIssuer?: string | null;
+    personalIdNumber?: string | null;
+    idIssueDate?: string | null;
+  }
 }
+
+// Ensure environment variables are defined, or your app will crash in production.
+// It's highly recommended to validate these at application startup.
+if (!process.env.GOOGLE_CLIENT_ID) {
+  console.error("GOOGLE_CLIENT_ID is not defined in environment variables.");
+  // Consider throwing an error or exiting the process in a real application
+}
+if (!process.env.GOOGLE_CLIENT_SECRET) {
+  console.error("GOOGLE_CLIENT_SECRET is not defined in environment variables.");
+}
+if (!process.env.NEXTAUTH_SECRET) {
+  console.error("NEXTAUTH_SECRET is not defined in environment variables.");
+}
+
 
 export const authOptions: AuthOptions = {
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      clientId: process.env.GOOGLE_CLIENT_ID!, // '!' asserts non-null, but runtime check above is safer
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!, // '!' asserts non-null
     }),
     CredentialsProvider({
       name: "credentials",
@@ -36,162 +81,199 @@ export const authOptions: AuthOptions = {
         email: { label: "Email", type: "text" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials, req) {
+      async authorize(credentials) {
+        // Check for missing credentials
         if (!credentials?.email || !credentials?.password) {
-          throw new Error("Missing credentials");
+          throw new Error("Missing credentials"); // NextAuth will redirect to signIn page with error param
         }
 
+        // Find user by email
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
         });
 
+        // Check if user exists and has a hashed password
         if (!user || !user.hashedPassword) {
-          throw new Error("Invalid credentials");
+          throw new Error("Invalid credentials"); // Generic error for security (don't reveal if email exists)
         }
 
+        // Compare provided password with hashed password
         const isCorrectPassword = await bcrypt.compare(
           credentials.password,
           user.hashedPassword
         );
 
         if (!isCorrectPassword) {
-          throw new Error("Invalid credentials");
+          throw new Error("Invalid credentials"); // Generic error for security
         }
 
+        // Specific check for PROVIDER role requiring face verification
+        if (user.role === UserRole.PROVIDER && !user.isFaceVerified) {
+          throw new Error("Face verification required for providers"); // This error will be displayed
+        }
+
+        // Ensure user has a role assigned
+        if (!user.role) {
+          throw new Error("Missing account role");
+        }
+
+        // Return the user object, enriching it with default values for optional fields
         return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          isOtpVerified: user.isOtpVerified,
-          isFaceVerified: user.isFaceVerified,
-          requiresRoleSelection: !user.role
+          ...user,
+          isOtpVerified: user.isOtpVerified ?? true, // Default to true if not set
+          isFaceVerified: user.isFaceVerified ?? false, // Default to false if not set
         };
       },
     }),
   ],
 
+  pages: {
+    signIn: "/", // Custom sign-in page
+    newUser: "/role", // Page for new users to select their role
+  },
+
   session: {
-    strategy: "jwt",
-    maxAge: 15 * 60, // 15 minutes (matches JWT expiry)
+    strategy: "jwt", // Use JWT for session management
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+    updateAge: 24 * 60 * 60, // 24 hours
   },
 
   jwt: {
-    secret: JWT_SECRET,
-    maxAge: 15 * 60, // 15 minutes
-    async encode({ secret, token }) {
-      return jwt.sign(token!, secret, { expiresIn: JWT_EXPIRES_IN });
-    },
-    async decode({ secret, token }) {
-      try {
-        return jwt.verify(token!, secret) as any;
-      } catch (e) {
-        return null;
-      }
+    maxAge: 30 * 24 * 60 * 60, // 30 days, matches session maxAge
+  },
+
+  secret: process.env.NEXTAUTH_SECRET, // Secret for signing/encrypting JWTs
+  debug: process.env.NODE_ENV === "development", // Enable debug logs in development
+
+cookies: {
+  sessionToken: {
+    name: `__Secure-next-auth.session-token`,
+    options: {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      secure: process.env.NODE_ENV === "production", // ❗ secure only in prod
+      domain:
+        process.env.NODE_ENV === "production"
+          ? "bookloop-eight.vercel.app"
+          : undefined, // ❗ allow local dev
     },
   },
+},
 
   callbacks: {
     async signIn({ user, account }) {
+      // Logic specific to Google sign-in
       if (account?.provider === "google") {
-        const email = user.email!;
-        let existingUser = await prisma.user.findUnique({
-          where: { email },
+        const existingUser = await prisma.user.findUnique({
+          where: { email: user.email ?? "" },
+          select: { role: true, isFaceVerified: true } // Select only necessary fields
         });
 
         if (!existingUser) {
-          existingUser = await prisma.user.create({
-            data: {
-              email,
-              name: user.name ?? "",
-              image: user.image ?? "",
-              isOtpVerified: false,
-              isFaceVerified: false,
-              role: null,
-            },
-          });
+          // If it's a new Google user, redirect them to the role selection page
+          return '/role';
         }
 
-        Object.assign(user, {
-          id: existingUser.id,
-          role: existingUser.role,
-          isOtpVerified: existingUser.isOtpVerified,
-          isFaceVerified: existingUser.isFaceVerified,
-          requiresRoleSelection: !existingUser.role
-        });
+        // If existing user is a PROVIDER and not face verified, prevent sign-in
+        if (existingUser.role === UserRole.PROVIDER && !existingUser.isFaceVerified) {
+          throw new Error("Face verification required."); // This error will be displayed
+        }
+
+        // Allow sign-in for existing users
+        return true;
       }
+      // For other providers (e.g., Credentials), always allow sign-in if authorize succeeded
       return true;
     },
 
+    async redirect({ url, baseUrl }) {
+      // Allow redirects to relative paths or same-origin URLs
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      else if (new URL(url).origin === baseUrl) return url;
+      // Fallback to base URL for external or malicious redirects
+      return baseUrl;
+    },
+
     async jwt({ token, user, trigger, session }) {
-      // Initial sign in
-      if (user) {
-        token.id = user.id;
-        token.email = user.email;
-        token.name = user.name;
-        token.role = user.role;
-        token.isOtpVerified = user.isOtpVerified;
-        token.isFaceVerified = user.isFaceVerified;
-        token.requiresRoleSelection = user.requiresRoleSelection;
+      // Update token properties if triggered by a session update (e.g., useSession().update())
+      if (trigger === "update" && session?.role) {
+        token.role = session.role;
+
+        // Persist role update to the database
+        await prisma.user.update({
+          where: { email: token.email ?? "" },
+          data: { role: session.role },
+        });
+
+        // If role is updated to PROVIDER, reset face verification status
+        if (session.role === UserRole.PROVIDER) {
+          token.isFaceVerified = false;
+        }
       }
 
-      // Handle role updates
-      if (trigger === "update" && session?.role) {
-        token.role = session.role as UserRole;
-        token.requiresRoleSelection = false;
-        
-        await prisma.user.update({
-          where: { id: token.id as string },
-          data: { role: session.role as UserRole },
-        });
+      // Populate token with user data on initial sign-in
+      if (user) {
+        token.id = user.id;
+        token.name = user.name;
+        token.email = user.email;
+        token.image = user.image;
+        token.role = user.role;
+        token.isOtpVerified = user.isOtpVerified ?? true;
+        token.otpCode = user.otpCode ?? null;
+        // Convert Date objects to ISO strings for consistent storage in JWT
+        token.otpExpiresAt = user.otpExpiresAt?.toISOString() ?? null;
+        token.isFaceVerified = user.isFaceVerified ?? false;
+
+        // Add provider-specific fields if the user is a PROVIDER
+        if (user.role === UserRole.PROVIDER) {
+          token.selfieImage = user.selfieImage ?? null;
+          token.idImage = user.idImage ?? null;
+          token.faceConfidence = user.faceConfidence ?? null;
+          token.idName = user.idName ?? null;
+          token.idNumber = user.idNumber ?? null;
+          token.idDOB = user.idDOB?.toISOString() ?? null;
+          token.idExpiryDate = user.idExpiryDate?.toISOString() ?? null;
+          token.idIssuer = user.idIssuer ?? null;
+          token.personalIdNumber = user.personalIdNumber ?? null;
+          token.idIssueDate = user.idIssueDate?.toISOString() ?? null;
+        }
       }
 
       return token;
     },
 
     async session({ session, token }) {
-      // Send minimal required properties to the client
-      session.user = {
-        id: token.id as string,
-        email: token.email as string,
-        name: token.name as string | null,
-        role: token.role as UserRole | null,
-        isOtpVerified: token.isOtpVerified as boolean,
-        isFaceVerified: token.isFaceVerified as boolean,
-        requiresRoleSelection: token.requiresRoleSelection as boolean,
-      };
-      
-      // Add the JWT token to the session
-      session.token = jwt.sign(
-        {
-          sub: token.id,
-          email: token.email,
-          role: token.role,
-          requiresRoleSelection: token.requiresRoleSelection
-        },
-        JWT_SECRET,
-        { expiresIn: JWT_EXPIRES_IN }
-      );
-
-      return session;
-    },
-
-    async redirect({ url, baseUrl, token }) {
-      // Handle role selection redirect
-      if (token?.requiresRoleSelection && !url.includes("/role")) {
-        return `${baseUrl}/role`;
+      // Map token properties to the session.user object, making them available client-side
+      if (session.user) {
+        session.user = {
+          ...session.user, // Keep default NextAuth user properties
+          id: token.id as string,
+          name: token.name ?? null,
+          email: token.email ?? null,
+          image: token.image ?? null,
+          role: token.role as UserRole,
+          isOtpVerified: token.isOtpVerified,
+          otpCode: token.otpCode,
+          otpExpiresAt: token.otpExpiresAt,
+          isFaceVerified: token.isFaceVerified,
+          // Conditionally add provider-specific fields
+          ...(token.role === UserRole.PROVIDER && {
+            selfieImage: token.selfieImage,
+            idImage: token.idImage,
+            faceConfidence: token.faceConfidence,
+            idName: token.idName,
+            idNumber: token.idNumber,
+            idDOB: token.idDOB,
+            idExpiryDate: token.idExpiryDate,
+            idIssuer: token.idIssuer,
+            personalIdNumber: token.personalIdNumber,
+            idIssueDate: token.idIssueDate,
+          }),
+        };
       }
 
-      // Default redirect handling
-      if (url.startsWith("/")) return `${baseUrl}${url}`;
-      if (new URL(url).origin === baseUrl) return url;
-      return baseUrl;
-    },
-  },
-
-  events: {
-    async signOut() {
-      // Add any cleanup logic for JWT tokens here
+      return session;
     },
   },
 };
