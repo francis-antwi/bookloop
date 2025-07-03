@@ -1,49 +1,64 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import jwt from 'jsonwebtoken';
-import prisma from '@/app/libs/prismadb'; 
+// Import getServerSession and authOptions
+import { getServerSession } from 'next-auth';
+// Adjust path as per your project structure
+import prisma from '@/app/libs/prismadb';
+import { UserRole } from '@prisma/client'; // Assuming UserRole enum is accessible
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Ensure only PATCH requests are allowed for updating roles
   if (req.method !== 'PATCH') {
-    return res.status(405).end();
+    return res.status(405).json({ message: 'Method Not Allowed' });
   }
 
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) {
-    return res.status(401).json({ error: 'Unauthorized' });
+  // 1. Get the session using getServerSession
+  const session = await getServerSession(req, res, authOptions);
+
+  // 2. Check if the user is authenticated
+  // If no session or no user in session, return 401 Unauthorized
+  if (!session || !session.user || !session.user.id) {
+    return res.status(401).json({ message: 'Authentication required' });
+  }
+
+  const { role } = req.body;
+
+  // 3. Validate the incoming role against your UserRole enum
+  // Ensure the role is one of the allowed values
+  if (!role || !Object.values(UserRole).includes(role)) {
+    return res.status(400).json({ message: 'Invalid role provided.' });
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!);
-    const { role } = req.body;
-
-    // Validate role
-    if (!['CUSTOMER', 'PROVIDER'].includes(role)) {
-      return res.status(400).json({ error: 'Invalid role' });
-    }
-
-    // Update user
-    const user = await prisma.user.update({
-      where: { id: decoded.sub as string },
-      data: { role },
-      select: {
+    // 4. Update the user's role in the database
+    const updatedUser = await prisma.user.update({
+      where: { id: session.user.id }, // Use the user ID from the session
+      data: {
+        role: role,
+        // Apply the same logic as in your NextAuth.js jwt callback:
+        // If the role is set to PROVIDER, reset isFaceVerified to false.
+        // Also, consider clearing selfieImage and idImage here if they should be reset.
+        isFaceVerified: role === UserRole.PROVIDER ? false : undefined,
+        selfieImage: role === UserRole.PROVIDER ? null : undefined, // Clear if changing to PROVIDER
+        idImage: role === UserRole.PROVIDER ? null : undefined,     // Clear if changing to PROVIDER
+      },
+      select: { // Select only necessary fields to return to the client
         id: true,
         email: true,
         role: true,
         isFaceVerified: true,
         selfieImage: true,
-        idImage: true
+        idImage: true,
+        // Add any other fields that RoleSelector's UserData interface expects
       }
     });
 
-    // Optionally issue new token
-    const newToken = jwt.sign(
-      { sub: user.id, role: user.role },
-      process.env.JWT_SECRET!,
-      { expiresIn: '15m' }
-    );
+    // 5. Return the updated user data.
+    // The frontend's `useSession().update()` will then automatically refresh its session state.
+    return res.status(200).json({ user: updatedUser, message: 'Role updated successfully' });
 
-    return res.json({ user, token: newToken });
-  } catch (err) {
-    return res.status(401).json({ error: 'Invalid token' });
+  } catch (error) {
+    console.error('Error updating user role:', error);
+    // Provide a more generic error message for security
+    return res.status(500).json({ message: 'Failed to update role due to a server error.' });
   }
 }
