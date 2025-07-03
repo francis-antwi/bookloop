@@ -4,6 +4,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import prisma from "@/app/libs/prismadb";
 import bcrypt from "bcrypt";
 import { UserRole } from "@prisma/client";
+import { PrismaAdapter } from "@next-auth/prisma-adapter"; // Import PrismaAdapter
 
 // It's good practice to extend the NextAuth types for better type safety
 // You would typically put this in a file like 'next-auth.d.ts' in your project root
@@ -70,6 +71,8 @@ if (!process.env.NEXTAUTH_SECRET) {
 
 
 export const authOptions: AuthOptions = {
+  // Add the PrismaAdapter here to enable database persistence for users and accounts
+  adapter: PrismaAdapter(prisma), 
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!, // '!' asserts non-null, but runtime check above is safer
@@ -233,30 +236,31 @@ export const authOptions: AuthOptions = {
       }
 
       // Populate token with user data on initial sign-in
+      // When using an adapter, 'user' will contain the full user object from the database
+      // including all custom fields.
       if (user) {
         token.id = user.id;
         token.name = user.name;
         token.email = user.email;
-        token.image = user.image as string | null; // Explicitly cast image to string | null
-        token.role = user.role;
-        token.isOtpVerified = user.isOtpVerified ?? true;
-        token.otpCode = user.otpCode ?? null;
-        // Convert Date objects to ISO strings for consistent storage in JWT
-        token.otpExpiresAt = user.otpExpiresAt?.toISOString() ?? null;
-        token.isFaceVerified = user.isFaceVerified ?? false;
+        token.image = user.image as string | null; 
+        token.role = (user as any).role; // Cast to any to access custom properties from adapter user
+        token.isOtpVerified = (user as any).isOtpVerified ?? true;
+        token.otpCode = (user as any).otpCode ?? null;
+        token.otpExpiresAt = (user as any).otpExpiresAt?.toISOString() ?? null;
+        token.isFaceVerified = (user as any).isFaceVerified ?? false;
 
         // Add provider-specific fields if the user is a PROVIDER
-        if (user.role === UserRole.PROVIDER) {
-          token.selfieImage = user.selfieImage ?? null;
-          token.idImage = user.idImage ?? null;
-          token.faceConfidence = user.faceConfidence ?? null;
-          token.idName = user.idName ?? null;
-          token.idNumber = user.idNumber ?? null;
-          token.idDOB = user.idDOB?.toISOString() ?? null;
-          token.idExpiryDate = user.idExpiryDate?.toISOString() ?? null;
-          token.idIssuer = user.idIssuer ?? null;
-          token.personalIdNumber = user.personalIdNumber ?? null;
-          token.idIssueDate = user.idIssueDate?.toISOString() ?? null;
+        if ((user as any).role === UserRole.PROVIDER) {
+          token.selfieImage = (user as any).selfieImage ?? null;
+          token.idImage = (user as any).idImage ?? null;
+          token.faceConfidence = (user as any).faceConfidence ?? null;
+          token.idName = (user as any).idName ?? null;
+          token.idNumber = (user as any).idNumber ?? null;
+          token.idDOB = (user as any).idDOB?.toISOString() ?? null;
+          token.idExpiryDate = (user as any).idExpiryDate?.toISOString() ?? null;
+          token.idIssuer = (user as any).idIssuer ?? null;
+          token.personalIdNumber = (user as any).personalIdNumber ?? null;
+          token.idIssueDate = (user as any).idIssueDate?.toISOString() ?? null;
         }
       }
 
