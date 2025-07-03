@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import prisma from '@/app/libs/prismadb';
 import { UserRole } from '@prisma/client';
-
+import { signIn } from "next-auth/react";
+await signIn('google', { redirect: false })
 /**
  * POST /api/role
  * Allows an authenticated user to set their role to 'CUSTOMER' or 'PROVIDER'.
