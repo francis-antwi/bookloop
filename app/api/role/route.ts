@@ -3,109 +3,148 @@ import { getToken } from 'next-auth/jwt';
 import prisma from '@/app/libs/prismadb';
 import { UserRole } from '@prisma/client';
 
-export async function GET(req: NextRequest) {
-  const token = await getToken({ req });
-
-  if (!token?.email) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { email: token.email },
-    select: {
-      email: true,
-      role: true,
-      isFaceVerified: true,
-      selfieImage: true,
-      idImage: true,
-      hasSelectedRole: true,
+// Helper function for consistent error responses
+const errorResponse = (message: string, status: number, details?: any) => {
+  return NextResponse.json(
+    { 
+      success: false,
+      error: message,
+      ...(details && { details }) 
     },
-  });
+    { status }
+  );
+};
 
-  if (!user) {
-    return NextResponse.json({ error: 'User not found' }, { status: 404 });
+export async function GET(req: NextRequest) {
+  try {
+    const token = await getToken({ req });
+    
+    if (!token?.email) {
+      return errorResponse('Authentication required', 401);
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: token.email },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        isFaceVerified: true,
+        isOtpVerified: true,
+        selfieImage: true,
+        idImage: true,
+        hasSelectedRole: true,
+        verified: true,
+      },
+    });
+
+    if (!user) {
+      return errorResponse('User not found', 404);
+    }
+
+    return NextResponse.json(
+      { 
+        success: true,
+        data: {
+          requiresRoleSelection: !user.hasSelectedRole,
+          requiresVerification: user.role === 'PROVIDER' && !user.isFaceVerified,
+          ...user
+        }
+      },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error('[GET /api/role] Error:', error);
+    return errorResponse('Internal server error', 500);
   }
-
-  return NextResponse.json({ user }, { status: 200 });
 }
 
 export async function POST(req: NextRequest) {
   try {
     const token = await getToken({ req });
-
-    if (!token || !token.email) {
-      return NextResponse.json(
-        { error: 'Unauthorized', message: 'Please sign in first.' },
-        { status: 401 }
-      );
+    
+    if (!token?.email) {
+      return errorResponse('Authentication required', 401);
     }
 
     const { role } = await req.json();
-    const normalizedRole = role?.toString().trim().toUpperCase();
+    
+    if (!role || typeof role !== 'string') {
+      return errorResponse('Role is required', 400);
+    }
 
-    if (!normalizedRole || !(normalizedRole in UserRole)) {
-      return NextResponse.json(
-        { error: 'Invalid role', message: "Role must be 'CUSTOMER' or 'PROVIDER'." },
-        { status: 400 }
-      );
+    const selectedRole = role.trim().toUpperCase();
+    
+    if (!Object.values(UserRole).includes(selectedRole as UserRole)) {
+      return errorResponse('Invalid role specified', 400, {
+        validRoles: Object.values(UserRole).filter(r => r !== 'ADMIN') // Typically users can't self-select ADMIN
+      });
     }
 
     const user = await prisma.user.findUnique({
       where: { email: token.email },
+      select: {
+        id: true,
+        role: true,
+        isFaceVerified: true,
+        isOtpVerified: true,
+        selfieImage: true,
+        idImage: true,
+        verified: true
+      },
     });
 
     if (!user) {
-      return NextResponse.json(
-        { error: 'User not found', message: 'Could not find the signed-in user in the database.' },
-        { status: 404 }
-      );
+      return errorResponse('User not found', 404);
     }
 
-    if (
-      normalizedRole === UserRole.PROVIDER &&
-      (!user.isFaceVerified || !user.selfieImage || !user.idImage)
-    ) {
-      return NextResponse.json(
-        {
-          error: 'Verification required',
-          message: 'You must complete face and ID verification before selecting Service Provider.',
-        },
-        { status: 403 }
-      );
+    // Check if trying to change existing role
+    if (user.role && user.role !== selectedRole) {
+      return errorResponse('Role cannot be changed once set', 403);
     }
 
-    if (user.role === normalizedRole) {
-      return NextResponse.json(
-        { success: true, message: `Role is already set to ${normalizedRole}.`, user },
-        { status: 200 }
-      );
+    // Provider-specific verification checks
+    if (selectedRole === UserRole.PROVIDER) {
+      if (!user.isFaceVerified || !user.verified) {
+        return errorResponse('Face verification required for providers', 403, {
+          requiresVerification: true
+        });
+      }
+
+      if (!user.selfieImage || !user.idImage) {
+        return errorResponse('ID and selfie uploads required for providers', 403, {
+          requiresUploads: true
+        });
+      }
     }
 
     const updatedUser = await prisma.user.update({
       where: { email: token.email },
       data: {
-        role: normalizedRole as UserRole,
+        role: selectedRole as UserRole,
         hasSelectedRole: true,
+        ...(selectedRole === UserRole.CUSTOMER && { isOtpVerified: true }) // Auto-verify customers
       },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        hasSelectedRole: true
+      }
     });
 
     return NextResponse.json(
       {
         success: true,
-        message: `Your role has been updated to ${normalizedRole}.`,
-        user: updatedUser,
-        shouldRefreshSession: true,
+        data: updatedUser,
+        message: `Role successfully set to ${selectedRole}`,
+        requiresSessionUpdate: true
       },
       { status: 200 }
     );
-  } catch (error: any) {
+
+  } catch (error) {
     console.error('[POST /api/role] Error:', error);
-    return NextResponse.json(
-      {
-        error: 'Internal Server Error',
-        message: error.message || 'Something went wrong while updating your role.',
-      },
-      { status: 500 }
-    );
+    return errorResponse('Internal server error', 500);
   }
 }

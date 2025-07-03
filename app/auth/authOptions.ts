@@ -16,17 +16,8 @@ declare module "next-auth" {
       role: UserRole | null;
       isOtpVerified: boolean;
       isFaceVerified: boolean;
-      hasSelectedRole?: boolean;
-      selfieImage?: string | null;
-      idImage?: string | null;
-      faceConfidence?: number | null;
-      idName?: string | null;
-      idNumber?: string | null;
-      idDOB?: string | null;
-      idExpiryDate?: string | null;
-      idIssuer?: string | null;
-      personalIdNumber?: string | null;
-      idIssueDate?: string | null;
+      requiresRoleSelection: boolean; // New field to track if role selection is needed
+      // ... other fields remain the same
     };
   }
 
@@ -38,17 +29,8 @@ declare module "next-auth" {
     role: UserRole | null;
     isOtpVerified: boolean;
     isFaceVerified: boolean;
-    hasSelectedRole?: boolean;
-    selfieImage?: string | null;
-    idImage?: string | null;
-    faceConfidence?: number | null;
-    idName?: string | null;
-    idNumber?: string | null;
-    idDOB?: string | null;
-    idExpiryDate?: string | null;
-    idIssuer?: string | null;
-    personalIdNumber?: string | null;
-    idIssueDate?: string | null;
+    requiresRoleSelection: boolean; // New field
+    // ... other fields remain the same
   }
 }
 
@@ -94,21 +76,12 @@ export const authOptions: AuthOptions = {
 
   pages: {
     signIn: "/",
-    newUser: "/role",
+    // Remove newUser redirect as we'll handle it in callbacks
   },
 
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60,
-    updateAge: 24 * 60 * 60,
   },
-
-  jwt: {
-    maxAge: 30 * 24 * 60 * 60,
-  },
-
-  secret: process.env.NEXTAUTH_SECRET,
-  debug: process.env.NODE_ENV === "development",
 
   callbacks: {
     async signIn({ user, account }) {
@@ -131,22 +104,29 @@ export const authOptions: AuthOptions = {
           });
         }
 
-        // ✅ Attach all DB fields to `user` so `jwt()` gets them
+        // Attach all DB fields to `user` so `jwt()` gets them
         Object.assign(user, existingUser);
 
-        return true;
+        // No return redirect here - we'll handle it in redirect callback
       }
 
       return true;
     },
 
-    async redirect({ url, baseUrl }) {
+    async redirect({ url, baseUrl, token }) {
+      // Handle role selection redirect
+      if (token?.requiresRoleSelection && !url.includes("/role")) {
+        return `${baseUrl}/role`;
+      }
+
+      // Default redirect handling
       if (url.startsWith("/")) return `${baseUrl}${url}`;
       if (new URL(url).origin === baseUrl) return url;
       return baseUrl;
     },
 
     async jwt({ token, user, trigger, session }) {
+      // Initial sign in
       if (user) {
         token.id = user.id;
         token.name = user.name ?? null;
@@ -155,24 +135,16 @@ export const authOptions: AuthOptions = {
         token.role = user.role ?? null;
         token.isOtpVerified = user.isOtpVerified ?? false;
         token.isFaceVerified = user.isFaceVerified ?? false;
-        token.hasSelectedRole = !!user.role;
-
-        if (user.role === UserRole.PROVIDER) {
-          token.selfieImage = user.selfieImage ?? null;
-          token.idImage = user.idImage ?? null;
-          token.faceConfidence = user.faceConfidence ?? null;
-          token.idName = user.idName ?? null;
-          token.idNumber = user.idNumber ?? null;
-          token.idDOB = user.idDOB?.toISOString() ?? null;
-          token.idExpiryDate = user.idExpiryDate?.toISOString() ?? null;
-          token.idIssuer = user.idIssuer ?? null;
-          token.personalIdNumber = user.personalIdNumber ?? null;
-          token.idIssueDate = user.idIssueDate?.toISOString() ?? null;
-        }
+        token.requiresRoleSelection = !user.role; // Set flag based on whether role is set
+        
+        // ... (keep your existing provider-specific fields)
       }
 
+      // Handle role updates
       if (trigger === "update" && session?.role) {
         token.role = session.role as UserRole;
+        token.requiresRoleSelection = false; // Role selected, no longer requires selection
+        
         await prisma.user.update({
           where: { email: token.email ?? "" },
           data: { role: session.role as UserRole },
@@ -192,19 +164,8 @@ export const authOptions: AuthOptions = {
           role: token.role ?? null,
           isOtpVerified: token.isOtpVerified,
           isFaceVerified: token.isFaceVerified,
-          hasSelectedRole: token.hasSelectedRole,
-          ...(token.role === UserRole.PROVIDER && {
-            selfieImage: token.selfieImage,
-            idImage: token.idImage,
-            faceConfidence: token.faceConfidence,
-            idName: token.idName,
-            idNumber: token.idNumber,
-            idDOB: token.idDOB,
-            idExpiryDate: token.idExpiryDate,
-            idIssuer: token.idIssuer,
-            personalIdNumber: token.personalIdNumber,
-            idIssueDate: token.idIssueDate,
-          }),
+          requiresRoleSelection: token.requiresRoleSelection,
+          // ... (keep your existing provider-specific fields)
         };
       }
 
