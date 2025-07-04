@@ -1,297 +1,216 @@
-'use client';
+import NextAuth, { AuthOptions } from "next-auth";
+import GoogleProvider from "next-auth/providers/google";
+import CredentialsProvider from "next-auth/providers/credentials";
+import prisma from "@/app/libs/prismadb";
+import bcrypt from "bcrypt";
+import { UserRole } from "@prisma/client";
 
-import { signIn } from 'next-auth/react';
-import { FcGoogle } from 'react-icons/fc';
-import { HiOutlineMail, HiOutlineLockClosed, HiOutlineEye, HiOutlineEyeOff } from 'react-icons/hi';
-import { IoMdClose } from 'react-icons/io';
-import { useCallback, useState } from 'react';
-import { FieldValues, SubmitHandler, useForm } from 'react-hook-form';
-import useRegisterModal from '@/app/hooks/useRegisterModal';
-import toast from 'react-hot-toast';
-
-import useLoginModal from '@/app/hooks/useLoginModal';
-import { useRouter } from "next/navigation";
-
-
-const LoginModal = () => {
-    const router = useRouter();
-    const registerModal = useRegisterModal();
-    const loginModal = useLoginModal();
-    const [isLoading, setIsLoading] = useState(false);
-    const [showPassword, setShowPassword] = useState(false);
-
-    const { register, handleSubmit, formState: { errors } } = useForm<FieldValues>({
-        defaultValues: {
-            email: '',
-            password: '',
+export const authOptions: AuthOptions = {
+  providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
+    CredentialsProvider({
+      name: "credentials",
+      credentials: {
+        email: { label: "Email", type: "text" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) {
+          throw new Error("MISSING_CREDENTIALS");
         }
-    });
 
- const onSubmit: SubmitHandler<FieldValues> = (data) => {
-  setIsLoading(true);
+        const user = await prisma.user.findUnique({
+          where: { email: credentials.email },
+        });
 
-  signIn("credentials", {
-    ...data,
-    redirect: false,
-  })
-    .then((callback) => {
-      setIsLoading(false);
+        if (!user || !user.hashedPassword) {
+          throw new Error("INVALID_CREDENTIALS");
+        }
 
-      if (callback?.ok) {
-        toast.success("Logged In");
+        const isCorrectPassword = await bcrypt.compare(
+          credentials.password,
+          user.hashedPassword
+        );
 
-        // Read callbackUrl from current URL if present
-        const urlParams = new URLSearchParams(window.location.search);
-        const callbackUrl = urlParams.get("callbackUrl");
+        if (!isCorrectPassword) throw new Error("INVALID_CREDENTIALS");
+        if (!user.isOtpVerified) throw new Error("PHONE_VERIFICATION_REQUIRED");
+        if (user.role === UserRole.PROVIDER && !user.isFaceVerified) {
+          throw new Error("FACE_VERIFICATION_REQUIRED");
+        }
+        if (!user.role) throw new Error("MISSING_ROLE");
 
-        // Prevent redirecting back to forgot-password
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          role: user.role,
+          isOtpVerified: user.isOtpVerified ?? true,
+          isFaceVerified: user.isFaceVerified ?? false,
+        };
+      },
+    }),
+  ],
+
+  pages: {
+    signIn: "/",
+    error: "/auth/error",
+    newUser: "/role",
+  },
+
+  session: {
+    strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60,
+    updateAge: 24 * 60 * 60,
+  },
+
+  jwt: {
+    maxAge: 30 * 24 * 60 * 60,
+  },
+
+  secret: process.env.NEXTAUTH_SECRET,
+  debug: process.env.NODE_ENV === "development",
+  trustHost: true,
+
+  cookies: {
+    sessionToken: {
+      name: `__Secure-next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: true,
+        domain:
+          process.env.NODE_ENV === "production"
+            ? "bookloop-eight.vercel.app"
+            : undefined,
+      },
+    },
+  },
+
+  callbacks: {
+    async signIn({ user, account }) {
+      if (account?.provider === "google") {
+        const existingUser = await prisma.user.findUnique({
+          where: { email: user.email ?? "" },
+        });
+
+        if (!existingUser) {
+          return "/auth/error?error=redirect-role";
+        }
+
         if (
-          callbackUrl &&
-          callbackUrl !== "/forgot-password" &&
-          !callbackUrl.includes("/forgot-password")
+          existingUser.role &&
+          existingUser.isOtpVerified &&
+          (existingUser.role !== UserRole.PROVIDER || existingUser.isFaceVerified)
         ) {
-          router.push(callbackUrl);
-        } else {
-          router.push("/"); // Fallback to home
+          return "/";
         }
-          router.refresh(); //
-        loginModal.onClose();
-      } else if (callback?.error) {
-        toast.error(callback.error || "Invalid credentials");
+
+        if (!existingUser.role) {
+          return "/auth/error?error=redirect-role";
+        }
+
+        if (!existingUser.isOtpVerified) {
+          return "/auth/error?error=redirect-verify";
+        }
+
+        if (
+          existingUser.role === UserRole.PROVIDER &&
+          !existingUser.isFaceVerified
+        ) {
+          return "/auth/error?error=redirect-verify";
+        }
       }
-    })
-    .catch(() => {
-      setIsLoading(false);
-      toast.error("Something went wrong. Please try again.");
-    });
+
+      return true;
+    },
+
+    async jwt({ token, user, trigger, session }) {
+      if (trigger === "update" && session?.role && session.role !== token.role) {
+        token.role = session.role;
+
+        await prisma.user.update({
+          where: { email: token.email ?? "" },
+          data: { role: session.role },
+        });
+
+        if (session.role === UserRole.PROVIDER) {
+          token.isFaceVerified = false;
+        }
+      }
+
+      if (user && user.email) {
+        const dbUser = await prisma.user.findUnique({
+          where: { email: user.email },
+        });
+
+        if (dbUser) {
+          token = {
+            ...token,
+            id: dbUser.id,
+            name: dbUser.name ?? "",
+            email: dbUser.email ?? "",
+            image: dbUser.image ?? null,
+            role: dbUser.role ?? null,
+            isOtpVerified: dbUser.isOtpVerified ?? true,
+            isFaceVerified: dbUser.isFaceVerified ?? false,
+            otpCode: dbUser.otpCode ?? null,
+            otpExpiresAt: dbUser.otpExpiresAt?.toISOString() ?? null,
+          };
+
+          if (dbUser.role === UserRole.PROVIDER) {
+            token = {
+              ...token,
+              selfieImage: dbUser.selfieImage ?? null,
+              idImage: dbUser.idImage ?? null,
+              faceConfidence: dbUser.faceConfidence ?? null,
+              idName: dbUser.idName ?? null,
+              idNumber: dbUser.idNumber ?? null,
+              idDOB: dbUser.idDOB?.toISOString() ?? null,
+              idExpiryDate: dbUser.idExpiryDate?.toISOString() ?? null,
+              idIssuer: dbUser.idIssuer ?? null,
+              personalIdNumber: dbUser.personalIdNumber ?? null,
+              idIssueDate: dbUser.idIssueDate?.toISOString() ?? null,
+            };
+          }
+        }
+      }
+
+      return token;
+    },
+
+    async session({ session, token }) {
+      if (session.user) {
+        session.user = {
+          id: token.id as string,
+          name: token.name ?? null,
+          email: token.email ?? null,
+          image: token.image ?? null,
+          role: token.role as UserRole,
+          isOtpVerified: token.isOtpVerified ?? true,
+          isFaceVerified: token.isFaceVerified ?? false,
+          otpCode: token.otpCode ?? null,
+          otpExpiresAt: token.otpExpiresAt ?? null,
+          selfieImage: token.selfieImage ?? null,
+          idImage: token.idImage ?? null,
+          faceConfidence: token.faceConfidence ?? null,
+          idName: token.idName ?? null,
+          idNumber: token.idNumber ?? null,
+          idDOB: token.idDOB ?? null,
+          idExpiryDate: token.idExpiryDate ?? null,
+          idIssuer: token.idIssuer ?? null,
+          personalIdNumber: token.personalIdNumber ?? null,
+          idIssueDate: token.idIssueDate ?? null,
+        };
+      }
+
+      return session;
+    },
+  },
 };
 
-    const toggle = useCallback(() => {
-        loginModal.onClose();
-        registerModal.onOpen();
-    }, [loginModal, registerModal]);
-
-    if (!loginModal.isOpen) return null;
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4">
-            {/* Enhanced backdrop with blur */}
-            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={loginModal.onClose} />
-            
-            {/* Modal container with animation */}
-            <div className="relative w-full max-w-md transform animate-in fade-in zoom-in-95 duration-300">
-                {/* Gradient border effect */}
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 rounded-3xl blur-sm opacity-75" />
-                
-                <div className="relative bg-white/95 backdrop-blur-xl border border-white/20 rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
-                    {/* Header with gradient accent */}
-                    <div className="relative">
-                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500" />
-                        
-                        <div className="flex items-center justify-between p-6 border-b border-gray-100/50">
-                            <div className="text-center flex-1">
-                                <h2 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
-                                    Welcome Back
-                                </h2>
-                                <p className="text-sm text-gray-600 mt-1">Sign in to your BookLoop account</p>
-                            </div>
-                            
-                            <button
-                                onClick={loginModal.onClose}
-                                disabled={isLoading}
-                                className="
-                                    group ml-4 p-2 rounded-full
-                                    bg-gray-100/50 hover:bg-red-50
-                                    border border-gray-200/50 hover:border-red-200
-                                    transition-all duration-200
-                                    hover:scale-110 active:scale-95
-                                    focus:outline-none focus:ring-2 focus:ring-red-500/20
-                                "
-                            >
-                                <IoMdClose 
-                                    size={18} 
-                                    className="text-gray-600 group-hover:text-red-500 transition-colors duration-200" 
-                                />
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Body */}
-                    <div className="flex-1 p-6">
-                        <div className="space-y-5">
-                            {/* Email input with icon */}
-                            <div className="relative">
-                                <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-                                    <HiOutlineMail size={20} />
-                                </div>
-                                <input
-                                    {...register('email', { 
-                                        required: 'Email is required',
-                                        pattern: {
-                                            value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                                            message: 'Invalid email address'
-                                        }
-                                    })}
-                                    type="email"
-                                    placeholder="Enter your email"
-                                    disabled={isLoading}
-                                    className="
-                                        w-full pl-11 pr-4 py-3 rounded-xl
-                                        bg-gray-50/50 border border-gray-200/50
-                                        focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20
-                                        transition-all duration-200
-                                        placeholder:text-gray-400
-                                        disabled:opacity-50 disabled:cursor-not-allowed
-                                    "
-                                />
-                                {errors.email && (
-                                    <p className="mt-1 text-xs text-red-500">{errors.email.message as string}</p>
-                                )}
-                            </div>
-
-                            {/* Password input with icon and toggle */}
-                            <div className="relative">
-                                <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-                                    <HiOutlineLockClosed size={20} />
-                                </div>
-                                <input
-                                    {...register('password', { 
-                                        required: 'Password is required',
-                                        minLength: {
-                                            value: 6,
-                                            message: 'Password must be at least 8 characters'
-                                        }
-                                    })}
-                                    type={showPassword ? "text" : "password"}
-                                    placeholder="Enter your password"
-                                    disabled={isLoading}
-                                    className="
-                                        w-full pl-11 pr-11 py-3 rounded-xl
-                                        bg-gray-50/50 border border-gray-200/50
-                                        focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20
-                                        transition-all duration-200
-                                        placeholder:text-gray-400
-                                        disabled:opacity-50 disabled:cursor-not-allowed
-                                    "
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                                >
-                                    {showPassword ? <HiOutlineEyeOff size={20} /> : <HiOutlineEye size={20} />}
-                                </button>
-                                {errors.password && (
-                                    <p className="mt-1 text-xs text-red-500">{errors.password.message as string}</p>
-                                )}
-                            </div>
-
-                            {/* Forgot password link */}
-                            <div className="text-right">
-                               <button
-  type="button"
- onClick={() => {
-    loginModal.onClose(); // ✅ close the modal first
-    router.push("/forgot-password", { scroll: false }); // ✅ then navigate
-  }}
-  className="text-sm text-blue-600 hover:text-blue-700 hover:underline transition-colors duration-200"
->
-  Forgot password?
-</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Footer */}
-                    <div className="bg-gray-50/50 backdrop-blur-sm p-6 border-t border-gray-100/50">
-                        {/* Primary action button */}
-                        <button
-                            disabled={isLoading}
-                            onClick={handleSubmit(onSubmit)}
-                            className="
-                                w-full py-3 px-6 rounded-xl font-semibold text-white
-                                bg-gradient-to-r from-blue-600 to-purple-600
-                                hover:from-blue-700 hover:to-purple-700
-                                transform transition-all duration-200
-                                hover:scale-[1.02] active:scale-[0.98]
-                                disabled:opacity-50 disabled:cursor-not-allowed
-                                disabled:hover:scale-100
-                                focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2
-                                shadow-lg hover:shadow-xl
-                                relative overflow-hidden
-                            "
-                        >
-                            {isLoading ? (
-                                <div className="flex items-center justify-center gap-2">
-                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                    Signing in...
-                                </div>
-                            ) : (
-                                'Sign In'
-                            )}
-                        </button>
-
-                        {/* Divider */}
-                        <div className="relative my-6">
-                            <div className="absolute inset-0 flex items-center">
-                                <div className="w-full border-t border-gray-200" />
-                            </div>
-                            <div className="relative flex justify-center text-sm">
-                                <span className="px-4 bg-gray-50/50 text-gray-500 font-medium">Or continue with</span>
-                            </div>
-                        </div>
-
-                        {/* Google sign-in button */}
-                        <button
-onClick={async () => {
-  setIsLoading(true);
-
-  try {
-    // Trigger Google sign-in (redirects to provider)
-    await signIn("google");
-  } catch (error) {
-    console.error("Google sign-in error:", error);
-    toast.error("Google sign-in failed. Please try again.");
-    setIsLoading(false); // restore loading state if signIn fails synchronously
-  }
-}}
-
-  disabled={isLoading}
-  className="
-    w-full py-3 px-6 rounded-xl font-semibold
-    bg-white border-2 border-gray-200
-    text-gray-700 hover:text-gray-900
-    hover:border-gray-300 hover:bg-gray-50
-    transform transition-all duration-200
-    hover:scale-[1.02] active:scale-[0.98]
-    disabled:opacity-50 disabled:cursor-not-allowed
-    disabled:hover:scale-100
-    focus:outline-none focus:ring-2 focus:ring-gray-500/20 focus:ring-offset-2
-    shadow-sm hover:shadow-md
-    flex items-center justify-center gap-3
-  "
->
-  <FcGoogle size={20} />
-  Continue with Google
-</button>
-
-                        {/* Sign up link */}
-                        <div className="mt-6 text-center">
-                            <p className="text-sm text-gray-600">
-                                First time using BookLoop?{' '}
-                                <button
-                                    onClick={toggle}
-                                    className="text-blue-600 hover:text-blue-700 font-semibold hover:underline transition-colors duration-200"
-                                >
-                                    Create account
-                                </button>
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-export default LoginModal;
+export default NextAuth(authOptions);
