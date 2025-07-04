@@ -242,7 +242,7 @@ const LoginModal = () => {
                         </div>
 
                         {/* Google sign-in button */}
-                        {/* <button
+                        <button
 onClick={async () => {
   setIsLoading(true);
 
@@ -273,7 +273,7 @@ onClick={async () => {
 >
   <FcGoogle size={20} />
   Continue with Google
-</button> */}
+</button>
 
                         {/* Sign up link */}
                         <div className="mt-6 text-center">
