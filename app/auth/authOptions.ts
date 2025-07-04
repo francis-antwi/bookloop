@@ -19,7 +19,7 @@ export const authOptions: AuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error("Missing credentials");
+          throw new Error("MISSING_CREDENTIALS");
         }
 
         const user = await prisma.user.findUnique({
@@ -27,7 +27,7 @@ export const authOptions: AuthOptions = {
         });
 
         if (!user || !user.hashedPassword) {
-          throw new Error("Invalid credentials");
+          throw new Error("INVALID_CREDENTIALS");
         }
 
         const isCorrectPassword = await bcrypt.compare(
@@ -35,15 +35,19 @@ export const authOptions: AuthOptions = {
           user.hashedPassword
         );
 
-        if (!isCorrectPassword) throw new Error("Invalid credentials");
-        if (!user.isOtpVerified) throw new Error("Phone verification required");
+        if (!isCorrectPassword) throw new Error("INVALID_CREDENTIALS");
+        if (!user.isOtpVerified) throw new Error("PHONE_VERIFICATION_REQUIRED");
         if (user.role === UserRole.PROVIDER && !user.isFaceVerified) {
-          throw new Error("Face verification required for providers");
+          throw new Error("FACE_VERIFICATION_REQUIRED");
         }
-        if (!user.role) throw new Error("Missing account role");
+        if (!user.role) throw new Error("MISSING_ROLE");
 
         return {
-          ...user,
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          role: user.role,
           isOtpVerified: user.isOtpVerified ?? true,
           isFaceVerified: user.isFaceVerified ?? false,
         };
@@ -52,9 +56,9 @@ export const authOptions: AuthOptions = {
   ],
 
   pages: {
-    signIn: "/", // Home/login page
-    error: "/auth/error", // Custom error page
-    newUser: "/role", // Google users go here for manual onboarding
+    signIn: "/",
+    error: "/auth/error",
+    newUser: "/role",
   },
 
   session: {
@@ -79,7 +83,7 @@ export const authOptions: AuthOptions = {
         sameSite: "lax",
         path: "/",
         secure: true,
-        domain: "bookloop-eight.vercel.app", // ✅ Update for prod
+        domain: "bookloop-eight.vercel.app",
       },
     },
   },
@@ -92,20 +96,18 @@ export const authOptions: AuthOptions = {
         });
 
         if (!existingUser) {
-          // ✅ Allow login — onboarding continues on /role
-          return true;
+          return true; // Redirect to /role for onboarding
         }
 
-        // ✅ User exists, now check OTP and face verification
         if (!existingUser.isOtpVerified) {
-          throw new Error("Phone verification required.");
+          throw new Error("PHONE_VERIFICATION_REQUIRED");
         }
 
         if (
           existingUser.role === UserRole.PROVIDER &&
           !existingUser.isFaceVerified
         ) {
-          throw new Error("Face verification required.");
+          throw new Error("FACE_VERIFICATION_REQUIRED");
         }
 
         return true;
@@ -115,8 +117,9 @@ export const authOptions: AuthOptions = {
     },
 
     async jwt({ token, user, trigger, session }) {
-      if (trigger === "update" && session?.role) {
+      if (trigger === "update" && session?.role && session.role !== token.role) {
         token.role = session.role;
+
         await prisma.user.update({
           where: { email: token.email ?? "" },
           data: { role: session.role },
@@ -130,28 +133,42 @@ export const authOptions: AuthOptions = {
       if (user) {
         token = {
           ...token,
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          image: user.image,
-          role: user.role,
+          id: user.id ?? "",
+          name: user.name ?? null,
+          email: user.email ?? null,
+          image: user.image ?? null,
+          role: user.role ?? null,
           isOtpVerified: user.isOtpVerified ?? true,
-          otpCode: user.otpCode ?? null,
-          otpExpiresAt: user.otpExpiresAt?.toISOString() ?? null,
           isFaceVerified: user.isFaceVerified ?? false,
-          ...(user.role === UserRole.PROVIDER && {
-            selfieImage: user.selfieImage ?? null,
-            idImage: user.idImage ?? null,
-            faceConfidence: user.faceConfidence ?? null,
-            idName: user.idName ?? null,
-            idNumber: user.idNumber ?? null,
-            idDOB: user.idDOB?.toISOString() ?? null,
-            idExpiryDate: user.idExpiryDate?.toISOString() ?? null,
-            idIssuer: user.idIssuer ?? null,
-            personalIdNumber: user.personalIdNumber ?? null,
-            idIssueDate: user.idIssueDate?.toISOString() ?? null,
-          }),
         };
+
+        if (user.role === UserRole.PROVIDER) {
+          const providerUser = await prisma.user.findUnique({
+            where: { email: user.email ?? "" },
+          });
+
+          if (providerUser) {
+            token = {
+              ...token,
+              selfieImage: providerUser.selfieImage ?? null,
+              idImage: providerUser.idImage ?? null,
+              faceConfidence: providerUser.faceConfidence ?? null,
+              idName: providerUser.idName ?? null,
+              idNumber: providerUser.idNumber ?? null,
+              idDOB: providerUser.idDOB?.toISOString() ?? null,
+              idExpiryDate: providerUser.idExpiryDate?.toISOString() ?? null,
+              idIssuer: providerUser.idIssuer ?? null,
+              personalIdNumber: providerUser.personalIdNumber ?? null,
+              idIssueDate: providerUser.idIssueDate?.toISOString() ?? null,
+              otpCode: providerUser.otpCode ?? null,
+              otpExpiresAt: providerUser.otpExpiresAt?.toISOString() ?? null,
+            };
+          }
+        }
+      }
+
+      if (process.env.NODE_ENV === "development") {
+        console.log("JWT Token:", token);
       }
 
       return token;
@@ -160,29 +177,30 @@ export const authOptions: AuthOptions = {
     async session({ session, token }) {
       if (session.user) {
         session.user = {
-          ...session.user,
           id: token.id as string,
           name: token.name ?? null,
           email: token.email ?? null,
           image: token.image ?? null,
           role: token.role as UserRole,
-          isOtpVerified: token.isOtpVerified,
-          otpCode: token.otpCode,
-          otpExpiresAt: token.otpExpiresAt,
-          isFaceVerified: token.isFaceVerified,
-          ...(token.role === UserRole.PROVIDER && {
-            selfieImage: token.selfieImage,
-            idImage: token.idImage,
-            faceConfidence: token.faceConfidence,
-            idName: token.idName,
-            idNumber: token.idNumber,
-            idDOB: token.idDOB,
-            idExpiryDate: token.idExpiryDate,
-            idIssuer: token.idIssuer,
-            personalIdNumber: token.personalIdNumber,
-            idIssueDate: token.idIssueDate,
-          }),
+          isOtpVerified: token.isOtpVerified ?? true,
+          isFaceVerified: token.isFaceVerified ?? false,
+          otpCode: token.otpCode ?? null,
+          otpExpiresAt: token.otpExpiresAt ?? null,
+          selfieImage: token.selfieImage ?? null,
+          idImage: token.idImage ?? null,
+          faceConfidence: token.faceConfidence ?? null,
+          idName: token.idName ?? null,
+          idNumber: token.idNumber ?? null,
+          idDOB: token.idDOB ?? null,
+          idExpiryDate: token.idExpiryDate ?? null,
+          idIssuer: token.idIssuer ?? null,
+          personalIdNumber: token.personalIdNumber ?? null,
+          idIssueDate: token.idIssueDate ?? null,
         };
+      }
+
+      if (process.env.NODE_ENV === "development") {
+        console.log("Session User:", session.user);
       }
 
       return session;
