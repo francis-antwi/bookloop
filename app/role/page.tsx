@@ -25,9 +25,11 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
       setSelectedRole(role);
       onRoleSelected(role);
       toast.success('Role selected successfully');
-    } catch {
-      toast.error('Failed to select role');
-    } finally {
+   } catch (error: any) {
+  const message = error?.response?.data?.message || 'Failed to select role';
+  toast.error(message);
+}
+finally {
       setIsLoading(false);
     }
   };
