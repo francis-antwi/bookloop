@@ -6,9 +6,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 export default function AuthErrorRedirectPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const error = searchParams?.get("error");
 
   useEffect(() => {
-    const error = searchParams.get("error");
     if (!error) return;
 
     const roleErrors = ["ROLE_SELECTION_REQUIRED", "redirect-role"];
@@ -21,7 +21,7 @@ export default function AuthErrorRedirectPage() {
     } else {
       router.replace("/");
     }
-  }, [searchParams]);
+  }, [error]);
 
   return (
     <div className="flex min-h-screen items-center justify-center text-lg">
