@@ -86,7 +86,7 @@ export const authOptions: AuthOptions = {
         domain:
           process.env.NODE_ENV === "production"
             ? "bookloop-eight.vercel.app"
-            : undefined,
+            : undefined, // 🔥 prevents local dev cookie issues
       },
     },
   },
@@ -102,18 +102,6 @@ export const authOptions: AuthOptions = {
           return "/auth/error?error=redirect-role";
         }
 
-        if (
-          existingUser.role &&
-          existingUser.isOtpVerified &&
-          (existingUser.role !== UserRole.PROVIDER || existingUser.isFaceVerified)
-        ) {
-          return "/";
-        }
-
-        if (!existingUser.role) {
-          return "/auth/error?error=redirect-role";
-        }
-
         if (!existingUser.isOtpVerified) {
           return "/auth/error?error=redirect-verify";
         }
@@ -124,6 +112,8 @@ export const authOptions: AuthOptions = {
         ) {
           return "/auth/error?error=redirect-verify";
         }
+
+        return true;
       }
 
       return true;
@@ -180,6 +170,10 @@ export const authOptions: AuthOptions = {
         }
       }
 
+      if (process.env.NODE_ENV === "development") {
+        console.log("🔐 JWT token issued:", token);
+      }
+
       return token;
     },
 
@@ -206,6 +200,10 @@ export const authOptions: AuthOptions = {
           personalIdNumber: token.personalIdNumber ?? null,
           idIssueDate: token.idIssueDate ?? null,
         };
+      }
+
+      if (process.env.NODE_ENV === "development") {
+        console.log("📦 Session object:", session.user);
       }
 
       return session;
