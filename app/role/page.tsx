@@ -1,155 +1,131 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import axios, { AxiosError } from 'axios';
+import { useState } from 'react';
+import { FiUserCheck, FiCheck, FiLoader } from 'react-icons/fi';
+import { useSession } from 'next-auth/react';
+import axios from 'axios';
 import toast from 'react-hot-toast';
-import { FiUserCheck, FiCheck, FiLoader, FiAlertCircle } from 'react-icons/fi';
-import { useSession, getSession } from 'next-auth/react';
 
-interface UserData {
-  id: string;
-  email: string;
-  role: 'CUSTOMER' | 'PROVIDER' | 'ADMIN' | null;
-  isFaceVerified: boolean;
-  selfieImage: string | null;
-  idImage: string | null;
+interface RoleSelectorProps {
+  onRoleSelected: (role: string) => void;
 }
 
-const RoleSelector = () => {
-  const router = useRouter();
-  const { data: session, status, update } = useSession();
+const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
+  const { data: session } = useSession();
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedRole, setSelectedRole] = useState(null); 
 
-  const [user, setUser] = useState<UserData | null>(null);
-  const [selectedRole, setSelectedRole] = useState<'CUSTOMER' | 'PROVIDER' | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const handleRoleSelect = async (role: string) => {
+    if (selectedRole === role) return;
 
-  useEffect(() => {
-    if (status === 'authenticated' && session?.user) {
-      setUser(session.user as UserData);
-      setSelectedRole(session.user.role as 'CUSTOMER' | 'PROVIDER' || null);
-    } else if (status === 'unauthenticated') {
-      toast.error('Authentication required. Please log in.');
-      router.replace('/');
-    }
-  }, [status, session, router]);
-
-  if (status === 'loading') {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <FiLoader className="animate-spin text-2xl text-blue-500" />
-        <p className="ml-2 text-gray-600">Loading session...</p>
-      </div>
-    );
-  }
-
-  if (status === 'unauthenticated' && !user) {
-    return (
-      <div className="text-center p-8 text-red-500 bg-red-50 rounded-lg shadow-md">
-        <FiAlertCircle className="inline-block mr-2 text-3xl" />
-        <p className="text-lg font-semibold">User not authenticated.</p>
-        <p className="mt-2 text-sm">Please log in to continue.</p>
-      </div>
-    );
-  }
-
-  if (user?.role) {
-    return (
-      <div className="p-6 bg-green-100 text-green-800 rounded-lg shadow-md text-center">
-        <FiUserCheck className="inline-block mr-2 text-3xl" />
-        <p className="text-lg font-semibold">
-          You're already registered as a {user.role.toLowerCase()}.
-        </p>
-        <button
-          onClick={() => router.push('/dashboard')}
-          className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition duration-200"
-        >
-          Go to Dashboard
-        </button>
-      </div>
-    );
-  }
-
-  const handleRoleSelect = async (role: 'CUSTOMER' | 'PROVIDER') => {
-    if (!user?.id) {
-      toast.error('User data not available. Please try logging in again.');
-      router.replace('/');
-      return;
-    }
-
-    setIsSubmitting(true);
-    setSelectedRole(role);
+    setIsLoading(true);
 
     try {
-      await axios.patch('/api/role', { role });
+      const response = await axios.post('/api/role', { role }, { withCredentials: true });
 
-      // Refresh session to get latest user data
-      await update();
-      const freshSession = await getSession();
+      if (response.status >= 200 && response.status < 300) {
+        setSelectedRole(role);
+        onRoleSelected?.(role);
+        toast.success('Role selected successfully');
 
-      toast.success('Role updated successfully!');
-
-      const freshUser = freshSession?.user as UserData | undefined;
-
-      if (
-        role === 'PROVIDER' &&
-        (!freshUser?.isFaceVerified || !freshUser.idImage)
-      ) {
-        router.replace('/verify');
+        window.location.href = role === 'PROVIDER' ? '/verify' : '/';
       } else {
-        router.replace('/');
+        const message = response?.data?.message || 'Unexpected response';
+        toast.error(message);
       }
-    } catch (err) {
-      const error = err as AxiosError<{ message?: string }>;
-      toast.error(error.response?.data?.message || 'Failed to update role. Please try again.');
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const message = err?.response?.data?.message || err?.message || 'Failed to select role';
+
+      toast.error(message);
+
+      if (status === 403 && err?.response?.data?.error === 'Verification required') {
+        setTimeout(() => {
+          window.location.href = '/verify';
+        }, 1000);
+      }
     } finally {
-      setIsSubmitting(false);
+      setIsLoading(false);
     }
   };
 
-  return (
-    <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-xl border border-gray-200">
-      <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">Select Your Role</h2>
-      <p className="text-center text-gray-600 mb-6">
-        Choose whether you will be a customer or a service provider.
-      </p>
+  const roles = [
+    {
+      value: 'CUSTOMER',
+      label: 'Customer',
+      desc: 'Looking for services',
+      gradient: 'from-blue-50 to-indigo-50',
+      border: 'border-blue-200',
+      selectedBorder: 'border-blue-500',
+      selectedBg: 'bg-gradient-to-r from-blue-50 to-indigo-100',
+      icon: '🛍️',
+    },
+    {
+      value: 'PROVIDER',
+      label: 'Service Provider',
+      desc: 'Offering services',
+      gradient: 'from-emerald-50 to-teal-50',
+      border: 'border-emerald-200',
+      selectedBorder: 'border-emerald-500',
+      selectedBg: 'bg-gradient-to-r from-emerald-50 to-teal-100',
+      icon: '⚡',
+    },
+  ];
 
-      <div className="space-y-4">
-        {(['CUSTOMER', 'PROVIDER'] as const).map((role) => (
+  return (
+    <div className="max-w-md mx-auto space-y-6 p-6">
+      <div className="text-center space-y-2">
+        <div className="inline-flex items-center justify-center w-12 h-12 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full mb-3">
+          <FiUserCheck className="text-white text-xl" />
+        </div>
+        <h2 className="text-2xl font-bold text-gray-900">Choose Your Role</h2>
+        <p className="text-gray-600 text-sm">Select how you'll be using our platform</p>
+      </div>
+
+      <div className="space-y-3">
+        {roles.map((role) => (
           <button
-            key={role}
-            disabled={isSubmitting}
-            onClick={() => handleRoleSelect(role)}
-            className={`w-full p-5 rounded-xl border-2 flex items-center justify-between transition-all duration-300 ease-in-out
-              ${selectedRole === role 
-                ? role === 'PROVIDER' 
-                  ? 'bg-blue-100 border-blue-600 text-blue-800 shadow-lg' 
-                  : 'bg-green-100 border-green-600 text-green-800 shadow-lg'
-                : 'bg-gray-50 border-gray-300 text-gray-700 hover:border-blue-400 hover:shadow-md'
+            key={role.value}
+            onClick={() => handleRoleSelect(role.value)}
+            disabled={isLoading}
+            className={`
+              relative w-full p-5 rounded-xl text-left transition-all duration-300 
+              transform hover:scale-[1.02] active:scale-[0.98]
+              border-2 shadow-sm hover:shadow-md
+              ${selectedRole === role.value
+                ? `${role.selectedBorder} ${role.selectedBg} shadow-lg`
+                : `${role.border} bg-white hover:${role.gradient}`
               }
-              ${isSubmitting ? 'opacity-60 cursor-not-allowed' : ''}
-              focus:outline-none focus:ring-2 focus:ring-offset-2 
-              ${role === 'PROVIDER' ? 'focus:ring-blue-500' : 'focus:ring-green-500'}
+              ${isLoading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}
+              group
             `}
           >
-            <span className="font-semibold text-lg">
-              {role === 'PROVIDER' ? 'Service Provider' : 'Customer'}
-            </span>
-            {selectedRole === role && (
-              isSubmitting 
-                ? <FiLoader className="animate-spin text-xl" /> 
-                : <FiCheck className="text-xl" />
+            <div className="flex items-start justify-between">
+              <div className="flex items-start space-x-3">
+                <div className="text-2xl mt-1">{role.icon}</div>
+                <div>
+                  <div className="font-semibold text-gray-900 text-lg">{role.label}</div>
+                  <div className="text-gray-600 text-sm mt-1">{role.desc}</div>
+                </div>
+              </div>
+              <div className="flex items-center">
+                {isLoading && selectedRole === role.value ? (
+                  <FiLoader className="text-blue-500 animate-spin" />
+                ) : selectedRole === role.value ? (
+                  <div className="flex items-center justify-center w-6 h-6 bg-blue-500 rounded-full">
+                    <FiCheck className="text-white text-sm" />
+                  </div>
+                ) : (
+                  <div className="w-6 h-6 border-2 border-gray-300 rounded-full group-hover:border-gray-400 transition-colors" />
+                )}
+              </div>
+            </div>
+            {selectedRole === role.value && (
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-b-xl" />
             )}
           </button>
         ))}
       </div>
-
-      {isSubmitting && (
-        <div className="mt-6 text-sm text-gray-500 text-center flex items-center justify-center">
-          <FiLoader className="inline-block animate-spin mr-2 text-lg" />
-          <p>Updating your account and session...</p>
-        </div>
-      )}
     </div>
   );
 };
