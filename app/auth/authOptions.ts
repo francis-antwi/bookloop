@@ -86,7 +86,7 @@ export const authOptions: AuthOptions = {
         domain:
           process.env.NODE_ENV === "production"
             ? "bookloop-eight.vercel.app"
-            : undefined,
+            : undefined, // 🔥 prevents local dev cookie issues
       },
     },
   },
@@ -113,7 +113,7 @@ export const authOptions: AuthOptions = {
           return "/auth/error?error=redirect-verify";
         }
 
-        return "/"; // Redirect immediately to home if everything is valid
+        return true;
       }
 
       return true;
@@ -171,7 +171,7 @@ export const authOptions: AuthOptions = {
       }
 
       if (process.env.NODE_ENV === "development") {
-        console.log("\uD83D\uDD10 JWT token issued:", token);
+        console.log("🔐 JWT token issued:", token);
       }
 
       return token;
@@ -203,7 +203,7 @@ export const authOptions: AuthOptions = {
       }
 
       if (process.env.NODE_ENV === "development") {
-        console.log("\uD83D\uDCC6 Session object:", session.user);
+        console.log("📦 Session object:", session.user);
       }
 
       return session;
