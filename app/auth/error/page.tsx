@@ -19,7 +19,7 @@ export default function AuthErrorRedirectPage() {
     } else if (verifyErrors.includes(error)) {
       router.replace("/verify");
     } else {
-      router.replace("/"); // default fallback
+      router.replace("/");
     }
   }, [searchParams]);
 
