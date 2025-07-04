@@ -5,10 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 export default function AuthErrorRedirectPage() {
   const router = useRouter();
-  const params = useSearchParams();
-  const error = params.get("error");
+  const searchParams = useSearchParams();
 
   useEffect(() => {
+    const error = searchParams.get("error");
     if (!error) return;
 
     const roleErrors = ["ROLE_SELECTION_REQUIRED", "redirect-role"];
@@ -19,9 +19,9 @@ export default function AuthErrorRedirectPage() {
     } else if (verifyErrors.includes(error)) {
       router.replace("/verify");
     } else {
-      router.replace("/"); // fallback
+      router.replace("/");
     }
-  }, [error]); // ✅ only re-run if error changes
+  }, [searchParams]);
 
   return (
     <div className="flex min-h-screen items-center justify-center text-lg">

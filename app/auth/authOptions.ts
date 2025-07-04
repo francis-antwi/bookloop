@@ -83,7 +83,10 @@ export const authOptions: AuthOptions = {
         sameSite: "lax",
         path: "/",
         secure: true,
-        domain: "bookloop-eight.vercel.app",
+        domain:
+          process.env.NODE_ENV === "production"
+            ? "bookloop-eight.vercel.app"
+            : undefined, // 🔥 prevents local dev cookie issues
       },
     },
   },
@@ -96,18 +99,18 @@ export const authOptions: AuthOptions = {
         });
 
         if (!existingUser) {
-          return true; // Redirect to /role for onboarding
+          return "/auth/error?error=redirect-role";
         }
 
         if (!existingUser.isOtpVerified) {
-          throw new Error("PHONE_VERIFICATION_REQUIRED");
+          return "/auth/error?error=redirect-verify";
         }
 
         if (
           existingUser.role === UserRole.PROVIDER &&
           !existingUser.isFaceVerified
         ) {
-          throw new Error("FACE_VERIFICATION_REQUIRED");
+          return "/auth/error?error=redirect-verify";
         }
 
         return true;
@@ -130,45 +133,45 @@ export const authOptions: AuthOptions = {
         }
       }
 
-      if (user) {
-        token = {
-          ...token,
-          id: user.id ?? "",
-          name: user.name ?? null,
-          email: user.email ?? null,
-          image: user.image ?? null,
-          role: user.role ?? null,
-          isOtpVerified: user.isOtpVerified ?? true,
-          isFaceVerified: user.isFaceVerified ?? false,
-        };
+      if (user && user.email) {
+        const dbUser = await prisma.user.findUnique({
+          where: { email: user.email },
+        });
 
-        if (user.role === UserRole.PROVIDER) {
-          const providerUser = await prisma.user.findUnique({
-            where: { email: user.email ?? "" },
-          });
+        if (dbUser) {
+          token = {
+            ...token,
+            id: dbUser.id,
+            name: dbUser.name ?? "",
+            email: dbUser.email ?? "",
+            image: dbUser.image ?? null,
+            role: dbUser.role ?? null,
+            isOtpVerified: dbUser.isOtpVerified ?? true,
+            isFaceVerified: dbUser.isFaceVerified ?? false,
+            otpCode: dbUser.otpCode ?? null,
+            otpExpiresAt: dbUser.otpExpiresAt?.toISOString() ?? null,
+          };
 
-          if (providerUser) {
+          if (dbUser.role === UserRole.PROVIDER) {
             token = {
               ...token,
-              selfieImage: providerUser.selfieImage ?? null,
-              idImage: providerUser.idImage ?? null,
-              faceConfidence: providerUser.faceConfidence ?? null,
-              idName: providerUser.idName ?? null,
-              idNumber: providerUser.idNumber ?? null,
-              idDOB: providerUser.idDOB?.toISOString() ?? null,
-              idExpiryDate: providerUser.idExpiryDate?.toISOString() ?? null,
-              idIssuer: providerUser.idIssuer ?? null,
-              personalIdNumber: providerUser.personalIdNumber ?? null,
-              idIssueDate: providerUser.idIssueDate?.toISOString() ?? null,
-              otpCode: providerUser.otpCode ?? null,
-              otpExpiresAt: providerUser.otpExpiresAt?.toISOString() ?? null,
+              selfieImage: dbUser.selfieImage ?? null,
+              idImage: dbUser.idImage ?? null,
+              faceConfidence: dbUser.faceConfidence ?? null,
+              idName: dbUser.idName ?? null,
+              idNumber: dbUser.idNumber ?? null,
+              idDOB: dbUser.idDOB?.toISOString() ?? null,
+              idExpiryDate: dbUser.idExpiryDate?.toISOString() ?? null,
+              idIssuer: dbUser.idIssuer ?? null,
+              personalIdNumber: dbUser.personalIdNumber ?? null,
+              idIssueDate: dbUser.idIssueDate?.toISOString() ?? null,
             };
           }
         }
       }
 
       if (process.env.NODE_ENV === "development") {
-        console.log("JWT Token:", token);
+        console.log("🔐 JWT token issued:", token);
       }
 
       return token;
@@ -200,7 +203,7 @@ export const authOptions: AuthOptions = {
       }
 
       if (process.env.NODE_ENV === "development") {
-        console.log("Session User:", session.user);
+        console.log("📦 Session object:", session.user);
       }
 
       return session;
