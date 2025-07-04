@@ -1,93 +1,98 @@
 import NextAuth from "next-auth";
+import { UserRole } from "@prisma/client";
 
 declare module "next-auth" {
   interface Session {
     user: {
+      id?: string;
       name?: string | null;
       email?: string | null;
       image?: string | null;
-      role?: string;
+      role?: UserRole;
 
-      // ✅ OTP fields
       isOtpVerified?: boolean;
       otpCode?: string | null;
       otpExpiresAt?: string | null;
 
-      // ✅ Face verification
       isFaceVerified?: boolean;
       selfieImage?: string | null;
       idImage?: string | null;
       faceConfidence?: number | null;
 
-      // ✅ Extracted ID fields
       idName?: string | null;
       idNumber?: string | null;
       idDOB?: string | null;
       idExpiryDate?: string | null;
       idIssuer?: string | null;
 
-      // ✅ NEW: Additional ID fields
       personalIdNumber?: string | null;
       idIssueDate?: string | null;
+
+      verified?: boolean;
+      nationality?: string | null;
+      gender?: string | null;
+      placeOfIssue?: string | null;
+      rawText?: string | null;
     };
   }
 
   interface User {
-    role?: string;
+    id?: string;
+    role?: UserRole;
 
-    // ✅ OTP fields
     isOtpVerified?: boolean;
     otpCode?: string | null;
     otpExpiresAt?: string | null;
 
-    // ✅ Face verification
     isFaceVerified?: boolean;
     selfieImage?: string | null;
     idImage?: string | null;
     faceConfidence?: number | null;
 
-    // ✅ Extracted ID fields
     idName?: string | null;
     idNumber?: string | null;
     idDOB?: string | null;
     idExpiryDate?: string | null;
     idIssuer?: string | null;
 
-    // ✅ NEW: Additional ID fields
     personalIdNumber?: string | null;
     idIssueDate?: string | null;
+
+    verified?: boolean;
+    nationality?: string | null;
+    gender?: string | null;
+    placeOfIssue?: string | null;
+    rawText?: string | null;
   }
 }
 
 declare module "next-auth/jwt" {
   interface JWT {
-    role?: string;
+    id?: string;
+    role?: UserRole;
 
-    // ✅ OTP fields
     isOtpVerified?: boolean;
     otpCode?: string | null;
     otpExpiresAt?: string | null;
 
-    // ✅ Face verification
     isFaceVerified?: boolean;
     selfieImage?: string | null;
     idImage?: string | null;
     faceConfidence?: number | null;
 
-    // ✅ Extracted ID fields
     idName?: string | null;
     idNumber?: string | null;
     idDOB?: string | null;
     idExpiryDate?: string | null;
     idIssuer?: string | null;
 
-    // ✅ NEW: Additional ID fields
     personalIdNumber?: string | null;
     idIssueDate?: string | null;
-    verified:boolean;
-    nationality: string | null;     // ✅ newly added
-    gender: string | null;          // ✅ newly added
-    placeOfIssue: string | null;    // ✅ newly added
-    rawText: string | null;    
+
+    verified?: boolean;
+    nationality?: string | null;
+    gender?: string | null;
+    placeOfIssue?: string | null;
+    rawText?: string | null;
   }
 }
