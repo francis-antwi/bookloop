@@ -250,7 +250,7 @@ onClick={async () => {
     // Trigger Google sign-in (redirects to provider)
     await signIn("google"
         , {
-  callbackUrl: "/auth/error" // or "/", "/dashboard", etc.
+  callbackUrl: "/role" // or "/", "/dashboard", etc.
 });
   } catch (error) {
     console.error("Google sign-in error:", error);
