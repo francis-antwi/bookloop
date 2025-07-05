@@ -248,7 +248,9 @@ onClick={async () => {
 
   try {
     // Trigger Google sign-in (redirects to provider)
-    await signIn("google");
+    await signIn("google", {
+  callbackUrl: "/role" // or "/", "/dashboard", etc.
+});
   } catch (error) {
     console.error("Google sign-in error:", error);
     toast.error("Google sign-in failed. Please try again.");
