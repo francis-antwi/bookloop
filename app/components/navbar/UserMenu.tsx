@@ -11,6 +11,7 @@ import useLoginModal from "@/app/hooks/useLoginModal";
 import useRentModal from "@/app/hooks/useRental";
 import { signOut, useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
+import { FiMail, FiHome, FiHeart, FiCalendar, FiList, FiCheck, FiBell, FiLogOut, FiUser, FiPlus } from "react-icons/fi";
 
 interface UserMenuProps {
   currentUser?: User | null;
@@ -27,7 +28,7 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuItemsRef = useRef<(HTMLDivElement | null)[]>([]);
-const { data: session, update } = useSession(); 
+  const { data: session, update } = useSession(); 
 
   const toggleOpen = useCallback(() => {
     setIsOpen((value) => !value);
@@ -109,46 +110,51 @@ const { data: session, update } = useSession();
     }
   }, [isOpen]);
 
-const handleSignOut = async () => {
-  setIsSigningOut(true);
-  try {
-    await signOut({ redirect: true, callbackUrl: "/" });
-    await update();
-  } catch (error) {
-    console.error("Sign out failed:", error);
-  } finally {
-    setIsSigningOut(false);
-  }
-};
-
+  const handleSignOut = async () => {
+    setIsSigningOut(true);
+    try {
+      await signOut({ redirect: true, callbackUrl: "/" });
+      await update();
+    } catch (error) {
+      console.error("Sign out failed:", error);
+    } finally {
+      setIsSigningOut(false);
+    }
+  };
 
   const isVerifiedProvider =
     currentUser?.role === "PROVIDER" && currentUser?.isFaceVerified;
 
   const menuItems = currentUser
     ? [
-        { onClick: () => router.push("/"), label: "Home" },
-        { onClick: () => router.push("/favourites"), label: "Favourites" },
-        { onClick: () => router.push("/bookings"), label: "Bookings" },
+        { onClick: () => router.push("/"), label: "Home", icon: <FiHome className="w-4 h-4" /> },
+        { onClick: () => router.push("/favourites"), label: "Favourites", icon: <FiHeart className="w-4 h-4" /> },
+        { onClick: () => router.push("/bookings"), label: "Bookings", icon: <FiCalendar className="w-4 h-4" /> },
         ...(isVerifiedProvider
           ? [
-              { onClick: () => router.push("/my-listings"), label: "Listings" },
-              { onClick: () => router.push("/approvals"), label: "Approvals" },
+              { onClick: () => router.push("/my-listings"), label: "Listings", icon: <FiList className="w-4 h-4" /> },
+              { onClick: () => router.push("/approvals"), label: "Approvals", icon: <FiCheck className="w-4 h-4" /> },
             ]
           : []),
-        { onClick: () => router.push("/notifications"), label: "Notifications" },
+        {
+          onClick: () => router.push("/chat/inbox"),
+          label: "Inbox",
+          icon: <FiMail className="w-4 h-4" />
+        },
+        { onClick: () => router.push("/notifications"), label: "Notifications", icon: <FiBell className="w-4 h-4" /> },
         ...(isVerifiedProvider
-          ? [{ onClick: onRent, label: "Get Listed" }]
+          ? [{ onClick: onRent, label: "Get Listed", icon: <FiPlus className="w-4 h-4" /> }]
           : []),
         {
           onClick: handleSignOut,
           label: "Logout",
-          className: "text-red-600 hover:bg-red-50",
+          icon: <FiLogOut className="w-4 h-4" />,
+          className: "text-red-600 hover:bg-red-50 border-t border-gray-100",
         },
       ]
     : [
-        { onClick: loginModal.onOpen, label: "Login" },
-        { onClick: registerModal.onOpen, label: "Sign Up" },
+        { onClick: loginModal.onOpen, label: "Login", icon: <FiUser className="w-4 h-4" /> },
+        { onClick: registerModal.onOpen, label: "Sign Up", icon: <FiPlus className="w-4 h-4" /> },
       ];
 
   return (
@@ -157,16 +163,17 @@ const handleSignOut = async () => {
         {isVerifiedProvider && (
           <button
             onClick={onRent}
-            className="hidden md:flex items-center gap-2 text-sm font-semibold py-3 px-6 rounded-full bg-gradient-to-r from-rose-500 to-pink-500 text-white hover:from-rose-600 hover:to-pink-600 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2"
+            className="hidden md:flex items-center gap-2 text-sm font-semibold py-3 px-6 rounded-full bg-gradient-to-r from-violet-500 via-purple-500 to-pink-500 text-white hover:from-violet-600 hover:via-purple-600 hover:to-pink-600 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 relative overflow-hidden group"
             aria-label="List your property"
           >
+            <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             <svg
               xmlns="http://www.w3.org/2000/svg"
               fill="none"
               viewBox="0 0 24 24"
-              strokeWidth={1.5}
+              strokeWidth={2}
               stroke="currentColor"
-              className="w-4 h-4"
+              className="w-4 h-4 relative z-10"
               aria-hidden="true"
             >
               <path
@@ -175,28 +182,30 @@ const handleSignOut = async () => {
                 d="M12 4.5v15m7.5-7.5h-15"
               />
             </svg>
-            Get Listed
+            <span className="relative z-10">Get Listed</span>
           </button>
         )}
 
         <button
           ref={buttonRef}
           onClick={toggleOpen}
-          className="p-3 md:py-2 md:px-3 border border-slate-200 flex flex-row items-center gap-3 rounded-full cursor-pointer hover:shadow-lg hover:border-slate-300 transition-all duration-200 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2"
+          className="p-3 md:py-2 md:px-3 border border-gray-200 flex flex-row items-center gap-3 rounded-full cursor-pointer hover:shadow-lg hover:border-gray-300 transition-all duration-300 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 group relative overflow-hidden"
           aria-expanded={isOpen}
           aria-haspopup="menu"
           aria-label="User menu"
         >
-          <div className="text-slate-600 hover:text-slate-800 transition-colors">
+          <div className="text-gray-600 hover:text-gray-800 transition-colors duration-200">
             <AiOutlineMenu size={16} aria-hidden="true" />
           </div>
           <div className="hidden md:block">
             <div className="relative">
-              <Avatar src={currentUser?.image} />
+              <div className="ring-2 ring-transparent group-hover:ring-blue-200 transition-all duration-300 rounded-full">
+                <Avatar src={currentUser?.image} />
+              </div>
               {currentUser && (
                 <>
                   <span className="sr-only">Online status</span>
-                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 border-2 border-white rounded-full" aria-hidden="true" />
+                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 border-2 border-white rounded-full animate-pulse" aria-hidden="true" />
                 </>
               )}
             </div>
@@ -211,55 +220,97 @@ const handleSignOut = async () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-40 bg-black/20"
+              className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
               onClick={() => setIsOpen(false)}
               aria-hidden="true"
             />
             <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
-              className="absolute z-50 right-0 top-14 w-60 bg-white rounded-xl shadow-2xl border border-slate-200"
+              initial={{ opacity: 0, y: -20, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.9 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="absolute z-50 right-0 top-16 w-72 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden backdrop-blur-xl"
               role="menu"
               aria-orientation="vertical"
               aria-labelledby="user-menu-button"
             >
               {currentUser && (
-                <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
-                  <div className="flex items-center gap-2">
-                    <Avatar src={currentUser.image} />
+                <div className="px-6 py-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-100">
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <Avatar src={currentUser.image} />
+                      <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full flex items-center justify-center">
+                        <div className="w-2 h-2 bg-white rounded-full" />
+                      </div>
+                    </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">
+                      <p className="font-semibold text-sm truncate text-gray-900">
                         {currentUser.name || "User"}
                       </p>
-                      <p className="text-xs text-slate-600 truncate">
+                      <p className="text-xs text-gray-600 truncate">
                         {currentUser.email}
                       </p>
+                      {isVerifiedProvider && (
+                        <div className="inline-flex items-center gap-1 mt-1">
+                          <div className="w-2 h-2 bg-green-500 rounded-full" />
+                          <span className="text-xs text-green-600 font-medium">Verified Provider</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
               )}
 
-              <div className="py-1 px-1 space-y-0.5">
+              <div className="py-2 px-2 space-y-1 max-h-80 overflow-y-auto">
                 {menuItems.map((item, index) => (
-                  <MenuItem
+                  <motion.div
                     key={item.label}
-                    ref={(el) => (menuItemsRef.current[index] = el)}
-                    onClick={() => {
-                      item.onClick();
-                      setIsOpen(false);
-                    }}
-                    label={
-                      item.label === "Logout" && isSigningOut
-                        ? "Signing out..."
-                        : item.label
-                    }
-                    className={item.className}
-                    role="menuitem"
-                    tabIndex={-1}
-                    disabled={item.label === "Logout" && isSigningOut}
-                  />
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className={`group relative ${item.className || ""}`}
+                  >
+                    <MenuItem
+                      ref={(el) => (menuItemsRef.current[index] = el)}
+                      onClick={() => {
+                        item.onClick();
+                        setIsOpen(false);
+                      }}
+                      label={
+                        <div className="flex items-center gap-3 py-1">
+                          <div className={`transition-colors duration-200 ${
+                            item.label === "Logout" 
+                              ? "text-red-500 group-hover:text-red-600" 
+                              : "text-gray-500 group-hover:text-blue-600"
+                          }`}>
+                            {item.icon}
+                          </div>
+                          <span className={`font-medium ${
+                            item.label === "Logout" 
+                              ? "text-red-600" 
+                              : "text-gray-700 group-hover:text-gray-900"
+                          }`}>
+                            {item.label === "Logout" && isSigningOut
+                              ? "Signing out..."
+                              : item.label}
+                          </span>
+                          {isSigningOut && item.label === "Logout" && (
+                            <div className="ml-auto">
+                              <div className="w-4 h-4 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" />
+                            </div>
+                          )}
+                        </div>
+                      }
+                      className={`rounded-xl transition-all duration-200 hover:bg-gray-50 ${
+                        item.label === "Logout" 
+                          ? "hover:bg-red-50 border-t border-gray-100 mt-2" 
+                          : "hover:bg-blue-50"
+                      }`}
+                      role="menuitem"
+                      tabIndex={-1}
+                      disabled={item.label === "Logout" && isSigningOut}
+                    />
+                  </motion.div>
                 ))}
               </div>
             </motion.div>
