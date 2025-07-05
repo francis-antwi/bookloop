@@ -49,7 +49,7 @@ export default function Inbox() {
                   alt={withUser.name}
                 />
               ) : (
-                <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center text-white">
+                <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center text-white font-medium">
                   {withUser.name.charAt(0).toUpperCase()}
                 </div>
               )}
@@ -61,7 +61,7 @@ export default function Inbox() {
             <div className="text-sm text-gray-400 text-right">
               <p>{formatTime(lastMessage.createdAt)}</p>
               {unread && (
-                <span className="inline-block w-2 h-2 bg-red-500 rounded-full mt-1"></span>
+                <span className="inline-block w-2 h-2 bg-red-500 rounded-full mt-1" />
               )}
             </div>
           </div>

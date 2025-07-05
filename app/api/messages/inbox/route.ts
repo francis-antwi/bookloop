@@ -1,68 +1,75 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/auth/authOptions';
 import prisma from '@/app/libs/prismadb';
 
-export async function GET(req: NextRequest) {
-  const session = await getServerSession({ req, ...authOptions });
+export async function GET() {
+  const session = await getServerSession(authOptions);
 
   if (!session?.user?.email) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json([], { status: 401 });
   }
 
   const currentUser = await prisma.user.findUnique({
     where: { email: session.user.email },
+    select: { id: true }
   });
 
   if (!currentUser) {
-    return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    return NextResponse.json([], { status: 404 });
   }
 
-  // Find unique users you've chatted with
-  const rawMessages = await prisma.message.findMany({
+  const messages = await prisma.message.findMany({
     where: {
       OR: [
         { senderId: currentUser.id },
-        { receiverId: currentUser.id },
-      ],
+        { receiverId: currentUser.id }
+      ]
     },
-    orderBy: {
-      createdAt: 'desc',
-    },
+    orderBy: { createdAt: 'desc' },
     include: {
-      sender: true,
-      receiver: true,
-    },
+      sender: { select: { id: true, name: true, image: true } },
+      receiver: { select: { id: true, name: true, image: true } }
+    }
   });
 
-  const seen = new Set<string>();
-  const inbox: any[] = [];
+  const seenConversations = new Map<string, boolean>();
 
-  for (const msg of rawMessages) {
-    const otherUser =
-      msg.senderId === currentUser.id ? msg.receiver : msg.sender;
-    if (seen.has(otherUser.id)) continue;
+  const conversations = messages.reduce((acc, msg) => {
+    const isSender = msg.senderId === currentUser.id;
+    const otherUser = isSender ? msg.receiver : msg.sender;
+    const convoId = otherUser.id;
 
-    const unreadCount = await prisma.message.count({
-      where: {
-        senderId: otherUser.id,
-        receiverId: currentUser.id,
-        read: false,
-      },
-    });
+    if (!seenConversations.has(convoId)) {
+      seenConversations.set(convoId, true);
 
-    inbox.push({
-      user: {
-        id: otherUser.id,
-        name: otherUser.name,
-        image: otherUser.image,
-      },
-      lastMessage: msg.content,
-      unreadCount,
-    });
+      acc.push({
+        withUser: {
+          id: otherUser.id,
+          name: otherUser.name || 'User',
+          image: otherUser.image || undefined
+        },
+        lastMessage: {
+          content: msg.content,
+          createdAt: msg.createdAt.toISOString()
+        },
+        unread: !msg.read && msg.receiverId === currentUser.id
+      });
+    }
 
-    seen.add(otherUser.id);
-  }
+    return acc;
+  }, [] as {
+    withUser: {
+      id: string;
+      name: string;
+      image?: string;
+    };
+    lastMessage: {
+      content: string;
+      createdAt: string;
+    };
+    unread: boolean;
+  }[]);
 
-  return NextResponse.json(inbox);
+  return NextResponse.json(conversations);
 }

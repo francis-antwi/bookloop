@@ -35,11 +35,29 @@ export default function ChatWindow({ withUserId, sessionUserId }: Props) {
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [showScrollButtons, setShowScrollButtons] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesTopRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const scrollToTop = () => {
+    messagesTopRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleScroll = () => {
+    if (messagesContainerRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+      const isNearBottom = scrollTop + clientHeight >= scrollHeight - 100;
+      const isNearTop = scrollTop <= 100;
+      
+      // Show scroll buttons if not at the very top or bottom and there's enough content
+      setShowScrollButtons(scrollHeight > clientHeight && !isNearTop && !isNearBottom);
+    }
   };
 
   const fetchMessages = async () => {
@@ -173,9 +191,14 @@ export default function ChatWindow({ withUserId, sessionUserId }: Props) {
   };
 
   return (
-    <div className="flex flex-col h-full max-h-[600px] bg-white">
+    <div className="flex flex-col h-full max-h-[600px] bg-white relative">
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto px-4 py-2 space-y-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+      <div 
+        ref={messagesContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto px-4 py-2 space-y-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent"
+      >
+        <div ref={messagesTopRef} />
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full text-gray-500">
             <div className="text-center">
@@ -261,6 +284,30 @@ export default function ChatWindow({ withUserId, sessionUserId }: Props) {
         )}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Scroll Control Buttons */}
+      {showScrollButtons && (
+        <div className="absolute right-4 top-1/2 transform -translate-y-1/2 flex flex-col gap-2 z-10">
+          <button
+            onClick={scrollToTop}
+            className="w-10 h-10 bg-white shadow-lg rounded-full flex items-center justify-center hover:bg-gray-50 transition-colors border border-gray-200"
+            title="Scroll to top"
+          >
+            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+            </svg>
+          </button>
+          <button
+            onClick={scrollToBottom}
+            className="w-10 h-10 bg-white shadow-lg rounded-full flex items-center justify-center hover:bg-gray-50 transition-colors border border-gray-200"
+            title="Scroll to bottom"
+          >
+            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Input Area */}
       <div className="border-t bg-gray-50 px-4 py-3">
