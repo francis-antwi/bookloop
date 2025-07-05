@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { pusherClient } from '../libs/pusherClient';
+import debounce from 'lodash.debounce';
 
 interface Props {
   withUserId: string;
@@ -95,26 +96,44 @@ export default function ChatWindow({ withUserId, sessionUserId }: Props) {
     }
   };
 
+  const handleTyping = debounce(() => {
+    pusherClient.trigger(`chat-${withUserId}`, 'typing', {
+      from: sessionUserId,
+      to: withUserId,
+    });
+  }, 500);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setContent(e.target.value);
+    handleTyping();
+  };
+
   useEffect(() => {
     fetchMessages();
     markAsRead();
 
     const channel = pusherClient.subscribe(`chat-${sessionUserId}`);
 
-    const handler = (data: any) => {
-      if (
-        data.senderId === withUserId ||
-        data.receiverId === withUserId
-      ) {
+    const messageHandler = (data: any) => {
+      if (data.senderId === withUserId || data.receiverId === withUserId) {
         fetchMessages();
         markAsRead();
       }
     };
 
-    channel.bind('new-message', handler);
+    const typingHandler = (data: any) => {
+      if (data.from === withUserId) {
+        setIsTyping(true);
+        setTimeout(() => setIsTyping(false), 2000);
+      }
+    };
+
+    channel.bind('new-message', messageHandler);
+    channel.bind('typing', typingHandler);
 
     return () => {
-      channel.unbind('new-message', handler);
+      channel.unbind('new-message', messageHandler);
+      channel.unbind('typing', typingHandler);
       pusherClient.unsubscribe(`chat-${sessionUserId}`);
     };
   }, [sessionUserId, withUserId]);
@@ -225,6 +244,9 @@ export default function ChatWindow({ withUserId, sessionUserId }: Props) {
             );
           })
         )}
+        {isTyping && (
+          <div className="text-sm text-gray-500 italic px-4">Typing...</div>
+        )}
         <div ref={messagesEndRef} />
       </div>
 
@@ -238,7 +260,7 @@ export default function ChatWindow({ withUserId, sessionUserId }: Props) {
               className="w-full px-4 py-3 rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white shadow-sm transition-all duration-200"
               placeholder="Type your message..."
               value={content}
-              onChange={(e) => setContent(e.target.value)}
+              onChange={handleInputChange}
               onKeyPress={handleKeyPress}
               disabled={loading}
             />
