@@ -119,7 +119,7 @@ if (registerData.shouldAutoLogin) {
 }
 
 
-toast.error("Verification complete, but auto-login failed. Please log in manually.");
+toast.error("Verification complete");
 router.push("/");
 
 
