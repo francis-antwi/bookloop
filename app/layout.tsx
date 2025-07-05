@@ -11,8 +11,6 @@ import SearchModal from "./components/SearchModal";
 import SessionProviderWrapper from "./providers/SessionProviderWrapper";
 import Script from "next/script";
 import { getServerSession } from "next-auth";
-import { getToken } from "next-auth/jwt";
-import { cookies } from "next/headers";
 import { authOptions } from "./auth/authOptions";
 
 const font = Nunito({ subsets: ["latin"] });
@@ -43,9 +41,7 @@ export const metadata = {
     locale: "en_GH",
     type: "website",
   },
-  icons: {
-    icon: "/images/app.png",
-  },
+
 };
 
 export default async function RootLayout({
@@ -53,38 +49,18 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // ✅ Get session via getServerSession
-  let session = await getServerSession(authOptions);
+  // ✅ Get session via getServerSession (this should work with your authOptions)
+  const session = await getServerSession(authOptions);
 
-  // 🔁 Fallback to getToken in App Router environments
-  if (!session) {
-    try {
-      const token = await getToken({
-        req: { headers: { cookie: cookies().toString() } },
-        secret: process.env.NEXTAUTH_SECRET,
-      });
-
-      if (token?.email) {
-        session = {
-          user: {
-            name: token.name ?? null,
-            email: token.email ?? null,
-            image: token.picture ?? null,
-          },
-          expires: token.exp
-            ? new Date(token.exp * 1000).toISOString()
-            : "",
-        };
-      }
-    } catch (err) {
-      console.error("❌ Error retrieving session via token:", err);
-    }
-  }
+  // 🔍 Debug logging - remove in production
+  console.log("🔍 Layout session:", session);
+  console.log("🔍 Session user:", session?.user);
 
   // ✅ Get current user from DB based on session
   let currentUser = null;
   try {
     currentUser = await getCurrentUser();
+    console.log("🔍 Current user from DB:", currentUser);
   } catch (err) {
     console.error("❌ Failed to fetch current user from DB:", err);
   }
