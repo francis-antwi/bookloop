@@ -64,6 +64,11 @@ export const authOptions: AuthOptions = {
     updateAge: 24 * 60 * 60,   // every 24 hours
   },
 
+  // Important: JWT configuration for better persistence
+  jwt: {
+    maxAge: 30 * 24 * 60 * 60, // 30 days - matches session maxAge
+  },
+
   secret: process.env.NEXTAUTH_SECRET,
   debug: process.env.NODE_ENV === "development",
   trustHost: true,
@@ -87,6 +92,7 @@ export const authOptions: AuthOptions = {
     },
 
     async jwt({ token, user, trigger, session }) {
+      // Handle session updates
       if (trigger === "update" && session?.role) {
         token.role = session.role;
 
@@ -101,8 +107,21 @@ export const authOptions: AuthOptions = {
         }
       }
 
+      // Initial sign in - fetch user data from database
       if (user?.email) {
-        const dbUser = await prisma.user.findUnique({ where: { email: user.email } });
+        const dbUser = await prisma.user.findUnique({ 
+          where: { email: user.email },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+            role: true,
+            isOtpVerified: true,
+            isFaceVerified: true,
+          }
+        });
+        
         if (dbUser) {
           token = {
             ...token,
@@ -114,6 +133,47 @@ export const authOptions: AuthOptions = {
             isOtpVerified: dbUser.isOtpVerified ?? true,
             isFaceVerified: dbUser.isFaceVerified ?? false,
           };
+        }
+      }
+
+      // For existing sessions, periodically refresh user data
+      if (token.email && !user) {
+        // Check if we should refresh user data (every 24 hours)
+        const lastRefresh = token.lastRefresh as number || 0;
+        const now = Date.now();
+        const shouldRefresh = now - lastRefresh > 24 * 60 * 60 * 1000; // 24 hours
+
+        if (shouldRefresh) {
+          try {
+            const dbUser = await prisma.user.findUnique({ 
+              where: { email: token.email },
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                image: true,
+                role: true,
+                isOtpVerified: true,
+                isFaceVerified: true,
+              }
+            });
+            
+            if (dbUser) {
+              token = {
+                ...token,
+                id: dbUser.id,
+                name: dbUser.name ?? "",
+                email: dbUser.email,
+                image: dbUser.image ?? null,
+                role: dbUser.role,
+                isOtpVerified: dbUser.isOtpVerified ?? true,
+                isFaceVerified: dbUser.isFaceVerified ?? false,
+                lastRefresh: now,
+              };
+            }
+          } catch (error) {
+            console.error("Error refreshing user data:", error);
+          }
         }
       }
 
@@ -133,6 +193,22 @@ export const authOptions: AuthOptions = {
         };
       }
       return session;
+    },
+  },
+
+  // Events for debugging and logging
+  events: {
+    async signIn({ user, account, profile }) {
+      console.log("User signed in:", { user: user.email, provider: account?.provider });
+    },
+    async signOut({ token }) {
+      console.log("User signed out:", token?.email);
+    },
+    async session({ session, token }) {
+      // Optional: Log session access for debugging
+      if (process.env.NODE_ENV === "development") {
+        console.log("Session accessed:", { user: session.user?.email, expires: session.expires });
+      }
     },
   },
 };
