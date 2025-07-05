@@ -4,7 +4,6 @@ import { authOptions } from '@/app/auth/authOptions';
 import prisma from '@/app/libs/prismadb';
 import { pusherServer } from '@/app/libs/pusher';
 
-
 export async function POST(req: NextRequest) {
   const session = await getServerSession({ req, ...authOptions });
   const body = await req.json();
@@ -16,10 +15,20 @@ export async function POST(req: NextRequest) {
 
   const sender = await prisma.user.findUnique({
     where: { email: session.user.email },
+    select: { id: true, name: true, image: true },
   });
 
   if (!sender) {
     return NextResponse.json({ error: 'Sender not found' }, { status: 404 });
+  }
+
+  const receiver = await prisma.user.findUnique({
+    where: { id: receiverId },
+    select: { id: true, name: true, image: true },
+  });
+
+  if (!receiver) {
+    return NextResponse.json({ error: 'Receiver not found' }, { status: 404 });
   }
 
   const message = await prisma.message.create({
@@ -28,15 +37,29 @@ export async function POST(req: NextRequest) {
       receiverId,
       content,
     },
+    select: {
+      id: true,
+      content: true,
+      createdAt: true,
+      senderId: true,
+      receiverId: true,
+      read: true,
+    },
   });
 
-  // Broadcast real-time event
-  await pusherServer.trigger(`chat-${receiverId}`, 'new-message', {
+  const fullMessage = {
     ...message,
-    senderId: sender.id,
-    senderName: sender.name,
-  });
+    sender,
+    receiver,
+  };
 
+  // Send to receiver's chat channel
+  await pusherServer.trigger(`chat-${receiverId}`, 'new-message', fullMessage);
+
+  // Also notify sender for real-time sync
+  await pusherServer.trigger(`chat-${sender.id}`, 'new-message', fullMessage);
+
+  // Global bell/toast notification
   await pusherServer.trigger('global-messages', 'new-message', {
     senderId: sender.id,
     senderName: sender.name,
@@ -44,5 +67,5 @@ export async function POST(req: NextRequest) {
     content,
   });
 
-  return NextResponse.json(message);
+  return NextResponse.json(fullMessage);
 }

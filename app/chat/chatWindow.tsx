@@ -47,6 +47,7 @@ export default function ChatWindow({ withUserId, sessionUserId }: Props) {
       setMessages(res.data);
       setTimeout(scrollToBottom, 100);
     } catch (err) {
+      console.error('Fetch messages failed:', err);
       toast.error('Failed to load chat');
     }
   };
@@ -62,18 +63,29 @@ export default function ChatWindow({ withUserId, sessionUserId }: Props) {
   const sendMessage = async () => {
     if (!content.trim()) return;
     setLoading(true);
+
     try {
       await axios.post('/api/messages', {
         receiverId: withUserId,
         content,
       });
       setContent('');
-      await fetchMessages();
-      inputRef.current?.focus();
-    } catch {
+    } catch (err) {
+      console.error('❌ Send message failed:', err);
       toast.error('Failed to send message');
+      setLoading(false);
+      return;
     }
+
+    try {
+      await fetchMessages();
+    } catch (err) {
+      console.error('⚠️ Message sent, but fetch failed:', err);
+      toast.error('Message sent, but could not refresh chat.');
+    }
+
     setLoading(false);
+    inputRef.current?.focus();
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -115,7 +127,7 @@ export default function ChatWindow({ withUserId, sessionUserId }: Props) {
     const date = new Date(dateString);
     const now = new Date();
     const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
-    
+
     if (diffInHours < 24) {
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     } else {
@@ -143,7 +155,7 @@ export default function ChatWindow({ withUserId, sessionUserId }: Props) {
           messages.map((msg, index) => {
             const isSender = msg.senderId === sessionUserId;
             const showAvatar = index === 0 || messages[index - 1].senderId !== msg.senderId;
-            
+
             return (
               <div
                 key={msg.id}
@@ -177,7 +189,7 @@ export default function ChatWindow({ withUserId, sessionUserId }: Props) {
                       {msg.sender.name}
                     </div>
                   )}
-                  
+
                   <div
                     className={`px-4 py-2 rounded-2xl shadow-sm ${
                       isSender
@@ -231,7 +243,7 @@ export default function ChatWindow({ withUserId, sessionUserId }: Props) {
               disabled={loading}
             />
           </div>
-          
+
           <button
             onClick={sendMessage}
             disabled={loading || !content.trim()}
