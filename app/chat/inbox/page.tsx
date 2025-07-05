@@ -23,7 +23,7 @@ export default function Inbox() {
   const router = useRouter();
 
   useEffect(() => {
-    axios.get('/api/inbox')
+    axios.get('/api/messages/inbox')
       .then((res) => {
         setConversations(res.data);
         setLoading(false);

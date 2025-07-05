@@ -19,11 +19,13 @@ export async function GET() {
     return NextResponse.json([], { status: 404 });
   }
 
+  const userId = currentUser.id;
+
   const messages = await prisma.message.findMany({
     where: {
       OR: [
-        { senderId: currentUser.id },
-        { receiverId: currentUser.id }
+        { senderId: userId },
+        { receiverId: userId }
       ]
     },
     orderBy: { createdAt: 'desc' },
@@ -33,43 +35,32 @@ export async function GET() {
     }
   });
 
-  const seenConversations = new Map<string, boolean>();
-
-  const conversations = messages.reduce((acc, msg) => {
-    const isSender = msg.senderId === currentUser.id;
-    const otherUser = isSender ? msg.receiver : msg.sender;
-    const convoId = otherUser.id;
-
-    if (!seenConversations.has(convoId)) {
-      seenConversations.set(convoId, true);
-
-      acc.push({
-        withUser: {
-          id: otherUser.id,
-          name: otherUser.name || 'User',
-          image: otherUser.image || undefined
-        },
-        lastMessage: {
-          content: msg.content,
-          createdAt: msg.createdAt.toISOString()
-        },
-        unread: !msg.read && msg.receiverId === currentUser.id
-      });
-    }
-
-    return acc;
-  }, [] as {
-    withUser: {
-      id: string;
-      name: string;
-      image?: string;
-    };
-    lastMessage: {
-      content: string;
-      createdAt: string;
-    };
+  const latestMessagesByUser = new Map<string, {
+    withUser: { id: string; name: string; image?: string };
+    lastMessage: { content: string; createdAt: string };
     unread: boolean;
-  }[]);
+  }>();
 
-  return NextResponse.json(conversations);
+  for (const msg of messages) {
+    const isSender = msg.senderId === userId;
+    const otherUser = isSender ? msg.receiver : msg.sender;
+    const otherUserId = otherUser.id;
+
+    if (latestMessagesByUser.has(otherUserId)) continue;
+
+    latestMessagesByUser.set(otherUserId, {
+      withUser: {
+        id: otherUser.id,
+        name: otherUser.name || 'User',
+        image: otherUser.image || undefined
+      },
+      lastMessage: {
+        content: msg.content,
+        createdAt: msg.createdAt.toISOString()
+      },
+      unread: msg.receiverId === userId && !msg.read
+    });
+  }
+
+  return NextResponse.json(Array.from(latestMessagesByUser.values()));
 }
