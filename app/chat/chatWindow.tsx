@@ -57,7 +57,7 @@ export default function ChatWindow({ withUserId, sessionUserId }: Props) {
     try {
       await axios.patch('/api/messages/read', { withUserId });
     } catch {
-      // Optional: toast.error('Failed to mark as read');
+      // Optionally show toast
     }
   };
 
@@ -71,8 +71,9 @@ export default function ChatWindow({ withUserId, sessionUserId }: Props) {
         content,
       });
       setContent('');
+      stopTyping(); // stop typing after sending
     } catch (err) {
-      console.error('❌ Send message failed:', err);
+      console.error('Send message failed:', err);
       toast.error('Failed to send message');
       setLoading(false);
       return;
@@ -80,9 +81,8 @@ export default function ChatWindow({ withUserId, sessionUserId }: Props) {
 
     try {
       await fetchMessages();
-    } catch (err) {
-      console.error('⚠️ Message sent, but fetch failed:', err);
-      toast.error('Message sent, but could not refresh chat.');
+    } catch {
+      toast.error('Message sent, but chat failed to refresh');
     }
 
     setLoading(false);
@@ -96,16 +96,24 @@ export default function ChatWindow({ withUserId, sessionUserId }: Props) {
     }
   };
 
-  const handleTyping = debounce(() => {
+  const emitTyping = debounce(() => {
     pusherClient.trigger(`chat-${withUserId}`, 'typing', {
       from: sessionUserId,
       to: withUserId,
     });
-  }, 500);
+  }, 300);
+
+  const stopTyping = debounce(() => {
+    pusherClient.trigger(`chat-${withUserId}`, 'stop-typing', {
+      from: sessionUserId,
+      to: withUserId,
+    });
+  }, 1000);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setContent(e.target.value);
-    handleTyping();
+    emitTyping();
+    stopTyping();
   };
 
   useEffect(() => {
@@ -115,7 +123,10 @@ export default function ChatWindow({ withUserId, sessionUserId }: Props) {
     const channel = pusherClient.subscribe(`chat-${sessionUserId}`);
 
     const messageHandler = (data: any) => {
-      if (data.senderId === withUserId || data.receiverId === withUserId) {
+      if (
+        data.senderId === withUserId ||
+        data.receiverId === withUserId
+      ) {
         fetchMessages();
         markAsRead();
       }
@@ -124,16 +135,23 @@ export default function ChatWindow({ withUserId, sessionUserId }: Props) {
     const typingHandler = (data: any) => {
       if (data.from === withUserId) {
         setIsTyping(true);
-        setTimeout(() => setIsTyping(false), 2000);
+      }
+    };
+
+    const stopTypingHandler = (data: any) => {
+      if (data.from === withUserId) {
+        setIsTyping(false);
       }
     };
 
     channel.bind('new-message', messageHandler);
     channel.bind('typing', typingHandler);
+    channel.bind('stop-typing', stopTypingHandler);
 
     return () => {
       channel.unbind('new-message', messageHandler);
       channel.unbind('typing', typingHandler);
+      channel.unbind('stop-typing', stopTypingHandler);
       pusherClient.unsubscribe(`chat-${sessionUserId}`);
     };
   }, [sessionUserId, withUserId]);
@@ -178,37 +196,28 @@ export default function ChatWindow({ withUserId, sessionUserId }: Props) {
             return (
               <div
                 key={msg.id}
-                className={`flex items-end gap-2 ${
-                  isSender ? 'justify-end' : 'justify-start'
-                }`}
+                className={`flex items-end gap-2 ${isSender ? 'justify-end' : 'justify-start'}`}
               >
-                {!isSender && (
+                {!isSender && showAvatar && (
                   <div className="w-8 h-8 flex-shrink-0">
-                    {showAvatar && msg.sender.image ? (
+                    {msg.sender.image ? (
                       <img
                         src={msg.sender.image}
                         alt={msg.sender.name}
                         className="w-8 h-8 rounded-full border-2 border-white shadow-sm"
                       />
-                    ) : showAvatar ? (
+                    ) : (
                       <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white text-sm font-semibold">
                         {msg.sender.name.charAt(0).toUpperCase()}
                       </div>
-                    ) : null}
+                    )}
                   </div>
                 )}
 
-                <div
-                  className={`relative max-w-[70%] ${
-                    isSender ? 'order-1' : 'order-2'
-                  }`}
-                >
+                <div className={`relative max-w-[70%] ${isSender ? 'order-1' : 'order-2'}`}>
                   {!isSender && showAvatar && (
-                    <div className="text-xs text-gray-500 mb-1 ml-3">
-                      {msg.sender.name}
-                    </div>
+                    <div className="text-xs text-gray-500 mb-1 ml-3">{msg.sender.name}</div>
                   )}
-
                   <div
                     className={`px-4 py-2 rounded-2xl shadow-sm ${
                       isSender
@@ -217,27 +226,25 @@ export default function ChatWindow({ withUserId, sessionUserId }: Props) {
                     }`}
                   >
                     <div className="break-words">{msg.content}</div>
-                    <div className={`text-xs mt-1 ${
-                      isSender ? 'text-blue-100' : 'text-gray-500'
-                    }`}>
+                    <div className={`text-xs mt-1 ${isSender ? 'text-blue-100' : 'text-gray-500'}`}>
                       {formatTime(msg.createdAt)}
                     </div>
                   </div>
                 </div>
 
-                {isSender && (
+                {isSender && showAvatar && (
                   <div className="w-8 h-8 flex-shrink-0">
-                    {showAvatar && msg.sender.image ? (
+                    {msg.sender.image ? (
                       <img
                         src={msg.sender.image}
                         alt="You"
                         className="w-8 h-8 rounded-full border-2 border-white shadow-sm"
                       />
-                    ) : showAvatar ? (
+                    ) : (
                       <div className="w-8 h-8 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center text-white text-sm font-semibold">
                         You
                       </div>
-                    ) : null}
+                    )}
                   </div>
                 )}
               </div>
@@ -245,7 +252,12 @@ export default function ChatWindow({ withUserId, sessionUserId }: Props) {
           })
         )}
         {isTyping && (
-          <div className="text-sm text-gray-500 italic px-4">Typing...</div>
+          <div className="flex items-center gap-2 text-sm text-gray-500 px-4 italic">
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" />
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce delay-150" />
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce delay-300" />
+            <span>Typing...</span>
+          </div>
         )}
         <div ref={messagesEndRef} />
       </div>

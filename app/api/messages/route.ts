@@ -4,6 +4,7 @@ import { authOptions } from '@/app/auth/authOptions';
 import prisma from '@/app/libs/prismadb';
 import { pusherServer } from '@/app/libs/pusher';
 
+// POST: Send a new message
 export async function POST(req: NextRequest) {
   const session = await getServerSession({ req, ...authOptions });
   const body = await req.json();
@@ -53,13 +54,8 @@ export async function POST(req: NextRequest) {
     receiver,
   };
 
-  // Send to receiver's chat channel
   await pusherServer.trigger(`chat-${receiverId}`, 'new-message', fullMessage);
-
-  // Also notify sender for real-time sync
   await pusherServer.trigger(`chat-${sender.id}`, 'new-message', fullMessage);
-
-  // Global bell/toast notification
   await pusherServer.trigger('global-messages', 'new-message', {
     senderId: sender.id,
     senderName: sender.name,
@@ -68,4 +64,70 @@ export async function POST(req: NextRequest) {
   });
 
   return NextResponse.json(fullMessage);
+}
+
+// GET: Fetch chat messages
+export async function GET(req: NextRequest) {
+  const session = await getServerSession({ req, ...authOptions });
+  const withUserId = req.nextUrl.searchParams.get('with');
+
+  if (!session?.user?.email || !withUserId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const currentUser = await prisma.user.findUnique({
+    where: { email: session.user.email },
+  });
+
+  if (!currentUser) {
+    return NextResponse.json({ error: 'User not found' }, { status: 404 });
+  }
+
+  const messages = await prisma.message.findMany({
+    where: {
+      OR: [
+        { senderId: currentUser.id, receiverId: withUserId },
+        { senderId: withUserId, receiverId: currentUser.id },
+      ],
+    },
+    orderBy: { createdAt: 'asc' },
+    include: {
+      sender: { select: { id: true, name: true, image: true } },
+      receiver: { select: { id: true, name: true, image: true } },
+    },
+  });
+
+  return NextResponse.json(messages);
+}
+
+// PATCH: Mark messages as read
+export async function PATCH(req: NextRequest) {
+  const session = await getServerSession({ req, ...authOptions });
+  const body = await req.json();
+  const { withUserId } = body;
+
+  if (!session?.user?.email || !withUserId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const currentUser = await prisma.user.findUnique({
+    where: { email: session.user.email },
+  });
+
+  if (!currentUser) {
+    return NextResponse.json({ error: 'User not found' }, { status: 404 });
+  }
+
+  await prisma.message.updateMany({
+    where: {
+      senderId: withUserId,
+      receiverId: currentUser.id,
+      read: false,
+    },
+    data: {
+      read: true,
+    },
+  });
+
+  return NextResponse.json({ status: 'ok' });
 }
