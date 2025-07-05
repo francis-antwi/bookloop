@@ -1,93 +1,37 @@
-'use client';
+// ✅ app/chat/[userId]/page.tsx
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/auth/authOptions';
+import prisma from '@/app/libs/prismadb';
+import ChatWindow from '@/components/chat/ChatWindow';
 
-import { useEffect, useState } from 'react';
-import axios from 'axios';
-import Link from 'next/link';
-import { pusherClient } from '@/app/libs/pusherClient';
-import toast from 'react-hot-toast';
-import { Bell } from 'lucide-react';
-
-interface ChatPreview {
-  user: {
-    id: string;
-    name: string;
-    image?: string;
+interface Props {
+  params: {
+    userId: string;
   };
-  lastMessage: string;
-  unreadCount: number;
 }
 
-export default function ChatInbox() {
-  const [chats, setChats] = useState<ChatPreview[]>([]);
-  const [totalUnread, setTotalUnread] = useState(0);
+export default async function ChatPage({ params }: Props) {
+  const session = await getServerSession(authOptions);
 
-  const fetchChats = async () => {
-    const res = await axios.get('/api/messages/inbox');
-    setChats(res.data);
+  if (!session?.user?.email) {
+    return <div className="p-6 text-center">You must be signed in to view messages.</div>;
+  }
 
-    const unread = res.data.reduce(
-      (acc: number, chat: ChatPreview) => acc + chat.unreadCount,
-      0
-    );
-    setTotalUnread(unread);
-  };
+  const currentUser = await prisma.user.findUnique({
+    where: { email: session.user.email },
+    select: { id: true },
+  });
 
-  useEffect(() => {
-    fetchChats();
-
-    const channel = pusherClient.subscribe('global-messages');
-
-    const handler = (data: any) => {
-      toast.success(`📩 New message from ${data.senderName}`);
-      fetchChats(); // Refresh inbox
-    };
-
-    channel.bind('new-message', handler);
-
-    return () => {
-      channel.unbind('new-message', handler);
-      pusherClient.unsubscribe('global-messages');
-    };
-  }, []);
+  if (!currentUser) {
+    return <div className="p-6 text-center">User not found.</div>;
+  }
 
   return (
-    <div className="max-w-md mx-auto mt-6">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold">Inbox</h2>
-        <div className="relative">
-          <Bell className="w-6 h-6 text-gray-600" />
-          {totalUnread > 0 && (
-            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs px-1 rounded-full">
-              {totalUnread}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {chats.map((chat) => (
-        <Link href={`/messages/${chat.user.id}`} key={chat.user.id}>
-          <div className="flex items-center gap-3 p-3 border-b hover:bg-gray-100 cursor-pointer">
-            {chat.user.image && (
-              <img
-                src={chat.user.image}
-                alt={chat.user.name}
-                className="w-10 h-10 rounded-full object-cover"
-              />
-            )}
-            <div className="flex-1">
-              <div className="font-semibold">{chat.user.name}</div>
-              <div className="text-sm text-gray-600 truncate">
-                {chat.lastMessage}
-              </div>
-            </div>
-            {chat.unreadCount > 0 && (
-              <span className="text-xs bg-red-500 text-white px-2 py-0.5 rounded-full">
-                {chat.unreadCount}
-              </span>
-            )}
-          </div>
-        </Link>
-      ))}
+    <div className="p-4">
+      <ChatWindow
+        withUserId={params.userId}
+        sessionUserId={currentUser.id}
+      />
     </div>
   );
 }
