@@ -82,7 +82,7 @@ export const authOptions: AuthOptions = {
         httpOnly: true,
         sameSite: "lax",
         path: "/",
-        secure: true,
+        secure: false,
         domain:
           process.env.NODE_ENV === "production"
             ? "bookloop-eight.vercel.app"
