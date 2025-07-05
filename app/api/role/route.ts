@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
+import { getToken } from "next-auth/jwt";
 import prisma from "@/app/libs/prismadb";
 import { UserRole } from "@prisma/client";
-import { authOptions } from "@/app/auth/authOptions";
+
+const secret = process.env.NEXTAUTH_SECRET!;
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession({ req, ...authOptions });
+  const token = await getToken({ req, secret });
 
-  if (!session?.user?.email) {
+  console.log("🔐 Token:", token); // ✅ Temp debug: Remove in production
+
+  if (!token?.email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -19,18 +22,15 @@ export async function POST(req: NextRequest) {
   }
 
   if (!["CUSTOMER", "PROVIDER"].includes(role)) {
-    return NextResponse.json(
-      {
-        error: "Invalid role",
-        message: "Allowed roles: CUSTOMER, PROVIDER",
-      },
-      { status: 400 }
-    );
+    return NextResponse.json({
+      error: "Invalid role",
+      message: "Allowed roles: CUSTOMER, PROVIDER",
+    }, { status: 400 });
   }
 
   try {
     const currentUser = await prisma.user.findUnique({
-      where: { email: session.user.email },
+      where: { email: token.email },
       select: {
         role: true,
         isFaceVerified: true,
@@ -56,18 +56,15 @@ export async function POST(req: NextRequest) {
         !currentUser.selfieImage ||
         !currentUser.idImage
       ) {
-        return NextResponse.json(
-          {
-            error: "Verification required",
-            message: "Complete identity verification to become a provider",
-          },
-          { status: 403 }
-        );
+        return NextResponse.json({
+          error: "Verification required",
+          message: "Complete identity verification to become a provider",
+        }, { status: 403 });
       }
     }
 
     await prisma.user.update({
-      where: { email: session.user.email },
+      where: { email: token.email },
       data: { role },
     });
 
@@ -76,13 +73,10 @@ export async function POST(req: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
-    console.error("Role update error:", error);
-    return NextResponse.json(
-      {
-        error: "Internal server error",
-        message: "Failed to update role",
-      },
-      { status: 500 }
-    );
+    console.error("🔥 Role update error:", error);
+    return NextResponse.json({
+      error: "Internal server error",
+      message: "Failed to update role",
+    }, { status: 500 });
   }
 }
