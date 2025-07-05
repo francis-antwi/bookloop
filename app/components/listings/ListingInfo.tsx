@@ -322,7 +322,7 @@ const showMessageButton = listing.user?.id && listing.user.id !== currentUserId;
 {showMessageButton && (
   <div className="flex flex-wrap gap-3 mt-6">
     <Link
-      href={`/messages/${listing.user.id}`}
+      href={`/chat/${listing.user.id}`}
       className="group inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-lg font-medium shadow-lg transition-all duration-200 hover:from-blue-700 hover:to-blue-800 hover:shadow-xl hover:scale-105 active:scale-95"
     >
       <FiMessageSquare className="w-5 h-5 transition-transform group-hover:rotate-12" />
