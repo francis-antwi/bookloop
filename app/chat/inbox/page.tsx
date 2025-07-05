@@ -124,7 +124,7 @@ export default function Inbox() {
             {conversations.map(({ withUser, lastMessage, unread }) => (
               <div
                 key={withUser.id}
-                onClick={() => router.push(`/messages/${withUser.id}`)}
+                onClick={() => router.push(`/chat/${withUser.id}`)}
                 className={`group relative flex items-center gap-4 p-4 rounded-2xl transition-all duration-200 cursor-pointer hover:shadow-md hover:bg-gray-50 ${
                   unread ? 'bg-blue-50 border-l-4 border-blue-500' : 'bg-white border border-gray-100'
                 }`}
