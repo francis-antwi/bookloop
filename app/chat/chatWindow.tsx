@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { pusherClient } from '@/app/libs/pusherClient';
+import { pusherClient } from '../libs/pusherClient';
+
 
 interface Props {
   withUserId: string;
