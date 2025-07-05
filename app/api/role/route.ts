@@ -99,6 +99,7 @@ export async function POST(req: NextRequest) {
       {
         error: "Internal Server Error",
         message: "Failed to update role",
+        redirect: "/verify",
       },
       { status: 500 }
     );
