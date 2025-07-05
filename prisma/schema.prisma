@@ -32,15 +32,15 @@ enum NotificationType {
 }
 
 model User {
-  id                String   @id @default(cuid())
-  email             String   @unique
+  id                String     @id @default(cuid())
+  email             String     @unique
   name              String
-  contactPhone      String?  @unique
+  contactPhone      String?    @unique
   hashedPassword    String?
-  role              UserRole? 
-  isOtpVerified     Boolean  @default(false)
-  isFaceVerified    Boolean  @default(false)
-  verified          Boolean  @default(false)
+  role              UserRole?
+  isOtpVerified     Boolean    @default(false)
+  isFaceVerified    Boolean    @default(false)
+  verified          Boolean    @default(false)
 
   selfieImage       String?
   idImage           String?
@@ -54,27 +54,27 @@ model User {
   idIssueDate       DateTime?
   idIssuer          String?
   idType            String?
-  nationality       String?     // ✅ Added
-  gender            String?     // ✅ Added
-  placeOfIssue      String?     // ✅ Added
-  rawText           String?     // ✅ Added
+  nationality       String?
+  gender            String?
+  placeOfIssue      String?
+  rawText           String?
 
   emailVerified     DateTime?
   image             String?
   resetToken        String?
   resetTokenExpiry  DateTime?
 
-  favouriteIds      String[]    @default([])
-  accounts          Account[]   // if you're using OAuth
+  favouriteIds      String[]     @default([])
+  accounts          Account[]
   listings          Listing[]
   reservations      Reservation[]
   notifications     Notification[]
   reviews           Review[]
-  sentMessages      Message[]  @relation("SentMessages")
-  receivedMessages  Message[]  @relation("ReceivedMessages")
+  sentMessages      Message[]    @relation("SentMessages")
+  receivedMessages  Message[]    @relation("ReceivedMessages")
 
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 }
 
 model OTPVerification {
@@ -103,13 +103,11 @@ model Account {
   id_token           String?
   session_state      String?
 
-  // Face Verification Fields
   selfieImage        String?
   idImage            String?
   faceConfidence     Float?
   isFaceVerified     Boolean  @default(false)
 
-  // ID Information
   idName             String?
   idNumber           String?
   personalIdNumber   String?
@@ -118,10 +116,10 @@ model Account {
   idExpiryDate       DateTime?
   idIssuer           String?
 
-  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviews            Review[]  // ✅ Now has proper relation
 
   @@unique([provider, providerAccountId])
-  reviews            Review[] // ✅ Already present — now paired properly in Review model
 }
 
 model Listing {
@@ -138,43 +136,37 @@ model Listing {
   address          String?
   status           ListingStatus  @default(PENDING)
 
-  // Apartment-specific
   bedrooms         Int?
   bathrooms        Int?
   furnished        Boolean?
   floor            Int?
 
-  // Car-specific
   make             String?
   model            String?
   year             Int?
   seats            Int?
   fuelType         String?
 
-  // Event Center-specific
   capacity         Int?
   rooms            Int?
   hasStage         Boolean?
   parkingAvailable Boolean?
 
-  // Restaurant-specific
   cuisineType       String?
   seatingCapacity   Int?
   openingHours      String?
   deliveryAvailable Boolean?
   menuHighlights    String?
 
-  // Appointment-specific
   serviceType       String?
   availableDates    String?
   duration          Int?
   requiresBooking   Boolean?
   serviceProvider   String?
 
-  // Relations
   user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   reservations     Reservation[]
-  reviews          Review[]       // ✅ Added to fix relation with Review
+  reviews          Review[]       // ✅ Fix for deployment error
 }
 
 model Reservation {
@@ -197,17 +189,19 @@ model Review {
   id          String     @id @default(uuid())
   userId      String
   listingId   String
-  accountId   String?    // ✅ Added to link Review to Account
-  rating      Int        // 1-5
+  accountId   String?    
+
+  rating      Int
   comment     String
   createdAt   DateTime   @default(now())
 
   user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   listing     Listing    @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  account     Account?   @relation(fields: [accountId], references: [id]) // ✅ Added
+  account     Account?   @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, listingId]) // one review per user per listing
+  @@unique([userId, listingId])
 }
+
 
 model Notification {
   id             String            @id @default(uuid())

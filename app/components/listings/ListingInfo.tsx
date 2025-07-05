@@ -1,7 +1,27 @@
+'use client';
+
 import React, { useState } from "react";
-import { Calendar, MapPin, Phone, Mail, Tag, Clock, Users, Car, Home, Building, Utensils, Settings, X, ChevronDown, ChevronUp } from "lucide-react";
-import { FiMessageSquare } from "react-icons/fi";
+import {
+  Calendar,
+  MapPin,
+  Phone,
+  Mail,
+  Tag,
+  Clock,
+  Users,
+  Car,
+  Home,
+  Building,
+  Utensils,
+  Settings,
+  X,
+  ChevronDown,
+  ChevronUp
+} from "lucide-react";
+import { FiFlag, FiMessageSquare } from "react-icons/fi";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
+
 interface ListingInfoProps {
   listing?: {
     createdAt?: string | null;
@@ -43,7 +63,6 @@ interface ListingInfoProps {
     requiresBooking?: boolean;
     serviceProvider?: string | null;
 
-    // ✅ Added for message link
     user: {
       id: string;
       name?: string;
@@ -51,6 +70,7 @@ interface ListingInfoProps {
     };
   };
 }
+
 const categorySpecificFields: Record<string, Record<string, { label: string; icon?: React.ReactNode }>> = {
   Apartments: {
     bedrooms: { label: "Bedrooms", icon: <Home className="w-4 h-4" /> },
@@ -98,16 +118,6 @@ const getCategoryIcon = (category?: string) => {
   }
 };
 
-
-<Link
-  href={`/messages/${listing.user.id}`}
-  className="mt-4 inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded"
->
-  <FiMessageSquare />
-  Message Provider
-</Link>
-
-
 const formatDate = (dateStr?: string | null) => {
   if (!dateStr) return "N/A";
   const date = new Date(dateStr);
@@ -116,16 +126,6 @@ const formatDate = (dateStr?: string | null) => {
     month: 'short',
     day: 'numeric'
   });
-};
-
-const formatPrice = (price?: number) => {
-  if (price === undefined || price === null) return "Contact for price";
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(price);
 };
 
 const InfoItem: React.FC<{ 
@@ -152,13 +152,6 @@ const InfoItem: React.FC<{
         {value.toString()}
       </p>
     </div>
-    {isClickable && (
-      <div className="text-blue-500 opacity-60 flex-shrink-0">
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-        </svg>
-      </div>
-    )}
   </div>
 );
 
@@ -225,10 +218,14 @@ const QuickContactButtons: React.FC<{ listing: any }> = ({ listing }) => (
 
 const ListingInfo: React.FC<ListingInfoProps> = ({ listing }) => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  
-  if (!listing) {
-    return null;
-  }
+
+  if (!listing) return null;
+const { data: session } = useSession();
+const currentUserId = (session?.user as { id?: string })?.id;
+
+if (!listing) return null;
+
+const showMessageButton = listing.user?.id && listing.user.id !== currentUserId;
 
   const extraFields = listing.category ? categorySpecificFields[listing.category] : null;
 
@@ -236,10 +233,7 @@ const ListingInfo: React.FC<ListingInfoProps> = ({ listing }) => {
     <>
       {/* Image Modal */}
       {selectedImage && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-2 sm:p-4"
-          onClick={() => setSelectedImage(null)}
-        >
+        <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-2 sm:p-4" onClick={() => setSelectedImage(null)}>
           <div className="relative max-w-full max-h-full">
             <button
               className="absolute -top-10 sm:-top-12 right-0 text-white hover:text-gray-300 transition-colors z-10"
@@ -259,16 +253,16 @@ const ListingInfo: React.FC<ListingInfoProps> = ({ listing }) => {
 
       <div className="min-h-screen bg-gray-50 pb-20 sm:pb-0">
         <div className="max-w-4xl mx-auto">
-          {/* Header Section - Mobile Optimized */}
+          {/* Header Section */}
           <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 text-white shadow-xl">
             <div className="p-4 sm:p-6">
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 text-blue-100 mb-2">
                     {getCategoryIcon(listing.category)}
-                    <span className="text-sm sm:text-base font-medium">{listing.category || "Uncategorized"}</span>
+                    <span className="text-sm font-medium">{listing.category || "Uncategorized"}</span>
                   </div>
-                  <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-2 leading-tight">
+                  <h1 className="text-xl sm:text-2xl font-bold mb-2 leading-tight">
                     {listing.title || "Untitled Listing"}
                   </h1>
                 </div>
@@ -284,31 +278,25 @@ const ListingInfo: React.FC<ListingInfoProps> = ({ listing }) => {
             </div>
           </div>
 
+          {/* Body Sections */}
           <div className="p-4 sm:p-6 space-y-6">
-            {/* Description Section */}
+
+            {/* Description */}
             {listing.description && (
-              <CollapsibleSection
-                title="Description"
-                icon={<Tag className="w-5 h-5" />}
-                defaultOpen={true}
-              >
+              <CollapsibleSection title="Description" icon={<Tag className="w-5 h-5" />}>
                 <p className="text-gray-700 leading-relaxed text-sm sm:text-base">{listing.description}</p>
               </CollapsibleSection>
             )}
 
-            {/* Contact Information */}
-            <CollapsibleSection
-              title="Contact Information"
-              icon={<Phone className="w-5 h-5" />}
-              defaultOpen={true}
-            >
+            {/* Contact Info + Message Provider */}
+            <CollapsibleSection title="Contact Information" icon={<Phone className="w-5 h-5" />}>
               <div className="grid gap-3 sm:gap-4">
                 {listing.contactPhone && (
                   <InfoItem
                     icon={<Phone className="w-4 h-4" />}
                     label="Phone"
                     value={listing.contactPhone}
-                    isClickable={true}
+                    isClickable
                     onClick={() => window.open(`tel:${listing.contactPhone}`, '_self')}
                   />
                 )}
@@ -317,7 +305,7 @@ const ListingInfo: React.FC<ListingInfoProps> = ({ listing }) => {
                     icon={<Mail className="w-4 h-4" />}
                     label="Email"
                     value={listing.email}
-                    isClickable={true}
+                    isClickable
                     onClick={() => window.open(`mailto:${listing.email}`, '_self')}
                   />
                 )}
@@ -326,21 +314,28 @@ const ListingInfo: React.FC<ListingInfoProps> = ({ listing }) => {
                     icon={<MapPin className="w-4 h-4" />}
                     label="Address"
                     value={listing.address}
-                    isClickable={true}
-                    onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(listing.address)}`, '_blank')}
+                    isClickable
+                    onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(listing.address!)}`, '_blank')}
                   />
                 )}
               </div>
-              {/* ✅ Message Provider Link */}
-          {listing.user?.id && (
-            <Link
-              href={`/messages/${listing.user.id}`}
-              className="mt-4 inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded"
-            >
-              <FiMessageSquare />
-              Message Provider
-            </Link>
-          )}
+{showMessageButton && (
+  <div className="flex flex-wrap gap-2">
+    <Link
+      href={`/messages/${listing.user.id}`}
+      className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+    >
+      <FiMessageSquare /> Message Provider
+    </Link>
+    <Link
+      href={`/report/listing/${listing.id}`}
+      className="inline-flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+    >
+      <FiFlag /> Report Listing
+    </Link>
+  </div>
+)}
+
             </CollapsibleSection>
 
             {/* Category-specific Details */}
@@ -353,17 +348,7 @@ const ListingInfo: React.FC<ListingInfoProps> = ({ listing }) => {
                 <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
                   {Object.entries(extraFields).map(([fieldName, { label, icon }]) => {
                     const value = (listing as any)[fieldName];
-
-                    if (
-                      value === null ||
-                      value === undefined ||
-                      value === false ||
-                      value === "" ||
-                      value === 0
-                    ) {
-                      return null;
-                    }
-
+                    if (!value) return null;
                     return (
                       <InfoItem
                         key={fieldName}
@@ -387,7 +372,7 @@ const ListingInfo: React.FC<ListingInfoProps> = ({ listing }) => {
           </div>
         </div>
 
-        {/* Mobile Quick Contact Bar */}
+        {/* Mobile Sticky Contact Bar */}
         <QuickContactButtons listing={listing} />
       </div>
     </>
