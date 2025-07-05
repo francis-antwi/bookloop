@@ -259,7 +259,7 @@ const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
               if (selectedRole === 'PROVIDER') {
                 router.push('/verify');
               } else {
-                router.push('/dashboard');
+                router.push('/');
               }
             }}
             disabled={isLoading}
