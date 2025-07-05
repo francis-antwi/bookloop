@@ -1,47 +1,48 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/auth/authOptions";
-import prisma from "@/app/libs/prismadb";
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/auth/authOptions';
+import prisma from '@/app/libs/prismadb';
+import { pusherServer } from '@/app/libs/pusher';
 
-export async function GET(req: NextRequest) {
-  try {
-    const session = await getServerSession({ req, ...authOptions });
-    const searchParams = req.nextUrl.searchParams;
-    const withUserId = searchParams.get("with");
 
-    if (!session?.user?.email || !withUserId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+export async function POST(req: NextRequest) {
+  const session = await getServerSession({ req, ...authOptions });
+  const body = await req.json();
+  const { receiverId, content } = body;
 
-    const currentUser = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    });
-
-    if (!currentUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    const messages = await prisma.message.findMany({
-      where: {
-        OR: [
-          { senderId: currentUser.id, receiverId: withUserId },
-          { senderId: withUserId, receiverId: currentUser.id },
-        ],
-      },
-      orderBy: { createdAt: "asc" },
-      include: {
-        sender: {
-          select: { id: true, name: true, image: true },
-        },
-        receiver: {
-          select: { id: true, name: true, image: true },
-        },
-      },
-    });
-
-    return NextResponse.json(messages);
-  } catch (error) {
-    console.error("❌ Error fetching messages:", error);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  if (!session?.user?.email) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const sender = await prisma.user.findUnique({
+    where: { email: session.user.email },
+  });
+
+  if (!sender) {
+    return NextResponse.json({ error: 'Sender not found' }, { status: 404 });
+  }
+
+  const message = await prisma.message.create({
+    data: {
+      senderId: sender.id,
+      receiverId,
+      content,
+    },
+  });
+
+  // Broadcast real-time event
+  await pusherServer.trigger(`chat-${receiverId}`, 'new-message', {
+    ...message,
+    senderId: sender.id,
+    senderName: sender.name,
+  });
+
+  await pusherServer.trigger('global-messages', 'new-message', {
+    senderId: sender.id,
+    senderName: sender.name,
+    receiverId,
+    content,
+  });
+
+  return NextResponse.json(message);
 }
