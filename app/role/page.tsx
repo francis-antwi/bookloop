@@ -1,11 +1,11 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { FiUserCheck, FiCheck, FiLoader, FiAlertCircle } from 'react-icons/fi';
-import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
-import axios from 'axios';
-import toast from 'react-hot-toast';
+import { useState, useEffect } from "react";
+import { FiUserCheck, FiCheck, FiLoader, FiAlertCircle } from "react-icons/fi";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import axios from "axios";
+import toast from "react-hot-toast";
 
 const RoleSelector = () => {
   const { data: session, status, update } = useSession();
@@ -14,19 +14,20 @@ const RoleSelector = () => {
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // ⏳ Redirect early if role already exists
   useEffect(() => {
     if (session?.user?.role) {
-      setSelectedRole(session.user.role);
+      router.replace("/");
     }
-  }, [session]);
+  }, [session?.user?.role, router]);
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/');
+    if (status === "unauthenticated") {
+      router.push("/");
     }
   }, [status, router]);
 
-  if (status === 'loading') {
+  if (status === "loading" || !session?.user) {
     return (
       <div className="max-w-md mx-auto space-y-6 p-6 text-center">
         <FiLoader className="animate-spin text-2xl text-blue-500 mx-auto mb-4" />
@@ -37,8 +38,8 @@ const RoleSelector = () => {
 
   const handleRoleSelect = async (role: string) => {
     if (isLoading || !session?.user?.email || !session?.user?.id) {
-      toast.error('Session error. Please sign in again.');
-      router.push('/');
+      toast.error("Session error. Please sign in again.");
+      router.push("/");
       return;
     }
 
@@ -51,30 +52,29 @@ const RoleSelector = () => {
     setError(null);
 
     try {
-      await axios.post('/api/role', {
+      await axios.post("/api/role", {
         role,
         userId: session.user.id,
       });
 
-      await update({ role }); // Refresh token with new role
+      await update({ role });
       setSelectedRole(role);
       toast.success(`Role updated to ${role.toLowerCase()} successfully!`);
 
-      // Redirect after a short delay
       setTimeout(() => {
-        router.push(role === 'PROVIDER' ? '/verify' : '/');
+        router.push(role === "PROVIDER" ? "/verify" : "/");
       }, 1000);
     } catch (err: any) {
       const message =
         err?.response?.data?.message ||
         err?.response?.data?.error ||
-        'Failed to update role. Please try again.';
+        "Failed to update role. Please try again.";
 
       setError(message);
       toast.error(message);
 
       if (err?.response?.status === 401) {
-        setTimeout(() => router.push('/'), 1500);
+        setTimeout(() => router.push("/"), 1500);
       }
     } finally {
       setIsLoading(false);
@@ -83,29 +83,29 @@ const RoleSelector = () => {
 
   const roles = [
     {
-      value: 'CUSTOMER',
-      label: 'Customer',
-      icon: '🛍️',
-      desc: 'Looking for services and solutions',
-      features: ['Browse services', 'Book appointments', 'Rate providers'],
+      value: "CUSTOMER",
+      label: "Customer",
+      icon: "🛍️",
+      desc: "Looking for services and solutions",
+      features: ["Browse services", "Book appointments", "Rate providers"],
       style: {
-        gradient: 'from-blue-50 to-indigo-50',
-        border: 'border-blue-200',
-        selectedBorder: 'border-blue-500',
-        selectedBg: 'bg-gradient-to-r from-blue-50 to-indigo-100',
+        gradient: "from-blue-50 to-indigo-50",
+        border: "border-blue-200",
+        selectedBorder: "border-blue-500",
+        selectedBg: "bg-gradient-to-r from-blue-50 to-indigo-100",
       },
     },
     {
-      value: 'PROVIDER',
-      label: 'Service Provider',
-      icon: '⚡',
-      desc: 'Offering professional services',
-      features: ['List services', 'Manage bookings', 'Earn income'],
+      value: "PROVIDER",
+      label: "Service Provider",
+      icon: "⚡",
+      desc: "Offering professional services",
+      features: ["List services", "Manage bookings", "Earn income"],
       style: {
-        gradient: 'from-emerald-50 to-teal-50',
-        border: 'border-emerald-200',
-        selectedBorder: 'border-emerald-500',
-        selectedBg: 'bg-gradient-to-r from-emerald-50 to-teal-100',
+        gradient: "from-emerald-50 to-teal-50",
+        border: "border-emerald-200",
+        selectedBorder: "border-emerald-500",
+        selectedBg: "bg-gradient-to-r from-emerald-50 to-teal-100",
       },
     },
   ];
@@ -117,10 +117,13 @@ const RoleSelector = () => {
           <FiUserCheck className="text-white text-xl" />
         </div>
         <h2 className="text-2xl font-bold text-gray-900">Choose Your Role</h2>
-        <p className="text-gray-600 text-sm">Select how you'll be using our platform</p>
+        <p className="text-gray-600 text-sm">
+          Select how you'll be using our platform
+        </p>
 
         <div className="bg-gray-50 rounded-lg p-3 mt-4 text-sm text-gray-600">
-          Signed in as: <span className="font-medium">{session?.user?.email}</span>
+          Signed in as:{" "}
+          <span className="font-medium">{session?.user?.email}</span>
         </div>
       </div>
 
@@ -142,22 +145,32 @@ const RoleSelector = () => {
             disabled={isLoading}
             className={`relative w-full p-5 rounded-xl text-left transition-all duration-300 
               border-2 shadow-sm hover:shadow-md
-              ${selectedRole === role.value
-                ? `${role.style.selectedBorder} ${role.style.selectedBg} shadow-lg`
-                : `${role.style.border} bg-white hover:${role.style.gradient}`
+              ${
+                selectedRole === role.value
+                  ? `${role.style.selectedBorder} ${role.style.selectedBg} shadow-lg`
+                  : `${role.style.border} bg-white hover:${role.style.gradient}`
               }
-              ${isLoading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}
+              ${
+                isLoading ? "opacity-70 cursor-not-allowed" : "cursor-pointer"
+              }
               group`}
           >
             <div className="flex items-start justify-between">
               <div className="flex space-x-3">
                 <div className="text-2xl mt-1">{role.icon}</div>
                 <div>
-                  <div className="font-semibold text-gray-900 text-lg">{role.label}</div>
-                  <div className="text-gray-600 text-sm mt-1">{role.desc}</div>
+                  <div className="font-semibold text-gray-900 text-lg">
+                    {role.label}
+                  </div>
+                  <div className="text-gray-600 text-sm mt-1">
+                    {role.desc}
+                  </div>
                   <ul className="mt-2 space-y-1">
                     {role.features.map((f, idx) => (
-                      <li key={idx} className="flex items-center space-x-2 text-xs text-gray-500">
+                      <li
+                        key={idx}
+                        className="flex items-center space-x-2 text-xs text-gray-500"
+                      >
                         <div className="w-1.5 h-1.5 bg-gray-400 rounded-full" />
                         <span>{f}</span>
                       </li>
@@ -180,27 +193,6 @@ const RoleSelector = () => {
           </button>
         ))}
       </div>
-
-      {selectedRole && (
-        <div className="pt-4 border-t">
-          <button
-            onClick={() => {
-              router.push(selectedRole === 'PROVIDER' ? '/verify' : '/');
-            }}
-            disabled={isLoading}
-            className="w-full py-3 px-6 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-medium rounded-lg hover:from-blue-600 hover:to-indigo-700 transition-all disabled:opacity-50"
-          >
-            {isLoading ? (
-              <span className="flex items-center justify-center space-x-2">
-                <FiLoader className="animate-spin" />
-                <span>Updating...</span>
-              </span>
-            ) : (
-              `Continue as ${selectedRole.toLowerCase()}`
-            )}
-          </button>
-        </div>
-      )}
     </div>
   );
 };
