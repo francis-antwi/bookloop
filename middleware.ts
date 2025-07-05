@@ -15,59 +15,64 @@ export default withAuth(
       .some((path) => pathname.startsWith(path));
     const isAdminPage = pathname.startsWith("/admin");
 
-    // 1. Unauthenticated users
+    // 1. If not authenticated
     if (!token) {
-      if (isPublic || isRolePage || isVerificationPage) return NextResponse.next();
+      if (isPublic || isRolePage || isVerificationPage) {
+        return NextResponse.next();
+      }
       return NextResponse.redirect(new URL("/auth", req.url));
     }
 
-    // 2. Authenticated but accessing auth pages
+    const role = token.role;
+    const isFaceVerified = token.isFaceVerified ?? false;
+    const isOtpVerified = token.isOtpVerified ?? false;
+    const isFullyVerified = token.verified ?? false;
+
+    // 2. Prevent logged-in users from accessing /auth
     if (pathname.startsWith("/auth") && pathname !== "/auth/error") {
       return NextResponse.redirect(new URL("/", req.url));
     }
 
-    const currentRole = token.role;
-
-    // 3. Force role selection if missing
-    if (!currentRole && !isRolePage && !isVerificationPage) {
+    // 3. Require role selection
+    if (!role && !isRolePage && !isVerificationPage) {
       return NextResponse.redirect(new URL("/role", req.url));
     }
 
     // 4. Prevent users with roles from accessing /role
-    if (isRolePage && currentRole) {
+    if (isRolePage && role) {
       return NextResponse.redirect(new URL("/", req.url));
     }
 
-    // 5. Block non-admins from admin pages
-    if (isAdminPage && currentRole !== "ADMIN") {
-      return NextResponse.redirect(new URL("/403", req.url));
-    }
-
-    // 6. Redirect admins to admin dashboard
-    if (currentRole === "ADMIN") {
+    // 5. Admin checks
+    if (role === "ADMIN") {
       if (!isAdminPage && pathname !== "/") {
         return NextResponse.redirect(new URL("/admin", req.url));
       }
-      return NextResponse.next();
+      return NextResponse.next(); // allow admins to access their dashboard
     }
 
-    // 7. Verification checks
+    // 6. Block non-admins from admin pages
+    if (isAdminPage && role !== "ADMIN") {
+      return NextResponse.redirect(new URL("/403", req.url));
+    }
+
+    // 7. Verification Page Redirection
     if (isVerificationPage) {
-      if (currentRole === "PROVIDER" && (token.isFaceVerified || token.verified)) {
+      if (role === "PROVIDER" && (isFaceVerified || isFullyVerified)) {
         return NextResponse.redirect(new URL("/my-listings", req.url));
       }
-      if (currentRole === "CUSTOMER" && (token.isOtpVerified || token.verified)) {
+      if (role === "CUSTOMER" && (isOtpVerified || isFullyVerified)) {
         return NextResponse.redirect(new URL("/", req.url));
       }
-      return NextResponse.next();
+      return NextResponse.next(); // allow access to /verify if not verified
     }
 
     // 8. Restrict provider-only pages
     if (isProviderPage) {
-      if (currentRole !== "PROVIDER") {
+      if (role !== "PROVIDER") {
         return NextResponse.redirect(new URL("/403", req.url));
       }
-      if (!token.isFaceVerified && !token.verified) {
+      if (!isFaceVerified && !isFullyVerified) {
         return NextResponse.redirect(new URL("/verify", req.url));
       }
     }
@@ -78,16 +83,14 @@ export default withAuth(
     callbacks: {
       authorized: ({ token, req }) => {
         const { pathname } = req.nextUrl;
-        const allowWithoutAuth = [
-          "/", "/auth", "/auth/error", "/_next", "/403", "/role", "/verify"
-        ];
-        return !!token || allowWithoutAuth.some((path) => pathname.startsWith(path));
+        const allowUnauth = ["/", "/auth", "/auth/error", "/_next", "/403", "/role", "/verify"];
+        return !!token || allowUnauth.some((path) => pathname.startsWith(path));
       },
     },
   }
 );
 
-// ✅ Exclude API routes from middleware (very important)
+// ✅ Exclude static and API routes
 export const config = {
   matcher: ["/((?!api/|_next/|favicon.ico).*)"],
 };

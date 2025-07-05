@@ -30,7 +30,10 @@ export const authOptions: AuthOptions = {
           throw new Error("INVALID_CREDENTIALS");
         }
 
-        const isCorrectPassword = await bcrypt.compare(credentials.password, user.hashedPassword);
+        const isCorrectPassword = await bcrypt.compare(
+          credentials.password,
+          user.hashedPassword
+        );
         if (!isCorrectPassword) throw new Error("INVALID_CREDENTIALS");
 
         if (!user.isOtpVerified) throw new Error("PHONE_VERIFICATION_REQUIRED");
@@ -55,7 +58,7 @@ export const authOptions: AuthOptions = {
   pages: {
     signIn: "/",
     error: "/auth/error",
-    newUser: "/role",
+    newUser: "/role", // fallback, but not used with Google unless managed manually
   },
 
   session: {
@@ -90,21 +93,14 @@ export const authOptions: AuthOptions = {
                 isFaceVerified: false,
               },
             });
-            return "/role";
           } catch (error) {
             console.error("Error creating user during Google sign-in:", error);
-            return "/auth/error?error=redirect-role";
+            return false;
           }
-        }
-
-        if (!existingUser.role) return "/role";
-        if (!existingUser.isOtpVerified) return "/auth/error?error=redirect-verify";
-        if (existingUser.role === "PROVIDER" && !existingUser.isFaceVerified) {
-          return "/auth/error?error=redirect-verify";
         }
       }
 
-      return true;
+      return true; // ✅ Always allow session creation
     },
 
     async jwt({ token, user, trigger, session }) {
