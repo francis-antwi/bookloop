@@ -12,25 +12,29 @@ export default withAuth(
 
     const publicPaths = ["/", "/auth", "/auth/error", "/api/auth", "/_next", "/403"];
     const isPublic = publicPaths.some(path => pathname.startsWith(path));
-
     const isRolePage = pathname === "/role";
     const isVerificationPage = pathname === "/verify";
     const isAdminPage = pathname.startsWith("/admin");
-    const isProviderPage = ["/my-listings", "/approvals", "/bookings", "/favourites", "/notifications"]
-      .some(path => pathname.startsWith(path));
+    const isProviderPage = [
+      "/my-listings",
+      "/approvals",
+      "/bookings",
+      "/favourites",
+      "/notifications"
+    ].some(path => pathname.startsWith(path));
 
-    // 🧱 1. No token: allow only public, role, or verification pages
+    // 🧱 1. Not authenticated
     if (!token) {
       if (isPublic || isRolePage || isVerificationPage) return NextResponse.next();
       return NextResponse.redirect(new URL("/auth", req.url));
     }
 
-    // 🧱 2. Prevent logged-in users from accessing /auth (except error)
+    // 🧱 2. Already authenticated, block /auth (except error)
     if (pathname.startsWith("/auth") && pathname !== "/auth/error") {
       return NextResponse.redirect(new URL("/", req.url));
     }
 
-    // 🔄 3. If user has no role, fetch latest from DB
+    // 🔄 3. Get role from token or DB
     let currentRole = token.role;
     if (!currentRole && token.id) {
       try {
@@ -39,48 +43,48 @@ export default withAuth(
           select: { role: true },
         });
         currentRole = user?.role ?? null;
-      } catch {
-        // silent fallback
+      } catch (err) {
+        console.error("❌ Failed to fetch user role from DB:", err);
       }
     }
 
-    // 🔐 4. If user has no role, redirect to /role
+    // 🔐 4. Redirect to /role if no role
     if (!currentRole && !isRolePage && !isVerificationPage) {
       return NextResponse.redirect(new URL("/role", req.url));
     }
 
-    // 🔁 5. If user already has a role and visits /role, redirect to /
+    // 🔁 5. Prevent role page if already has role
     if (isRolePage && currentRole) {
       return NextResponse.redirect(new URL("/", req.url));
     }
 
-    // 🔒 6. Admin-only page protection
-    if (isAdminPage && token.role !== "ADMIN") {
+    // 🔒 6. Restrict /admin to ADMIN only
+    if (isAdminPage && currentRole !== "ADMIN") {
       return NextResponse.redirect(new URL("/403", req.url));
     }
 
-    // 🔁 7. Admins always redirected to /admin (except homepage or admin pages)
-    if (token.role === "ADMIN") {
+    // 🧭 7. Redirect ADMINs to /admin unless on home or admin page
+    if (currentRole === "ADMIN") {
       if (!isAdminPage && pathname !== "/") {
         return NextResponse.redirect(new URL("/admin", req.url));
       }
       return NextResponse.next();
     }
 
-    // ✅ 8. Verification checks
+    // ✅ 8. Verification logic for /verify
     if (isVerificationPage) {
-      if (token.role === "PROVIDER" && (token.isFaceVerified || token.verified)) {
+      if (currentRole === "PROVIDER" && (token.isFaceVerified || token.verified)) {
         return NextResponse.redirect(new URL("/my-listings", req.url));
       }
-      if (token.role === "CUSTOMER" && (token.isOtpVerified || token.verified)) {
+      if (currentRole === "CUSTOMER" && (token.isOtpVerified || token.verified)) {
         return NextResponse.redirect(new URL("/", req.url));
       }
       return NextResponse.next();
     }
 
-    // 🔐 9. Restrict provider-only routes and enforce verification
+    // 🔐 9. Restrict provider-only pages and enforce verification
     if (isProviderPage) {
-      if (token.role !== "PROVIDER") {
+      if (currentRole !== "PROVIDER") {
         return NextResponse.redirect(new URL("/403", req.url));
       }
       if (!token.isFaceVerified && !token.verified) {

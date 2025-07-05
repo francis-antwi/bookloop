@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Calendar, MapPin, Phone, Mail, Tag, Clock, Users, Car, Home, Building, Utensils, Settings, X, ChevronDown, ChevronUp } from "lucide-react";
+import { Calendar, MapPin, Phone, Mail, Tag, Clock, Users, Car, Home, Building, Utensils, Settings, X, ChevronDown, ChevronUp, Link } from "lucide-react";
+import ReviewForm from "../inputs/ReviewForm";
 
 interface ListingInfoProps {
   listing?: {
@@ -90,7 +91,12 @@ const getCategoryIcon = (category?: string) => {
     default: return <Tag className="w-5 h-5" />;
   }
 };
-
+<><Link
+  href={`/messages/${listing.user.id}`} // listing.user.id must be passed in props
+  className="mt-4 inline-block bg-blue-600 text-white px-4 py-2 rounded"
+>
+  Message Provider
+</Link><ReviewForm listingId={listing.id} /></>
 const formatDate = (dateStr?: string | null) => {
   if (!dateStr) return "N/A";
   const date = new Date(dateStr);

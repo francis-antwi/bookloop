@@ -15,6 +15,7 @@ export const authOptions: AuthOptions = {
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
+
     CredentialsProvider({
       name: "credentials",
       credentials: {
@@ -83,7 +84,7 @@ export const authOptions: AuthOptions = {
     async signIn({ user, account }) {
       if (account?.provider === "google" && user.email) {
         try {
-          let existingUser = await prisma.user.findUnique({
+          const existingUser = await prisma.user.findUnique({
             where: { email: user.email },
           });
 
@@ -103,24 +104,28 @@ export const authOptions: AuthOptions = {
           return false;
         }
       }
+
       return true;
     },
 
     async jwt({ token, user, trigger, session }) {
+      // 🎯 Handle role update from session
       if (trigger === "update" && session?.role) {
         token.role = session.role;
         await prisma.user.update({
           where: { email: token.email ?? "" },
           data: { role: session.role },
         });
+
         if (session.role === UserRole.PROVIDER) {
           token.isFaceVerified = false;
         }
       }
 
-      if (user?.email) {
+      // 🧠 Populate token with DB user info
+      if (user?.email || token?.email) {
         const dbUser = await prisma.user.findUnique({
-          where: { email: user.email },
+          where: { email: user?.email ?? (token.email as string) },
           select: {
             id: true,
             name: true,
@@ -133,16 +138,13 @@ export const authOptions: AuthOptions = {
         });
 
         if (dbUser) {
-          token = {
-            ...token,
-            id: dbUser.id,
-            name: dbUser.name ?? "",
-            email: dbUser.email,
-            image: dbUser.image ?? null,
-            role: dbUser.role,
-            isOtpVerified: dbUser.isOtpVerified ?? true,
-            isFaceVerified: dbUser.isFaceVerified ?? false,
-          };
+          token.id = dbUser.id;
+          token.name = dbUser.name ?? "";
+          token.email = dbUser.email;
+          token.image = dbUser.image ?? null;
+          token.role = dbUser.role;
+          token.isOtpVerified = dbUser.isOtpVerified ?? false;
+          token.isFaceVerified = dbUser.isFaceVerified ?? false;
         }
       }
 
@@ -157,10 +159,11 @@ export const authOptions: AuthOptions = {
           email: token.email ?? null,
           image: token.image ?? null,
           role: token.role as UserRole,
-          isOtpVerified: token.isOtpVerified ?? true,
+          isOtpVerified: token.isOtpVerified ?? false,
           isFaceVerified: token.isFaceVerified ?? false,
         };
       }
+
       return session;
     },
   },
@@ -179,6 +182,7 @@ export const authOptions: AuthOptions = {
       if (process.env.NODE_ENV === "development") {
         console.log("📦 Session accessed:", {
           user: session.user?.email,
+          role: session.user?.role,
           expires: session.expires,
         });
       }
