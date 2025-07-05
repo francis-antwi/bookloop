@@ -164,7 +164,7 @@ useEffect(() => {
       )}
     </div>
   ),
-}
+},
 
         { onClick: () => router.push("/notifications"), label: "Notifications", icon: <FiBell className="w-4 h-4" /> },
         ...(isVerifiedProvider
