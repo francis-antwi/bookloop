@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
         message: "Failed to update role",
         redirect: "/verify",
       },
-      { status: 500 }
+       { status: 403 }
     );
   }
 }
