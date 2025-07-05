@@ -3,10 +3,7 @@ import Client from "@/app/components/Client";
 import EmptyState from "@/app/components/EmptyState";
 import ListingClient from "./ListingClient";
 import getCurrentUser from "@/app/actions/getCurrentUser";
-import ListingChatStarter from "@/app/components/ListingChatStarter";
 
-
-<ListingChatStarter providerId={listing.userId} listingTitle={listing.title} />
 
 interface IParams {
     listingId?: string;
@@ -33,8 +30,7 @@ const ListingPage = async ({ params }: { params: IParams }) => {
              currentUser={currentUser}
 
              />
-             
-<ListingChatStarter providerId={listing.userId} listingTitle={listing.title} />
+
         </Client>
        
   
