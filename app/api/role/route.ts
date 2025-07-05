@@ -52,9 +52,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ✅ If the role is already set and matches, just redirect to /
+    // ✅ If the same role is already set, return a redirect path
     if (user.role === role) {
-      return NextResponse.redirect(new URL("/", req.url));
+      const redirectPath = role === "PROVIDER" ? "/verify" : "/";
+      return NextResponse.json(
+        {
+          success: true,
+          message: `Role already set to ${role}`,
+          redirect: redirectPath, // ✅ Add redirect field for frontend to handle
+        },
+        { status: 200 }
+      );
     }
 
     // ✅ If PROVIDER, ensure all verification fields are met
@@ -68,6 +76,7 @@ export async function POST(req: NextRequest) {
             error: "Verification required",
             message:
               "You must complete identity verification to become a provider.",
+            redirect: "/verify", // ✅ Added for client-side redirect
           },
           { status: 403 }
         );
