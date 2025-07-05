@@ -30,12 +30,9 @@ export const authOptions: AuthOptions = {
           throw new Error("INVALID_CREDENTIALS");
         }
 
-        const isCorrectPassword = await bcrypt.compare(
-          credentials.password,
-          user.hashedPassword
-        );
-
+        const isCorrectPassword = await bcrypt.compare(credentials.password, user.hashedPassword);
         if (!isCorrectPassword) throw new Error("INVALID_CREDENTIALS");
+
         if (!user.isOtpVerified) throw new Error("PHONE_VERIFICATION_REQUIRED");
         if (user.role === UserRole.PROVIDER && !user.isFaceVerified) {
           throw new Error("FACE_VERIFICATION_REQUIRED");
@@ -63,33 +60,13 @@ export const authOptions: AuthOptions = {
 
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60,
-    updateAge: 24 * 60 * 60,
-  },
-
-  jwt: {
-    maxAge: 30 * 24 * 60 * 60,
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+    updateAge: 24 * 60 * 60,   // every 24 hours
   },
 
   secret: process.env.NEXTAUTH_SECRET,
   debug: process.env.NODE_ENV === "development",
   trustHost: true,
-
-  cookies: {
-    sessionToken: {
-      name: `__Secure-next-auth.session-token`,
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: false,
-        domain:
-          process.env.NODE_ENV === "production"
-            ? "bookloop-eight.vercel.app"
-            : undefined,
-      },
-    },
-  },
 
   callbacks: {
     async signIn({ user, account }) {
@@ -98,30 +75,10 @@ export const authOptions: AuthOptions = {
           where: { email: user.email ?? "" },
         });
 
-        if (!existingUser) {
-          return "/auth/error?error=redirect-role";
-        }
-
-        if (
-          existingUser.role &&
-          existingUser.isOtpVerified &&
-          (existingUser.role !== UserRole.PROVIDER || existingUser.isFaceVerified)
-        ) {
-          return "/";
-        }
-
-        if (!existingUser.role) {
-          return "/auth/error?error=redirect-role";
-        }
-
-        if (!existingUser.isOtpVerified) {
-          return "/auth/error?error=redirect-verify";
-        }
-
-        if (
-          existingUser.role === UserRole.PROVIDER &&
-          !existingUser.isFaceVerified
-        ) {
+        if (!existingUser) return "/auth/error?error=redirect-role";
+        if (!existingUser.role) return "/auth/error?error=redirect-role";
+        if (!existingUser.isOtpVerified) return "/auth/error?error=redirect-verify";
+        if (existingUser.role === "PROVIDER" && !existingUser.isFaceVerified) {
           return "/auth/error?error=redirect-verify";
         }
       }
@@ -130,9 +87,10 @@ export const authOptions: AuthOptions = {
     },
 
     async jwt({ token, user, trigger, session }) {
-      if (trigger === "update" && session?.role && session.role !== token.role) {
+      if (trigger === "update" && session?.role) {
         token.role = session.role;
 
+        // Update user role in DB if needed
         await prisma.user.update({
           where: { email: token.email ?? "" },
           data: { role: session.role },
@@ -143,40 +101,19 @@ export const authOptions: AuthOptions = {
         }
       }
 
-      if (user && user.email) {
-        const dbUser = await prisma.user.findUnique({
-          where: { email: user.email },
-        });
-
+      if (user?.email) {
+        const dbUser = await prisma.user.findUnique({ where: { email: user.email } });
         if (dbUser) {
           token = {
             ...token,
             id: dbUser.id,
             name: dbUser.name ?? "",
-            email: dbUser.email ?? "",
+            email: dbUser.email,
             image: dbUser.image ?? null,
-            role: dbUser.role ?? null,
+            role: dbUser.role,
             isOtpVerified: dbUser.isOtpVerified ?? true,
             isFaceVerified: dbUser.isFaceVerified ?? false,
-            otpCode: dbUser.otpCode ?? null,
-            otpExpiresAt: dbUser.otpExpiresAt?.toISOString() ?? null,
           };
-
-          if (dbUser.role === UserRole.PROVIDER) {
-            token = {
-              ...token,
-              selfieImage: dbUser.selfieImage ?? null,
-              idImage: dbUser.idImage ?? null,
-              faceConfidence: dbUser.faceConfidence ?? null,
-              idName: dbUser.idName ?? null,
-              idNumber: dbUser.idNumber ?? null,
-              idDOB: dbUser.idDOB?.toISOString() ?? null,
-              idExpiryDate: dbUser.idExpiryDate?.toISOString() ?? null,
-              idIssuer: dbUser.idIssuer ?? null,
-              personalIdNumber: dbUser.personalIdNumber ?? null,
-              idIssueDate: dbUser.idIssueDate?.toISOString() ?? null,
-            };
-          }
         }
       }
 
@@ -193,21 +130,8 @@ export const authOptions: AuthOptions = {
           role: token.role as UserRole,
           isOtpVerified: token.isOtpVerified ?? true,
           isFaceVerified: token.isFaceVerified ?? false,
-          otpCode: token.otpCode ?? null,
-          otpExpiresAt: token.otpExpiresAt ?? null,
-          selfieImage: token.selfieImage ?? null,
-          idImage: token.idImage ?? null,
-          faceConfidence: token.faceConfidence ?? null,
-          idName: token.idName ?? null,
-          idNumber: token.idNumber ?? null,
-          idDOB: token.idDOB ?? null,
-          idExpiryDate: token.idExpiryDate ?? null,
-          idIssuer: token.idIssuer ?? null,
-          personalIdNumber: token.personalIdNumber ?? null,
-          idIssueDate: token.idIssueDate ?? null,
         };
       }
-
       return session;
     },
   },
