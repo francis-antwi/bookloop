@@ -8,8 +8,7 @@ export default withAuth(
     const token = req.auth?.token;
 
     const isRolePage = pathname === "/role";
-    const isVerificationPage = pathname === "/verify";
-
+    const isAdminPage = pathname.startsWith("/admin");
     const isProviderOnlyPage = [
       "/my-listings",
       "/approvals",
@@ -18,45 +17,33 @@ export default withAuth(
       "/notifications",
     ].some((path) => pathname.startsWith(path));
 
-    const isAdminPage = pathname.startsWith("/admin");
-
-    const isPublic = [
-      "/",
-      "/auth",
-      "/auth/error",
-      "/403",
-    ].some((path) => pathname.startsWith(path));
-
-    // 1. Not authenticated → allow only public, role, or verify
+    // 1. If not authenticated
     if (!token) {
-      if (isPublic || isRolePage || isVerificationPage) {
+      if (pathname.startsWith("/auth") || pathname === "/403") {
         return NextResponse.next();
       }
       return NextResponse.redirect(new URL("/auth", req.url));
     }
 
-    // Destructure token attributes
     const role = token.role;
     const isFaceVerified = token.isFaceVerified ?? false;
     const isOtpVerified = token.isOtpVerified ?? false;
     const isFullyVerified = token.verified ?? false;
 
-    // 2. Block signed-in users from /auth except /auth/error
-    if (pathname.startsWith("/auth") && pathname !== "/auth/error") {
-      return NextResponse.redirect(new URL("/", req.url));
+    // ✅ STRICT: If no role — allow ONLY /role
+    if (!role) {
+      if (!isRolePage) {
+        return NextResponse.redirect(new URL("/role", req.url));
+      }
+      return NextResponse.next();
     }
 
-    // 3. No role → allow only /role and /verify
-    if (!role && !isRolePage && !isVerificationPage) {
-      return NextResponse.redirect(new URL("/role", req.url));
-    }
-
-    // 4. Already has role → block /role
+    // 🔒 Block users with role from accessing /role again
     if (role && isRolePage) {
       return NextResponse.redirect(new URL("/", req.url));
     }
 
-    // 5. Admin access logic
+    // 🔐 Admin access
     if (role === "ADMIN") {
       if (!isAdminPage && pathname !== "/") {
         return NextResponse.redirect(new URL("/admin", req.url));
@@ -64,23 +51,11 @@ export default withAuth(
       return NextResponse.next();
     }
 
-    // 6. Non-admin on /admin page → /403
     if (isAdminPage && role !== "ADMIN") {
       return NextResponse.redirect(new URL("/403", req.url));
     }
 
-    // 7. /verify redirect logic
-    if (isVerificationPage) {
-      if (role === "PROVIDER" && (isFaceVerified || isFullyVerified)) {
-        return NextResponse.redirect(new URL("/my-listings", req.url));
-      }
-      if (role === "CUSTOMER" && (isOtpVerified || isFullyVerified)) {
-        return NextResponse.redirect(new URL("/", req.url));
-      }
-      return NextResponse.next(); // still verifying
-    }
-
-    // 8. Restrict provider-only pages
+    // 🔒 Provider: must be face verified
     if (isProviderOnlyPage) {
       if (role !== "PROVIDER") {
         return NextResponse.redirect(new URL("/403", req.url));
@@ -90,14 +65,36 @@ export default withAuth(
       }
     }
 
+    // 🔁 /verify page access logic
+    if (pathname === "/verify") {
+      if (role === "PROVIDER" && (isFaceVerified || isFullyVerified)) {
+        return NextResponse.redirect(new URL("/my-listings", req.url));
+      }
+      if (role === "CUSTOMER" && (isOtpVerified || isFullyVerified)) {
+        return NextResponse.redirect(new URL("/", req.url));
+      }
+      return NextResponse.next(); // still verifying
+    }
+
     return NextResponse.next();
   },
   {
     callbacks: {
       authorized: ({ token, req }) => {
         const { pathname } = req.nextUrl;
-        const allowUnauth = ["/", "/auth", "/auth/error", "/403", "/role", "/verify"];
-        return !!token || allowUnauth.some((path) => pathname.startsWith(path));
+
+        // ✅ Unauthenticated can only access auth and error pages
+        if (!token) {
+          return ["/auth", "/auth/error", "/403"].some((p) => pathname.startsWith(p));
+        }
+
+        // ✅ Users with no role can ONLY access /role
+        if (!token.role) {
+          return pathname === "/role";
+        }
+
+        // ✅ Everyone else passes token check
+        return true;
       },
     },
   }
