@@ -35,14 +35,14 @@ export async function POST(request: Request) {
 
     const {
       email,
-      name, // This comes from the registration form
+      name,
       contactPhone,
       password,
       role = "CUSTOMER",
       selfieImage,
       idImage,
       faceConfidence,
-      idName, // This comes from ID document extraction
+      idName,
       idNumber,
       idDOB,
       idExpiryDate,
@@ -60,10 +60,8 @@ export async function POST(request: Request) {
       extractionComplete
     } = body;
 
-    // Determine the name to use - priority to Google name, then form name
     const displayName = isGoogleAuth && googleUserName ? googleUserName : name;
 
-    // Basic validation
     if (!displayName || (!email && !isGoogleAuth)) {
       return NextResponse.json({
         error: "Missing required fields",
@@ -90,12 +88,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Phone already registered" }, { status: 409 });
     }
 
-    // Parse dates
     const parsedDOB = idDOB ? parseDate(idDOB) : null;
     const parsedExpiry = idExpiryDate ? parseDate(idExpiryDate) : null;
     const parsedIssue = idIssueDate ? parseDate(idIssueDate) : null;
 
-    // Provider-specific validation
     if (role === "PROVIDER") {
       const missing = [];
 
@@ -130,11 +126,52 @@ export async function POST(request: Request) {
       }
     }
 
-    // Google users: prevent re-registration
     if (isGoogleAuth && googleUserEmail) {
       const existingGoogleUser = await prisma.user.findUnique({ where: { email: googleUserEmail } });
       if (existingGoogleUser) {
-        return NextResponse.json({ error: "Google user already exists" }, { status: 409 });
+        if (role === "PROVIDER") {
+          const updated = await prisma.user.update({
+            where: { email: googleUserEmail },
+            data: {
+              role,
+              isFaceVerified: true,
+              verified: true,
+              selfieImage: selfieImage || selfieUrl || null,
+              idImage: idImage || imageUrl || null,
+              faceConfidence: faceConfidence || null,
+              idName: idName || null,
+              idNumber: idNumber || personalIdNumber || null,
+              idDOB: parsedDOB,
+              idExpiryDate: parsedExpiry,
+              idIssueDate: parsedIssue,
+              idIssuer: idIssuer || null,
+              personalIdNumber: personalIdNumber || null,
+              nationality: nationality || null,
+              gender: gender || null,
+              placeOfIssue: placeOfIssue || null,
+              idType: idType || null,
+              rawText: rawText || null
+            },
+            select: {
+              id: true,
+              email: true,
+              name: true,
+              role: true,
+              contactPhone: true,
+              isFaceVerified: true,
+              verified: true,
+              createdAt: true
+            }
+          });
+
+          return NextResponse.json({
+            success: true,
+            user: updated,
+            message: "Google PROVIDER verified and updated successfully"
+          }, { status: 200 });
+        }
+
+        return NextResponse.json({ message: "Google user already exists" }, { status: 200 });
       }
     }
 
@@ -143,7 +180,7 @@ export async function POST(request: Request) {
     const user = await prisma.user.create({
       data: {
         email: email || googleUserEmail,
-        name: displayName, // This uses the determined display name
+        name: displayName,
         contactPhone: contactPhone || null,
         hashedPassword,
         role,
@@ -152,7 +189,7 @@ export async function POST(request: Request) {
         selfieImage: selfieImage || selfieUrl || null,
         idImage: idImage || imageUrl || null,
         faceConfidence: faceConfidence || null,
-        idName: idName || null, // This stores the extracted ID name separately
+        idName: idName || null,
         idNumber: idNumber || personalIdNumber || null,
         idDOB: parsedDOB,
         idExpiryDate: parsedExpiry,
@@ -168,7 +205,7 @@ export async function POST(request: Request) {
       select: {
         id: true,
         email: true,
-        name: true, // This will return the display name
+        name: true,
         role: true,
         contactPhone: true,
         isFaceVerified: true,

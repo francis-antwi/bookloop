@@ -1,3 +1,7 @@
+// ============================
+// ✅ NextAuth Configuration
+// ============================
+
 import NextAuth, { AuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
@@ -34,8 +38,8 @@ export const authOptions: AuthOptions = {
           credentials.password,
           user.hashedPassword
         );
-        if (!isCorrectPassword) throw new Error("INVALID_CREDENTIALS");
 
+        if (!isCorrectPassword) throw new Error("INVALID_CREDENTIALS");
         if (!user.isOtpVerified) throw new Error("PHONE_VERIFICATION_REQUIRED");
         if (user.role === UserRole.PROVIDER && !user.isFaceVerified) {
           throw new Error("FACE_VERIFICATION_REQUIRED");
@@ -78,12 +82,12 @@ export const authOptions: AuthOptions = {
   callbacks: {
     async signIn({ user, account }) {
       if (account?.provider === "google" && user.email) {
-        let existingUser = await prisma.user.findUnique({
-          where: { email: user.email },
-        });
+        try {
+          let existingUser = await prisma.user.findUnique({
+            where: { email: user.email },
+          });
 
-        if (!existingUser) {
-          try {
+          if (!existingUser) {
             await prisma.user.create({
               data: {
                 email: user.email,
@@ -93,36 +97,22 @@ export const authOptions: AuthOptions = {
                 isFaceVerified: false,
               },
             });
-
-            // ✅ Re-fetch user after creation
-            existingUser = await prisma.user.findUnique({
-              where: { email: user.email },
-            });
-          } catch (error) {
-            console.error("Error creating user during Google sign-in:", error);
-            return false;
           }
+        } catch (error) {
+          console.error("Google sign-in error:", error);
+          return false;
         }
-
-        // Optional debug
-        console.log("✅ Google sign-in user:", {
-          email: existingUser?.email,
-          role: existingUser?.role,
-        });
       }
-
       return true;
     },
 
     async jwt({ token, user, trigger, session }) {
       if (trigger === "update" && session?.role) {
         token.role = session.role;
-
         await prisma.user.update({
           where: { email: token.email ?? "" },
           data: { role: session.role },
         });
-
         if (session.role === UserRole.PROVIDER) {
           token.isFaceVerified = false;
         }
@@ -156,45 +146,6 @@ export const authOptions: AuthOptions = {
         }
       }
 
-      if (token.email && !user) {
-        const lastRefresh = (token.lastRefresh as number) || 0;
-        const now = Date.now();
-        const shouldRefresh = now - lastRefresh > 24 * 60 * 60 * 1000;
-
-        if (shouldRefresh) {
-          try {
-            const dbUser = await prisma.user.findUnique({
-              where: { email: token.email },
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                image: true,
-                role: true,
-                isOtpVerified: true,
-                isFaceVerified: true,
-              },
-            });
-
-            if (dbUser) {
-              token = {
-                ...token,
-                id: dbUser.id,
-                name: dbUser.name ?? "",
-                email: dbUser.email,
-                image: dbUser.image ?? null,
-                role: dbUser.role,
-                isOtpVerified: dbUser.isOtpVerified ?? true,
-                isFaceVerified: dbUser.isFaceVerified ?? false,
-                lastRefresh: now,
-              };
-            }
-          } catch (error) {
-            console.error("Error refreshing user data:", error);
-          }
-        }
-      }
-
       return token;
     },
 
@@ -216,14 +167,20 @@ export const authOptions: AuthOptions = {
 
   events: {
     async signIn({ user, account }) {
-      console.log("User signed in:", { user: user.email, provider: account?.provider });
+      console.log("✅ User signed in:", {
+        user: user.email,
+        provider: account?.provider,
+      });
     },
     async signOut({ token }) {
-      console.log("User signed out:", token?.email);
+      console.log("👋 User signed out:", token?.email);
     },
     async session({ session }) {
       if (process.env.NODE_ENV === "development") {
-        console.log("Session accessed:", { user: session.user?.email, expires: session.expires });
+        console.log("📦 Session accessed:", {
+          user: session.user?.email,
+          expires: session.expires,
+        });
       }
     },
   },
