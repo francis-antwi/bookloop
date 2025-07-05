@@ -9,21 +9,22 @@ export default function AuthErrorRedirectPage() {
   const searchParams = useSearchParams();
   const error = searchParams?.get("error");
   const { data: session, status } = useSession();
+
   const [timedOut, setTimedOut] = useState(false);
 
-  // ⏳ Trigger fallback redirect if session is stuck in loading
+  // ✅ 1. Fallback redirect ONLY IF session is stuck in loading
   useEffect(() => {
     if (status !== "loading") return;
 
-    const timeout = setTimeout(() => {
+    const fallback = setTimeout(() => {
       setTimedOut(true);
       router.replace("/");
-    }, 5000); // ⏰ 5-second timeout
+    }, 5000); // 5 seconds
 
-    return () => clearTimeout(timeout);
+    return () => clearTimeout(fallback);
   }, [status, router]);
 
-  // 🔁 Normal error-based redirect logic
+  // ✅ 2. Handle error-based redirects once session is ready
   useEffect(() => {
     if (!error || status === "loading") return;
 
@@ -32,7 +33,7 @@ export default function AuthErrorRedirectPage() {
 
     if (roleErrors.includes(error)) {
       if (session?.user?.role) {
-        router.replace("/");
+        router.replace("/"); // already has role
       } else {
         router.replace("/role");
       }
@@ -45,7 +46,6 @@ export default function AuthErrorRedirectPage() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center text-center px-4">
-      {/* Spinner */}
       <svg
         className="animate-spin h-6 w-6 text-blue-500 mb-3"
         xmlns="http://www.w3.org/2000/svg"
@@ -59,17 +59,17 @@ export default function AuthErrorRedirectPage() {
           r="10"
           stroke="currentColor"
           strokeWidth="4"
-        ></circle>
+        />
         <path
           className="opacity-75"
           fill="currentColor"
           d="M4 12a8 8 0 018-8v8H4z"
-        ></path>
+        />
       </svg>
 
       <p className="text-lg font-semibold mb-2">Redirecting...</p>
       <p className="text-sm text-gray-500">
-        If you are not redirected automatically,&nbsp;
+        If not redirected automatically,&nbsp;
         <button
           onClick={() => router.replace("/")}
           className="underline text-blue-500 hover:text-blue-600"
@@ -81,7 +81,7 @@ export default function AuthErrorRedirectPage() {
 
       {timedOut && (
         <p className="mt-2 text-xs text-red-500">
-          Session took too long — redirecting to home.
+          Took too long — sending you to home.
         </p>
       )}
     </div>
