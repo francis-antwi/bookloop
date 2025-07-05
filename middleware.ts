@@ -8,6 +8,7 @@ export default withAuth(
     const token = req.auth?.token;
 
     const isRolePage = pathname === "/role";
+    const isVerifyPage = pathname === "/verify";
     const isAdminPage = pathname.startsWith("/admin");
     const isProviderOnlyPage = [
       "/my-listings",
@@ -17,9 +18,10 @@ export default withAuth(
       "/notifications",
     ].some((path) => pathname.startsWith(path));
 
-    // 1. If not authenticated
+    // 1. Not authenticated: allow public pages
     if (!token) {
-      if (pathname.startsWith("/auth") || pathname === "/403") {
+      const publicPaths = ["/", "/auth", "/auth/error", "/403"];
+      if (publicPaths.some((p) => pathname.startsWith(p))) {
         return NextResponse.next();
       }
       return NextResponse.redirect(new URL("/auth", req.url));
@@ -30,20 +32,17 @@ export default withAuth(
     const isOtpVerified = token.isOtpVerified ?? false;
     const isFullyVerified = token.verified ?? false;
 
-    // ✅ STRICT: If no role — allow ONLY /role
-    if (!role) {
-      if (!isRolePage) {
-        return NextResponse.redirect(new URL("/role", req.url));
-      }
-      return NextResponse.next();
+    // 2. No role selected: force /role even if on "/"
+    if (!role && !isRolePage) {
+      return NextResponse.redirect(new URL("/role", req.url));
     }
 
-    // 🔒 Block users with role from accessing /role again
+    // 3. Block /role if already has role
     if (role && isRolePage) {
       return NextResponse.redirect(new URL("/", req.url));
     }
 
-    // 🔐 Admin access
+    // 4. Admin routing
     if (role === "ADMIN") {
       if (!isAdminPage && pathname !== "/") {
         return NextResponse.redirect(new URL("/admin", req.url));
@@ -55,7 +54,26 @@ export default withAuth(
       return NextResponse.redirect(new URL("/403", req.url));
     }
 
-    // 🔒 Provider: must be face verified
+    // 5. Verification check
+    if (role === "PROVIDER" && !isFaceVerified && !isFullyVerified && !isVerifyPage) {
+      return NextResponse.redirect(new URL("/verify", req.url));
+    }
+
+    if (role === "CUSTOMER" && !isOtpVerified && !isFullyVerified && !isVerifyPage) {
+      return NextResponse.redirect(new URL("/verify", req.url));
+    }
+
+    // 6. Verified users shouldn't revisit /verify
+    if (isVerifyPage) {
+      if (role === "PROVIDER" && (isFaceVerified || isFullyVerified)) {
+        return NextResponse.redirect(new URL("/my-listings", req.url));
+      }
+      if (role === "CUSTOMER" && (isOtpVerified || isFullyVerified)) {
+        return NextResponse.redirect(new URL("/", req.url));
+      }
+    }
+
+    // 7. Provider-only route protection
     if (isProviderOnlyPage) {
       if (role !== "PROVIDER") {
         return NextResponse.redirect(new URL("/403", req.url));
@@ -65,42 +83,23 @@ export default withAuth(
       }
     }
 
-    // 🔁 /verify page access logic
-    if (pathname === "/verify") {
-      if (role === "PROVIDER" && (isFaceVerified || isFullyVerified)) {
-        return NextResponse.redirect(new URL("/my-listings", req.url));
-      }
-      if (role === "CUSTOMER" && (isOtpVerified || isFullyVerified)) {
-        return NextResponse.redirect(new URL("/", req.url));
-      }
-      return NextResponse.next(); // still verifying
-    }
-
     return NextResponse.next();
   },
   {
     callbacks: {
       authorized: ({ token, req }) => {
-        const { pathname } = req.nextUrl;
+        const pathname = req.nextUrl.pathname;
+        const publicPaths = ["/", "/auth", "/auth/error", "/403"];
 
-        // ✅ Unauthenticated can only access auth and error pages
-        if (!token) {
-          return ["/auth", "/auth/error", "/403"].some((p) => pathname.startsWith(p));
-        }
+        if (!token) return publicPaths.some((p) => pathname.startsWith(p));
+        if (!token.role) return pathname === "/role";
 
-        // ✅ Users with no role can ONLY access /role
-        if (!token.role) {
-          return pathname === "/role";
-        }
-
-        // ✅ Everyone else passes token check
         return true;
       },
     },
   }
 );
 
-// ✅ Exclude static and API routes
 export const config = {
   matcher: ["/((?!api/|_next/|favicon.ico).*)"],
 };
