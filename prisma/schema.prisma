@@ -121,7 +121,7 @@ model Account {
   user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
-  reviews       Review[]
+  reviews            Review[] // ✅ Already present — now paired properly in Review model
 }
 
 model Listing {
@@ -174,6 +174,7 @@ model Listing {
   // Relations
   user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   reservations     Reservation[]
+  reviews          Review[]       // ✅ Added to fix relation with Review
 }
 
 model Reservation {
@@ -191,16 +192,19 @@ model Reservation {
   user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   listing        Listing            @relation(fields: [listingId], references: [id], onDelete: Cascade)
 }
+
 model Review {
   id          String     @id @default(uuid())
   userId      String
   listingId   String
+  accountId   String?    // ✅ Added to link Review to Account
   rating      Int        // 1-5
   comment     String
   createdAt   DateTime   @default(now())
 
   user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   listing     Listing    @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  account     Account?   @relation(fields: [accountId], references: [id]) // ✅ Added
 
   @@unique([userId, listingId]) // one review per user per listing
 }
@@ -218,6 +222,7 @@ model Notification {
 
   user           User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
+
 model Message {
   id           String     @id @default(uuid())
   senderId     String
