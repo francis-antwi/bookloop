@@ -120,6 +120,8 @@ if (registerData.shouldAutoLogin) {
 
 
 toast.error("Verification complete, but auto-login failed. Please log in manually.");
+router.push("/");
+
 
     } catch (error: any) {
       const errorData = error.response?.data;
