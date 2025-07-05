@@ -283,28 +283,6 @@ const ListingInfo: React.FC<ListingInfoProps> = ({ listing }) => {
         <div className="max-w-4xl mx-auto p-4 sm:p-6">
           <h1 className="sr-only">{listing.title}</h1>
 
-          {/* Thumbnail Grid */}
-          {listing.imageSrc && listing.imageSrc.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-6">
-              {listing.imageSrc.map((src, idx) => (
-                <div 
-                  key={idx} 
-                  className="relative w-full h-48 rounded-xl overflow-hidden cursor-pointer hover:opacity-90 transition-opacity" 
-                  onClick={() => setSelectedImage(src)}
-                >
-                  <Image 
-                    src={src} 
-                    alt={`Listing image ${idx + 1}`} 
-                    fill 
-                    className="object-cover" 
-                    sizes="(max-width: 768px) 50vw, 33vw" 
-                    loading="lazy"
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-
           {/* Title / Provider / Price */}
           <div className="bg-white rounded-xl shadow p-6 space-y-4">
             <div className="flex justify-between items-start">
