@@ -12,7 +12,7 @@ import useRentModal from "@/app/hooks/useRental";
 import { signOut, useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FiMail, FiHome, FiHeart, FiCalendar, FiList, FiCheck, FiBell, FiLogOut, FiUser, FiPlus } from "react-icons/fi";
-
+import axios from "axios";
 interface UserMenuProps {
   currentUser?: User | null;
 }
