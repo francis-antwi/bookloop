@@ -60,13 +60,12 @@ export const authOptions: AuthOptions = {
 
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 days
-    updateAge: 24 * 60 * 60,   // every 24 hours
+    maxAge: 30 * 24 * 60 * 60,
+    updateAge: 24 * 60 * 60,
   },
 
-  // Important: JWT configuration for better persistence
   jwt: {
-    maxAge: 30 * 24 * 60 * 60, // 30 days - matches session maxAge
+    maxAge: 30 * 24 * 60 * 60,
   },
 
   secret: process.env.NEXTAUTH_SECRET,
@@ -75,13 +74,30 @@ export const authOptions: AuthOptions = {
 
   callbacks: {
     async signIn({ user, account }) {
-      if (account?.provider === "google") {
+      if (account?.provider === "google" && user.email) {
         const existingUser = await prisma.user.findUnique({
-          where: { email: user.email ?? "" },
+          where: { email: user.email },
         });
 
-        if (!existingUser) return "/auth/error?error=redirect-role";
-        if (!existingUser.role) return "/auth/error?error=redirect-role";
+        if (!existingUser) {
+          try {
+            await prisma.user.create({
+              data: {
+                email: user.email,
+                name: user.name ?? "",
+                image: user.image ?? null,
+                isOtpVerified: false,
+                isFaceVerified: false,
+              },
+            });
+            return "/role";
+          } catch (error) {
+            console.error("Error creating user during Google sign-in:", error);
+            return "/auth/error?error=redirect-role";
+          }
+        }
+
+        if (!existingUser.role) return "/role";
         if (!existingUser.isOtpVerified) return "/auth/error?error=redirect-verify";
         if (existingUser.role === "PROVIDER" && !existingUser.isFaceVerified) {
           return "/auth/error?error=redirect-verify";
@@ -92,11 +108,9 @@ export const authOptions: AuthOptions = {
     },
 
     async jwt({ token, user, trigger, session }) {
-      // Handle session updates
       if (trigger === "update" && session?.role) {
         token.role = session.role;
 
-        // Update user role in DB if needed
         await prisma.user.update({
           where: { email: token.email ?? "" },
           data: { role: session.role },
@@ -107,9 +121,8 @@ export const authOptions: AuthOptions = {
         }
       }
 
-      // Initial sign in - fetch user data from database
       if (user?.email) {
-        const dbUser = await prisma.user.findUnique({ 
+        const dbUser = await prisma.user.findUnique({
           where: { email: user.email },
           select: {
             id: true,
@@ -119,9 +132,9 @@ export const authOptions: AuthOptions = {
             role: true,
             isOtpVerified: true,
             isFaceVerified: true,
-          }
+          },
         });
-        
+
         if (dbUser) {
           token = {
             ...token,
@@ -136,16 +149,14 @@ export const authOptions: AuthOptions = {
         }
       }
 
-      // For existing sessions, periodically refresh user data
       if (token.email && !user) {
-        // Check if we should refresh user data (every 24 hours)
-        const lastRefresh = token.lastRefresh as number || 0;
+        const lastRefresh = (token.lastRefresh as number) || 0;
         const now = Date.now();
-        const shouldRefresh = now - lastRefresh > 24 * 60 * 60 * 1000; // 24 hours
+        const shouldRefresh = now - lastRefresh > 24 * 60 * 60 * 1000;
 
         if (shouldRefresh) {
           try {
-            const dbUser = await prisma.user.findUnique({ 
+            const dbUser = await prisma.user.findUnique({
               where: { email: token.email },
               select: {
                 id: true,
@@ -155,9 +166,9 @@ export const authOptions: AuthOptions = {
                 role: true,
                 isOtpVerified: true,
                 isFaceVerified: true,
-              }
+              },
             });
-            
+
             if (dbUser) {
               token = {
                 ...token,
@@ -196,16 +207,14 @@ export const authOptions: AuthOptions = {
     },
   },
 
-  // Events for debugging and logging
   events: {
-    async signIn({ user, account, profile }) {
+    async signIn({ user, account }) {
       console.log("User signed in:", { user: user.email, provider: account?.provider });
     },
     async signOut({ token }) {
       console.log("User signed out:", token?.email);
     },
-    async session({ session, token }) {
-      // Optional: Log session access for debugging
+    async session({ session }) {
       if (process.env.NODE_ENV === "development") {
         console.log("Session accessed:", { user: session.user?.email, expires: session.expires });
       }
