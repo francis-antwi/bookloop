@@ -2,7 +2,8 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/auth/authOptions';
 import prisma from '@/app/libs/prismadb';
-import ChatWindow from '@/components/chat/ChatWindow';
+import ChatWindow from '../chatWindow';
+
 
 interface Props {
   params: {
