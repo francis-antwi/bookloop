@@ -21,7 +21,10 @@ export async function POST(req: NextRequest) {
 
   if (!["CUSTOMER", "PROVIDER"].includes(role)) {
     return NextResponse.json(
-      { error: "Invalid role. Allowed roles: CUSTOMER, PROVIDER" },
+      {
+        error: "Invalid role. Allowed roles: CUSTOMER, PROVIDER",
+        redirect: "/role",
+      },
       { status: 400 }
     );
   }
@@ -38,7 +41,13 @@ export async function POST(req: NextRequest) {
     });
 
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return NextResponse.json(
+        {
+          error: "User not found",
+          redirect: "/",
+        },
+        { status: 404 }
+      );
     }
 
     // 🚫 Prevent changing to a different role once it's set
@@ -47,19 +56,19 @@ export async function POST(req: NextRequest) {
         {
           error: "Role change not allowed",
           message: `Your role is already set to '${user.role}'.`,
+          redirect: user.role === "PROVIDER" ? "/verify" : "/",
         },
         { status: 403 }
       );
     }
 
-    // ✅ If the same role is already set, return a redirect path
+    // ✅ If the same role is already set, return redirect path
     if (user.role === role) {
-      const redirectPath = role === "PROVIDER" ? "/verify" : "/";
       return NextResponse.json(
         {
           success: true,
           message: `Role already set to ${role}`,
-          redirect: redirectPath, // ✅ Add redirect field for frontend to handle
+          redirect: role === "PROVIDER" ? "/verify" : "/",
         },
         { status: 200 }
       );
@@ -76,7 +85,7 @@ export async function POST(req: NextRequest) {
             error: "Verification required",
             message:
               "You must complete identity verification to become a provider.",
-            redirect: "/verify", // ✅ Added for client-side redirect
+            redirect: "/verify",
           },
           { status: 403 }
         );
@@ -90,7 +99,11 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json(
-      { success: true, message: "Role updated successfully" },
+      {
+        success: true,
+        message: "Role updated successfully",
+        redirect: role === "PROVIDER" ? "/verify" : "/",
+      },
       { status: 200 }
     );
   } catch (error) {
@@ -99,9 +112,9 @@ export async function POST(req: NextRequest) {
       {
         error: "Internal Server Error",
         message: "Failed to update role",
-        redirect: "/verify",
+        redirect: "/role",
       },
-       { status: 403 }
+      { status: 500 }
     );
   }
 }

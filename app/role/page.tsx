@@ -52,7 +52,7 @@ const RoleSelector = () => {
     setError(null);
 
     try {
-      await axios.post("/api/role", {
+      const res = await axios.post("/api/role", {
         role,
         userId: session.user.id,
       });
@@ -61,9 +61,8 @@ const RoleSelector = () => {
       setSelectedRole(role);
       toast.success(`Role updated to ${role.toLowerCase()} successfully!`);
 
-      setTimeout(() => {
-        router.push(role === "PROVIDER" ? "/verify" : "/");
-      }, 1000);
+      const redirectPath = res.data?.redirect || (role === "PROVIDER" ? "/verify" : "/");
+      router.push(redirectPath);
     } catch (err: any) {
       const message =
         err?.response?.data?.message ||
@@ -73,8 +72,11 @@ const RoleSelector = () => {
       setError(message);
       toast.error(message);
 
-      if (err?.response?.status === 401) {
-        setTimeout(() => router.push("/"), 1500);
+      const redirectPath = err?.response?.data?.redirect;
+      if (redirectPath) {
+        setTimeout(() => router.push(redirectPath), 1000);
+      } else if (err?.response?.status === 401) {
+        setTimeout(() => router.push("/"), 1000);
       }
     } finally {
       setIsLoading(false);
