@@ -58,7 +58,7 @@ export const authOptions: AuthOptions = {
   pages: {
     signIn: "/",
     error: "/auth/error",
-    newUser: "/role", // fallback, but not used with Google unless managed manually
+    newUser: "/role",
   },
 
   session: {
@@ -78,7 +78,7 @@ export const authOptions: AuthOptions = {
   callbacks: {
     async signIn({ user, account }) {
       if (account?.provider === "google" && user.email) {
-        const existingUser = await prisma.user.findUnique({
+        let existingUser = await prisma.user.findUnique({
           where: { email: user.email },
         });
 
@@ -93,14 +93,25 @@ export const authOptions: AuthOptions = {
                 isFaceVerified: false,
               },
             });
+
+            // ✅ Re-fetch user after creation
+            existingUser = await prisma.user.findUnique({
+              where: { email: user.email },
+            });
           } catch (error) {
             console.error("Error creating user during Google sign-in:", error);
             return false;
           }
         }
+
+        // Optional debug
+        console.log("✅ Google sign-in user:", {
+          email: existingUser?.email,
+          role: existingUser?.role,
+        });
       }
 
-      return true; // ✅ Always allow session creation
+      return true;
     },
 
     async jwt({ token, user, trigger, session }) {
