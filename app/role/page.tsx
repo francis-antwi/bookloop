@@ -11,25 +11,56 @@ interface RoleSelectorProps {
 }
 
 const RoleSelector = ({ onRoleSelected }: RoleSelectorProps) => {
-  const { data: session, update } = useSession();
+  const { data: session, status, update } = useSession();
   const [isLoading, setIsLoading] = useState(false);
   const [selectedRole, setSelectedRole] = useState(session?.user?.role || null);
+
+  // Don't render until session is loaded
+  if (status === "loading") {
+    return (
+      <div className="max-w-md mx-auto space-y-6 p-6">
+        <div className="text-center">
+          <FiLoader className="animate-spin text-2xl mx-auto mb-4 text-blue-500" />
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Redirect if not authenticated
+  if (status === "unauthenticated") {
+    return (
+      <div className="max-w-md mx-auto space-y-6 p-6">
+        <div className="text-center">
+          <p className="text-gray-600">Please sign in to continue</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleRoleSelect = async (role: string) => {
     if (selectedRole === role) return;
     
+    // Double check session exists before making API call
+    if (!session) {
+      toast.error('Please sign in first');
+      return;
+    }
+    
     setIsLoading(true);
     try {
+      console.log('Making API call with session:', session.user.email);
+      
       await axios.post('/api/role', { role });
       await update({ role });
       setSelectedRole(role);
       onRoleSelected(role);
       toast.success('Role selected successfully');
-   } catch (error: any) {
-  const message = error?.response?.data?.message || 'Failed to select role';
-  toast.error(message);
-}
-finally {
+    } catch (error: any) {
+      console.error('Role selection error:', error);
+      const message = error?.response?.data?.message || 'Failed to select role';
+      toast.error(message);
+    } finally {
       setIsLoading(false);
     }
   };
@@ -69,6 +100,10 @@ finally {
         </h2>
         <p className="text-gray-600 text-sm">
           Select how you'll be using our platform
+        </p>
+        {/* Debug info - remove in production */}
+        <p className="text-xs text-gray-500">
+          Signed in as: {session?.user?.email}
         </p>
       </div>
 
@@ -126,8 +161,6 @@ finally {
           </button>
         ))}
       </div>
-
-      
     </div>
   );
 };
