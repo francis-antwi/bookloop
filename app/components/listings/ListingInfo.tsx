@@ -1,13 +1,13 @@
 import React, { useState } from "react";
-import { Calendar, MapPin, Phone, Mail, Tag, Clock, Users, Car, Home, Building, Utensils, Settings, X, ChevronDown, ChevronUp, Link } from "lucide-react";
-import ReviewForm from "../inputs/ReviewForm";
-
+import { Calendar, MapPin, Phone, Mail, Tag, Clock, Users, Car, Home, Building, Utensils, Settings, X, ChevronDown, ChevronUp } from "lucide-react";
+import { FiMessageSquare } from "react-icons/fi";
+import Link from "next/link";
 interface ListingInfoProps {
   listing?: {
     createdAt?: string | null;
     updatedAt?: string | null;
     category?: string;
-    imageSrc?: string[]; // or string if one image
+    imageSrc?: string[];
     price?: number;
     title?: string;
     description?: string;
@@ -42,9 +42,15 @@ interface ListingInfoProps {
     duration?: number | null;
     requiresBooking?: boolean;
     serviceProvider?: string | null;
+
+    // ✅ Added for message link
+    user: {
+      id: string;
+      name?: string;
+      image?: string;
+    };
   };
 }
-
 const categorySpecificFields: Record<string, Record<string, { label: string; icon?: React.ReactNode }>> = {
   Apartments: {
     bedrooms: { label: "Bedrooms", icon: <Home className="w-4 h-4" /> },
@@ -91,12 +97,17 @@ const getCategoryIcon = (category?: string) => {
     default: return <Tag className="w-5 h-5" />;
   }
 };
-<><Link
-  href={`/messages/${listing.user.id}`} // listing.user.id must be passed in props
-  className="mt-4 inline-block bg-blue-600 text-white px-4 py-2 rounded"
+
+
+<Link
+  href={`/messages/${listing.user.id}`}
+  className="mt-4 inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded"
 >
+  <FiMessageSquare />
   Message Provider
-</Link><ReviewForm listingId={listing.id} /></>
+</Link>
+
+
 const formatDate = (dateStr?: string | null) => {
   if (!dateStr) return "N/A";
   const date = new Date(dateStr);
@@ -320,6 +331,16 @@ const ListingInfo: React.FC<ListingInfoProps> = ({ listing }) => {
                   />
                 )}
               </div>
+              {/* ✅ Message Provider Link */}
+          {listing.user?.id && (
+            <Link
+              href={`/messages/${listing.user.id}`}
+              className="mt-4 inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded"
+            >
+              <FiMessageSquare />
+              Message Provider
+            </Link>
+          )}
             </CollapsibleSection>
 
             {/* Category-specific Details */}
