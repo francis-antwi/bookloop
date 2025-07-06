@@ -113,6 +113,12 @@ const Approvals: React.FC<ApprovalsProps> = ({ approvals: initialReservations, c
     🚨 Cancellation Risk: {(reservation.cancellationRisk * 100).toFixed(0)}%
   </div>
 )}
+{reservation?.user?.trustScore != null && (
+  <div className="text-sm font-medium text-yellow-600">
+    🔒 Trust Score: {(reservation.user.trustScore * 100).toFixed(0)}%
+  </div>
+)}
+
 
                         </>
                       ) : (

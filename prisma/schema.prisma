@@ -41,7 +41,7 @@ model User {
   isOtpVerified     Boolean    @default(false)
   isFaceVerified    Boolean    @default(false)
   verified          Boolean    @default(false)
-
+   trustScore       Float?
   selfieImage       String?
   idImage           String?
   faceConfidence    Float?
