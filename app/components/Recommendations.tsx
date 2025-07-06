@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import ListingCard from '../listings/ListingCard';
+import ListingCard from './listings/ListingCard';
+
 
 export default function RecommendedListings() {
   const [recommendations, setRecommendations] = useState([]);
