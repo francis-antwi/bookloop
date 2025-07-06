@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import OccupancyChart from "../components/OccupancyChart";
+import PriceSuggestionChart from "../components/PriceSuggestionChart";
 
 
 // Type definition to match Prisma model
@@ -490,7 +491,8 @@ const PropertiesClient: React.FC<PropertiesClientProps> = ({ listings }) => {
     <OccupancyChart listingId={listing.id} />
   </div>
 )}
-                                    
+                                    <PriceSuggestionChart listingId={listing.id} />
+
                                     {/* Action Buttons Overlay */}
                                     <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center space-x-3 rounded-2xl">
                                         <button
