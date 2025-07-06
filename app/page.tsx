@@ -48,14 +48,15 @@ const Home = async ({ searchParams }: HomeProps) => {
             gap-9
           "
         >
-          <RecommendedListings />
-          {listings.map((listing: SafeListing) => (
-            <ListingCard
-              key={listing.id}
-              data={listing}
-              currentUser={currentUser}
-            />
-          ))}
+        {listings.length > 0 && <RecommendedListings />}
+
+  {listings.map((listing: SafeListing) => (
+    <ListingCard
+      key={listing.id}
+      data={listing}
+      currentUser={currentUser}
+    />
+  ))}
         </div>
       </Container>
     </Client>

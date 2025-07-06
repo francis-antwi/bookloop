@@ -102,6 +102,7 @@ const Approvals: React.FC<ApprovalsProps> = ({ approvals: initialReservations, c
                           actionLabel={actionLabel}
                           currentUser={currentUser}
                         />
+                        
                       ) : (
                         <div className="p-4 bg-red-100 text-red-700 text-sm font-medium">
                           Listing information missing for this reservation.
@@ -142,6 +143,12 @@ const Approvals: React.FC<ApprovalsProps> = ({ approvals: initialReservations, c
                             </>
                           )}
                         </button>
+                        {reservation.cancellationRisk !== null && (
+  <div className="text-sm text-red-500 font-semibold">
+    🚨 Cancellation Risk: {(reservation.cancellationRisk * 100).toFixed(0)}%
+  </div>
+)}
+
                       </div>
                     </div>
                   </div>

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Heading from "./Heading";
 import Button from "./Button";
+import RecommendedListings from "./Recommendations";
 
 interface EmptyStateProps {
     title?: string;
@@ -88,7 +89,9 @@ const EmptyState: React.FC<EmptyStateProps> = ({
         : "min-h-[60vh] flex items-center justify-center p-8 mt-40 z-0";
 
     return (
+        
         <div className={backgroundClasses}>
+            <RecommendedListings/>
             <div 
                 className={`
                     relative
