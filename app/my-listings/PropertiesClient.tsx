@@ -3,6 +3,8 @@ import ListingCard from "../components/listings/ListingCard";
 import { useState, useCallback } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
+import OccupancyChart from "../components/OccupancyChart";
+
 
 // Type definition to match Prisma model
 type ListingStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -483,6 +485,11 @@ const PropertiesClient: React.FC<PropertiesClientProps> = ({ listings }) => {
                                         disabled={deletingId === listing.id || editingId === listing.id}
                                         actionLabel=""
                                     />
+                                    {listing.status === 'APPROVED' && (
+  <div className="p-4">
+    <OccupancyChart listingId={listing.id} />
+  </div>
+)}
                                     
                                     {/* Action Buttons Overlay */}
                                     <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center space-x-3 rounded-2xl">
