@@ -4,6 +4,7 @@ import Client from "./components/Client";
 import Container from "./components/Container";
 import EmptyState from "./components/EmptyState";
 import ListingCard from "./components/listings/ListingCard";
+import RecommendedListings from "./components/Recommendations";
 import { SafeListing } from "./types";
 
 interface HomeProps {
@@ -47,6 +48,7 @@ const Home = async ({ searchParams }: HomeProps) => {
             gap-9
           "
         >
+          <RecommendedListings />
           {listings.map((listing: SafeListing) => (
             <ListingCard
               key={listing.id}
