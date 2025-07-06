@@ -135,7 +135,7 @@ model Listing {
   contactPhone     String?
   address          String?
   status           ListingStatus  @default(PENDING)
-
+  suggestedPrice    Float?
   bedrooms         Int?
   bathrooms        Int?
   furnished        Boolean?

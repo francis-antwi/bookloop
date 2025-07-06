@@ -23,7 +23,7 @@ interface Listing {
     contactPhone?: string | null;
     address?: string | null;
     status: ListingStatus;
-    
+    suggestedPrice?: number | null;
     // Apartment-specific fields
     bedrooms?: number | null;
     bathrooms?: number | null;
@@ -486,11 +486,17 @@ const PropertiesClient: React.FC<PropertiesClientProps> = ({ listings }) => {
                                         disabled={deletingId === listing.id || editingId === listing.id}
                                         actionLabel=""
                                     />
-                                    {listing.status === 'APPROVED' && (
-  <div className="p-4">
-    <OccupancyChart listingId={listing.id} />
+                                    {listing.suggestedPrice && (
+  <div className="px-4 pb-3 text-sm text-green-700 font-medium">
+    💡 Suggested Price: ${listing.suggestedPrice}
   </div>
 )}
+
+                                    {listing.status === 'APPROVED' && (
+                                    <div className="p-4">
+                                        <OccupancyChart listingId={listing.id} />
+                                    </div>
+                                    )}
                                     <PriceSuggestionChart listingId={listing.id} />
 
                                     {/* Action Buttons Overlay */}
@@ -549,6 +555,7 @@ const PropertiesClient: React.FC<PropertiesClientProps> = ({ listings }) => {
                     </div>
                 )}
             </div>
+            
         </div>
     );
 };

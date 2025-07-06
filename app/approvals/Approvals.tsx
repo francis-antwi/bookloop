@@ -123,6 +123,11 @@ const Approvals: React.FC<ApprovalsProps> = ({ approvals: initialReservations, c
     ⚠️ Fraud Risk: {(reservation.fraudRisk * 100).toFixed(0)}%
   </div>
 )}
+{reservation?.overbookingRisk != null && reservation.overbookingRisk > 0.4 && (
+  <div className="px-4 text-sm font-medium text-amber-600">
+    ⛔ Overbooking Risk: {(reservation.overbookingRisk * 100).toFixed(0)}%
+  </div>
+)}
 
 
 
