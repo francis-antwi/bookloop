@@ -3,6 +3,7 @@ import getCurrentUser from "@/app/actions/getCurrentUser";
 import { sendNotification } from "../utils/notification";
 import { ReservationStatus, NotificationType } from "@prisma/client";
 import prisma from "@/app/libs/prismadb";
+import { differenceInDays } from "date-fns";
 
 // GET: Fetch reservations for listings owned by the current user
 export async function GET() {
@@ -27,7 +28,44 @@ export async function GET() {
       },
     });
 
-    return NextResponse.json(reservations);
+    // Dynamically calculate missing cancellationRisk values
+    const updatedReservations = await Promise.all(
+      reservations.map(async (res) => {
+        if (res.cancellationRisk !== null && res.cancellationRisk !== undefined) {
+          return res; // already has value
+        }
+
+        let score = 0;
+
+        const leadTime = differenceInDays(new Date(res.startDate), new Date(res.createdAt));
+        if (leadTime < 3) score += 0.3;
+        else if (leadTime > 30) score += 0.1;
+
+        const stayLength = differenceInDays(new Date(res.endDate), new Date(res.startDate));
+        if (stayLength <= 2) score += 0.1;
+
+        const pastCancellations = await prisma.reservation.count({
+          where: {
+            userId: res.userId,
+            status: "CANCELLED",
+          },
+        });
+
+        if (pastCancellations > 2) score += 0.4;
+        else if (pastCancellations > 0) score += 0.2;
+
+        score = Math.min(1, Math.max(0, score));
+
+        const updated = await prisma.reservation.update({
+          where: { id: res.id },
+          data: { cancellationRisk: score },
+        });
+
+        return { ...res, cancellationRisk: updated.cancellationRisk };
+      })
+    );
+
+    return NextResponse.json(updatedReservations);
   } catch (error) {
     console.error("GET /api/reservations Error:", error);
     return NextResponse.json(

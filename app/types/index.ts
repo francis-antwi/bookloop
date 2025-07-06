@@ -59,4 +59,6 @@ export type SafeReservation = Omit<
   endDate: string;
   status: ReservationStatus;
   listing: SafeListing;
+  cancellationRisk?: number | null;
+  
 };
