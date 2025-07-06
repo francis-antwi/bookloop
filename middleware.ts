@@ -19,8 +19,7 @@ export default withAuth(
       "/my-listings",
       "/approvals",
       "/bookings",
-      "/favourites",
-      "/notifications"
+      
     ].some(path => pathname.startsWith(path));
 
     // 🧱 1. Not authenticated
