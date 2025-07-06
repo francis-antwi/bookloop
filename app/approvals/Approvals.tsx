@@ -56,7 +56,7 @@ const Approvals: React.FC<ApprovalsProps> = ({ approvals: initialReservations, c
           <div className="relative py-8 flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">Bookings</h1>
-              <p className="mt-2 text-slate-600 text-lg">Manage bookings on your listings</p>
+              <p className=" text-slate-600 text-lg">Manage bookings on your listings</p>
             </div>
             <div className="hidden sm:flex items-center space-x-4">
               <div className="bg-gradient-to-r from-emerald-500 to-cyan-600 text-white px-4 py-2 rounded-full text-sm font-medium shadow-lg">

@@ -160,7 +160,7 @@ const ListingHead: React.FC<ListingHeadProps> = ({
 
             {/* Thumbnail Strip */}
             {imageSrc.length > 1 && (
-              <div className="mt-4 flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+              <div className="mt-2 flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                 {imageSrc.map((src, index) => (
                   <button
                     key={index}
@@ -265,7 +265,7 @@ const ListingHead: React.FC<ListingHeadProps> = ({
 
             {/* Modal Thumbnail Strip */}
             {imageSrc.length > 1 && (
-              <div className="mt-6 flex justify-center gap-2 overflow-x-auto pb-2">
+              <div className="mt-4 flex justify-center gap-2 overflow-x-auto pb-2">
                 {imageSrc.map((src, index) => (
                   <button
                     key={index}
