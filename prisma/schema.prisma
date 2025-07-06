@@ -179,6 +179,7 @@ model Reservation {
   createdAt      DateTime           @default(now())
   email          String?
   contactPhone   String?
+  fraudRisk      Float?
   status         ReservationStatus  @default(PENDING)
   cancellationRisk Float?
   user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
