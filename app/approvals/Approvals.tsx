@@ -108,11 +108,12 @@ const Approvals: React.FC<ApprovalsProps> = ({ approvals: initialReservations, c
                           />
 
                           {/* 🚨 Cancellation Risk Display */}
-                          {typeof reservation.cancellationRisk === 'number' && reservation.cancellationRisk > 0.3 && (
-                            <div className="px-4 pb-4 text-sm font-medium text-red-600">
-                              🚨 Cancellation Risk: {(reservation.cancellationRisk * 100).toFixed(0)}%
-                            </div>
-                          )}
+                     {reservation?.cancellationRisk != null && reservation.cancellationRisk > 0.3 && (
+  <div className="px-4 pb-4 text-sm font-medium text-red-600">
+    🚨 Cancellation Risk: {(reservation.cancellationRisk * 100).toFixed(0)}%
+  </div>
+)}
+
                         </>
                       ) : (
                         <div className="p-4 bg-red-100 text-red-700 text-sm font-medium">
