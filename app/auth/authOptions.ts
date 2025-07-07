@@ -41,7 +41,6 @@ export const authOptions: AuthOptions = {
         );
 
         if (!isCorrectPassword) throw new Error("INVALID_CREDENTIALS");
-        if (!user.isOtpVerified) throw new Error("PHONE_VERIFICATION_REQUIRED");
         if (user.role === UserRole.PROVIDER && !user.isFaceVerified) {
           throw new Error("FACE_VERIFICATION_REQUIRED");
         }
