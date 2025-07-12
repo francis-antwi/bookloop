@@ -114,14 +114,10 @@ if (!registerData.success) {
 
 if (registerData.shouldAutoLogin) {
   toast.success('Verification complete! Logging you in...');
-  await update();
-  router.push('/');
+  window.location.href = '/'; 
+  return;
 }
-else {
-  toast.success('Verification complete!');
-  await update();
-  onComplete();
-}
+
     } catch (error: any) {
       const errorData = error.response?.data;
       const errorMsg = errorData?.error || error.message || 'Verification failed';
