@@ -140,11 +140,14 @@ export async function POST(request: Request) {
 
     console.log("Listing created with ID:", listing.id);
 
-    await sendNotification(
-      currentUser.id,
-      `Your listing "${listing.title}" has been submitted for admin review.`,
-      "SYSTEM",
-    );
+ if (currentUser.role !== "ADMIN") {
+  await sendNotification(
+    currentUser.id,
+    `Your listing "${listing.title}" has been submitted for admin review.`,
+    "SYSTEM"
+  );
+}
+
     console.log("Notification sent to listing owner");
 
     const admins = await prisma.user.findMany({
