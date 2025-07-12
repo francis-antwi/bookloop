@@ -64,7 +64,7 @@ export default function OccupancyChart({ listingId }: Props) {
         <div className="h-full flex items-center justify-center">
           <div className="text-center">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent mb-4"></div>
-            <p className="text-gray-600 font-medium">Loading occupancy prediction...</p>
+            <p className="text-gray-600 font-medium">Loading booking prediction...</p>
           </div>
         </div>
       </div>
@@ -95,7 +95,7 @@ export default function OccupancyChart({ listingId }: Props) {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-xl font-bold text-gray-800 mb-1">
-              Occupancy Forecast
+              Booking Forecast
             </h2>
             <p className="text-sm text-gray-500">
               Next 30 days prediction
@@ -103,7 +103,7 @@ export default function OccupancyChart({ listingId }: Props) {
           </div>
           <div className="flex items-center space-x-2">
             <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-            <span className="text-sm text-gray-600 font-medium">Occupancy Rate</span>
+            <span className="text-sm text-gray-600 font-medium">Booking Rate</span>
           </div>
         </div>
 
