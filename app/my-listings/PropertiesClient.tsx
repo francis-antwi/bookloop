@@ -433,6 +433,80 @@ const PropertiesClient: React.FC<PropertiesClientProps> = ({ listings }) => {
                         {/* Modal Content */}
                         <form onSubmit={(e) => { e.preventDefault(); onSubmitEdit(); }} className="p-8">
                             {renderFieldSections()}
+                            {/* Image Upload Section */}
+<div className="mt-10">
+  <label className="block text-sm font-semibold text-slate-700 mb-2">
+    Listing Images
+  </label>
+  <input
+    type="file"
+    multiple
+    accept="image/*"
+    onChange={(e) => {
+      const files = e.target.files;
+      if (!files) return;
+
+      const fileReaders = Array.from(files).map((file) => {
+        return new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      });
+
+      Promise.all(fileReaders)
+        .then((base64Images) => {
+          setFormData((prev) => ({
+            ...prev,
+            imageSrc: [...(prev.imageSrc || []), ...base64Images],
+          }));
+        })
+        .catch((error) => {
+          toast.error("Failed to load image(s)");
+          console.error(error);
+        });
+    }}
+    className="block w-full px-4 py-2 bg-white border border-slate-300 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+  />
+
+  {/* Image Previews */}
+  {formData.imageSrc.length > 0 && (
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4">
+      {formData.imageSrc.map((src, index) => (
+        <div key={index} className="relative group border rounded-lg overflow-hidden">
+          <img
+            src={src}
+            alt={`Preview ${index}`}
+            className="w-full h-32 object-cover"
+          />
+          <button
+            type="button"
+            onClick={() =>
+              setFormData((prev) => ({
+                ...prev,
+                imageSrc: prev.imageSrc.filter((_, i) => i !== index),
+              }))
+            }
+            className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition"
+            title="Remove"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      ))}
+    </div>
+  )}
+</div>
+
 
                             {/* Action Buttons */}
                             <div className="flex flex-col sm:flex-row gap-3 pt-8 mt-8 border-t border-slate-200">

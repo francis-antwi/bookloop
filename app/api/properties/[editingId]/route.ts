@@ -85,7 +85,7 @@ export async function PUT(
       contactPhone: body.contactPhone,
       address: body.address,
       ...(body.email && { email: body.email }),
-      ...(body.imageSrc && { imageSrc: body.imageSrc }),
+      ...(body.imageSrc !== undefined && { imageSrc: body.imageSrc }),
       ...(body.status && { status: body.status }),
       ...(body.category && { category: body.category }),
       ...(body.createdAt && { createdAt: new Date(body.createdAt) }),
