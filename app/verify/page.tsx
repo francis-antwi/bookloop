@@ -117,6 +117,8 @@ if (registerData.shouldAutoLogin) {
   window.location.href = '/'; 
   return;
 }
+toast.success("Verification complete");
+router.push("/");
 
     } catch (error: any) {
       const errorData = error.response?.data;
