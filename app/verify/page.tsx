@@ -61,7 +61,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
 
   const handleSelfieCapture = (blob: Blob) => {
     setSelfieImage(blob);
-    setVerificationStatus(null); // Reset verification status when new selfie is taken
+    setVerificationStatus(null);
   };
 
   const handleIdUpload = (file: File) => {
@@ -78,7 +78,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
       return;
     }
     setIdFile(file);
-    setVerificationStatus(null); // Reset verification status when new ID is uploaded
+    setVerificationStatus(null);
   };
 
   const handleBusinessDataChange = (field: string, value: string) => {
@@ -97,114 +97,338 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
     setBusinessFiles(prev => ({ ...prev, [field]: file }));
   };
 
- // Key changes to fix the auto-advance issue:
-
-// 1. Update the submitIdentityVerification function to ensure proper flow
-const submitIdentityVerification = async () => {
-  if (!selfieImage || !idFile) {
-    toast.error('Please complete all verification steps');
-    return;
-  }
-
-  setIsLoading(true);
-  setVerificationStatus(null);
-
-  try {
-    const verificationFormData = new FormData();
-    verificationFormData.append('selfie', new File([selfieImage], 'selfie.jpg', { type: 'image/jpeg' }));
-    verificationFormData.append('idImage', idFile);
-    verificationFormData.append('email', session?.user?.email || '');
-    verificationFormData.append('name', session?.user?.name || '');
-    verificationFormData.append('role', role);
-
-    const response = await axios.post('/api/verify', verificationFormData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 60000
-    });
-
-    if (!response.data.success) {
-      throw new Error(response.data.error || 'Identity verification failed');
+  const submitIdentityVerification = async () => {
+    if (!selfieImage || !idFile) {
+      toast.error('Please complete all verification steps');
+      return;
     }
 
-    setVerificationStatus({ 
-      success: true, 
-      confidence: response.data.matchConfidence 
-    });
-    setIdentityVerified(true);
+    setIsLoading(true);
+    setVerificationStatus(null);
 
-    if (role === 'PROVIDER') {
-      toast.success('Identity verified! Moving to business verification...');
-      // Add a small delay to show the success message, then move to business step
-      setTimeout(() => {
-        setCurrentStep('business');
-      }, 1000);
-    } else {
-      toast.success('Verification complete!');
+    try {
+      const verificationFormData = new FormData();
+      verificationFormData.append('selfie', new File([selfieImage], 'selfie.jpg', { type: 'image/jpeg' }));
+      verificationFormData.append('idImage', idFile);
+      verificationFormData.append('email', session?.user?.email || '');
+      verificationFormData.append('name', session?.user?.name || '');
+      verificationFormData.append('role', role);
+
+      const response = await axios.post('/api/verify', verificationFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 60000
+      });
+
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Identity verification failed');
+      }
+
+      setVerificationStatus({ 
+        success: true, 
+        confidence: response.data.matchConfidence 
+      });
+      setIdentityVerified(true);
+
+      if (role === 'PROVIDER') {
+        toast.success('Identity verified! Moving to business verification...');
+        setTimeout(() => {
+          setCurrentStep('business');
+        }, 1500);
+      } else {
+        toast.success('Verification complete!');
+        setTimeout(() => {
+          onComplete();
+          router.push('/');
+        }, 1500);
+      }
+
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.error || error.message || 'Verification failed';
+      setVerificationStatus({ success: false, error: errorMsg });
+      toast.error(errorMsg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const submitBusinessVerification = async () => {
+    if (!businessData.tinNumber || !businessData.businessName || !businessData.businessType) {
+      toast.error('Please fill in all required business information');
+      return;
+    }
+    if (!businessFiles.tinCertificate) {
+      toast.error('TIN Certificate is required');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const businessFormData = new FormData();
+      businessFormData.append('email', session?.user?.email || '');
+      businessFormData.append('verificationStep', 'business');
+      
+      Object.entries(businessData).forEach(([key, value]) => {
+        if (value) businessFormData.append(key, value);
+      });
+      
+      Object.entries(businessFiles).forEach(([key, file]) => {
+        if (file) businessFormData.append(key, file);
+      });
+
+      const response = await axios.post('/api/verify-business', businessFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 120000
+      });
+
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Business verification failed');
+      }
+
+      toast.success('Business verification submitted for review!');
       setTimeout(() => {
         onComplete();
-        router.push('/');
+        router.push('/pending-approval');
       }, 1500);
+
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.error || error.message || 'Business verification failed';
+      toast.error(errorMsg);
+    } finally {
+      setIsLoading(false);
     }
+  };
 
-  } catch (error: any) {
-    const errorMsg = error.response?.data?.error || error.message || 'Verification failed';
-    setVerificationStatus({ success: false, error: errorMsg });
-    toast.error(errorMsg);
-  } finally {
-    setIsLoading(false);
-  }
-};
+  const nextStep = () => {
+    if (currentStep === 'selfie' && selfieImage) {
+      setCurrentStep('id');
+    } else if (currentStep === 'id' && idFile) {
+      submitIdentityVerification();
+    }
+  };
 
-// 2. Update the nextStep function to handle the flow better
-const nextStep = () => {
-  if (currentStep === 'selfie' && selfieImage) {
-    setCurrentStep('id');
-  } else if (currentStep === 'id' && idFile) {
-    // Don't change step here - let submitIdentityVerification handle it
-    submitIdentityVerification();
-  }
-};
+  const prevStep = () => {
+    if (currentStep === 'id') {
+      setCurrentStep('selfie');
+    } else if (currentStep === 'business') {
+      setCurrentStep('id');
+    }
+  };
 
-// 3. Update the success message display condition
-{verificationStatus?.success === true && currentStep === 'id' && role !== 'PROVIDER' && (
-  <div className="p-4 bg-green-50 border border-green-200 rounded-xl mb-6">
-    <div className="flex items-start gap-3">
-      <FiCheck className="text-green-500 text-xl mt-0.5 flex-shrink-0" />
-      <div>
-        <p className="font-medium text-green-800">Verification Successful!</p>
-        <p className="text-sm text-green-600 mt-1">
-          Match confidence: {verificationStatus.confidence}%
-        </p>
+  const getStepNumber = () => {
+    if (currentStep === 'selfie') return 1;
+    if (currentStep === 'id') return 2;
+    return 3;
+  };
+
+  const getTotalSteps = () => role === 'PROVIDER' ? 3 : 2;
+
+  const getProgressWidth = () => {
+    const progress = (getStepNumber() / getTotalSteps()) * 100;
+    return `${progress}%`;
+  };
+
+  const canProceedFromSelfie = () => selfieImage !== null;
+  const canProceedFromId = () => idFile !== null;
+  const canSubmitBusiness = () => {
+    return businessData.tinNumber && 
+           businessData.businessName && 
+           businessData.businessType && 
+           businessFiles.tinCertificate;
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-4">
+      <div className="max-w-2xl mx-auto">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full mb-4 shadow-lg">
+            <FiShield className="text-2xl text-white" />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Identity Verification</h1>
+          <p className="text-gray-600">
+            {role === 'PROVIDER' 
+              ? 'Complete identity and business verification to access provider functions'
+              : 'Complete identity verification to access the platform'
+            }
+          </p>
+        </div>
+
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-gray-700">Progress</span>
+            <span className="text-sm text-gray-500">{getStepNumber()} of {getTotalSteps()}</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div
+              className="bg-gradient-to-r from-blue-500 to-indigo-600 h-2 rounded-full transition-all duration-500 ease-out"
+              style={{ width: getProgressWidth() }}
+            />
+          </div>
+        </div>
+
+        {verificationStatus?.success === false && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-xl mb-6">
+            <div className="flex items-start gap-3">
+              <FiAlertCircle className="text-red-500 text-xl mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-medium text-red-800">Verification Failed</p>
+                <p className="text-sm text-red-600 mt-1">{verificationStatus.error}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {verificationStatus?.success === true && currentStep === 'id' && (
+          <div className={`p-4 border rounded-xl mb-6 ${
+            role === 'PROVIDER' 
+              ? 'bg-blue-50 border-blue-200' 
+              : 'bg-green-50 border-green-200'
+          }`}>
+            <div className="flex items-start gap-3">
+              <FiCheck className={`text-xl mt-0.5 flex-shrink-0 ${
+                role === 'PROVIDER' ? 'text-blue-500' : 'text-green-500'
+              }`} />
+              <div>
+                <p className={`font-medium ${
+                  role === 'PROVIDER' ? 'text-blue-800' : 'text-green-800'
+                }`}>
+                  {role === 'PROVIDER' ? 'Identity Verified!' : 'Verification Successful!'}
+                </p>
+                <p className={`text-sm mt-1 ${
+                  role === 'PROVIDER' ? 'text-blue-600' : 'text-green-600'
+                }`}>
+                  Match confidence: {verificationStatus.confidence}%
+                  {role === 'PROVIDER' && ' - Moving to business verification...'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
+          {currentStep === 'selfie' && (
+            <SelfieStep
+              selfieImage={selfieImage}
+              onSelfieCapture={handleSelfieCapture}
+              onNext={nextStep}
+              canProceed={canProceedFromSelfie()}
+            />
+          )}
+          
+          {currentStep === 'id' && (
+            <IDStep
+              idFile={idFile}
+              onIdUpload={handleIdUpload}
+              onBack={prevStep}
+              onNext={nextStep}
+              isLoading={isLoading}
+              isProvider={role === 'PROVIDER'}
+              canProceed={canProceedFromId()}
+            />
+          )}
+          
+          {currentStep === 'business' && role === 'PROVIDER' && (
+            <BusinessStep
+              businessData={businessData}
+              businessFiles={businessFiles}
+              onDataChange={handleBusinessDataChange}
+              onFileUpload={handleBusinessFileUpload}
+              onBack={prevStep}
+              onSubmit={submitBusinessVerification}
+              isLoading={isLoading}
+              canSubmit={canSubmitBusiness()}
+              identityVerified={identityVerified}
+            />
+          )}
+        </div>
+
+        <SecurityNotice />
       </div>
     </div>
-  </div>
-)}
+  );
+};
 
-{verificationStatus?.success === true && currentStep === 'id' && role === 'PROVIDER' && (
-  <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl mb-6">
-    <div className="flex items-start gap-3">
-      <FiCheck className="text-blue-500 text-xl mt-0.5 flex-shrink-0" />
-      <div>
-        <p className="font-medium text-blue-800">Identity Verified!</p>
-        <p className="text-sm text-blue-600 mt-1">
-          Match confidence: {verificationStatus.confidence}% - Moving to business verification...
-        </p>
+// Component types
+type SelfieStepProps = {
+  selfieImage: Blob | null;
+  onSelfieCapture: (blob: Blob) => void;
+  onNext: () => void;
+  canProceed: boolean;
+};
+
+type IDStepProps = {
+  idFile: File | null;
+  onIdUpload: (file: File) => void;
+  onBack: () => void;
+  onNext: () => void;
+  isLoading: boolean;
+  isProvider: boolean;
+  canProceed: boolean;
+};
+
+type BusinessStepProps = {
+  businessData: any;
+  businessFiles: any;
+  onDataChange: (field: string, value: string) => void;
+  onFileUpload: (field: string, file: File) => void;
+  onBack: () => void;
+  onSubmit: () => void;
+  isLoading: boolean;
+  canSubmit: boolean;
+  identityVerified: boolean;
+};
+
+type FileUploadProps = {
+  label: string;
+  file: File | null;
+  onFileUpload: (file: File) => void;
+  required?: boolean;
+};
+
+type SuccessMessageProps = {
+  title: string;
+  description: string;
+  truncate?: boolean;
+};
+
+// Step Components
+const SelfieStep = ({ selfieImage, onSelfieCapture, onNext, canProceed }: SelfieStepProps) => (
+  <div className="space-y-6">
+    <div className="text-center">
+      <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-3">
+        <FiUser className="text-xl text-blue-600" />
       </div>
+      <h2 className="text-xl font-semibold text-gray-900 mb-2">Face Verification</h2>
+      <p className="text-gray-600 text-sm">Take a clear selfie for identity confirmation</p>
     </div>
+    
+    <div className="relative">
+      <Camera onCapture={onSelfieCapture} />
+      {selfieImage && (
+        <div className="absolute -top-2 -right-2 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+          <FiCheck className="text-white text-sm" />
+        </div>
+      )}
+    </div>
+    
+    {selfieImage && (
+      <SuccessMessage
+        title="Selfie captured successfully!"
+        description="Ready to proceed to next step"
+      />
+    )}
+    
+    <button
+      onClick={onNext}
+      disabled={!canProceed}
+      className="w-full py-4 px-6 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 disabled:from-gray-300 disabled:to-gray-400 disabled:transform-none disabled:shadow-md flex items-center justify-center gap-2"
+    >
+      <span>Continue to ID Verification</span>
+      <FiArrowRight className="text-sm" />
+    </button>
   </div>
-)}
+);
 
-// 4. Alternative approach - you could also add a useEffect to handle the transition
-useEffect(() => {
-  if (verificationStatus?.success === true && role === 'PROVIDER' && currentStep === 'id') {
-    const timer = setTimeout(() => {
-      setCurrentStep('business');
-    }, 1500);
-    return () => clearTimeout(timer);
-  }
-}, [verificationStatus, role, currentStep]);
-
-// 5. Update the IDStep component to show loading state appropriately
 const IDStep = ({ idFile, onIdUpload, onBack, onNext, isLoading, isProvider, canProceed }: IDStepProps) => (
   <div className="space-y-6">
     <div className="text-center">
@@ -288,347 +512,6 @@ const IDStep = ({ idFile, onIdUpload, onBack, onNext, isLoading, isProvider, can
     </div>
   </div>
 );
-
-  const submitBusinessVerification = async () => {
-    if (!businessData.tinNumber || !businessData.businessName || !businessData.businessType) {
-      toast.error('Please fill in all required business information');
-      return;
-    }
-    if (!businessFiles.tinCertificate) {
-      toast.error('TIN Certificate is required');
-      return;
-    }
-
-    setIsLoading(true);
-
-    try {
-      const businessFormData = new FormData();
-      businessFormData.append('email', session?.user?.email || '');
-      businessFormData.append('verificationStep', 'business');
-      
-      Object.entries(businessData).forEach(([key, value]) => {
-        if (value) businessFormData.append(key, value);
-      });
-      
-      Object.entries(businessFiles).forEach(([key, file]) => {
-        if (file) businessFormData.append(key, file);
-      });
-
-      const response = await axios.post('/api/verify-business', businessFormData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 120000
-      });
-
-      if (!response.data.success) {
-        throw new Error(response.data.error || 'Business verification failed');
-      }
-
-      toast.success('Business verification submitted for review!');
-      setTimeout(() => {
-        onComplete();
-        router.push('/pending-approval');
-      }, 1500);
-
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.error || error.message || 'Business verification failed';
-      toast.error(errorMsg);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const getStepNumber = () => {
-    if (currentStep === 'selfie') return 1;
-    if (currentStep === 'id') return 2;
-    return 3;
-  };
-
-  const getTotalSteps = () => role === 'PROVIDER' ? 3 : 2;
-
-  const getProgressWidth = () => {
-    const progress = (getStepNumber() / getTotalSteps()) * 100;
-    return `${progress}%`;
-  };
-
-  const nextStep = () => {
-    if (currentStep === 'selfie' && selfieImage) {
-      setCurrentStep('id');
-    } else if (currentStep === 'id' && idFile) {
-      // For ID step, we need to submit verification first
-      // The submitIdentityVerification function will handle moving to business step
-      submitIdentityVerification();
-    }
-  };
-
-  const prevStep = () => {
-    if (currentStep === 'id') {
-      setCurrentStep('selfie');
-    } else if (currentStep === 'business') {
-      setCurrentStep('id');
-    }
-  };
-
-  const canProceedFromSelfie = () => {
-    return selfieImage !== null;
-  };
-
-  const canProceedFromId = () => {
-    return idFile !== null;
-  };
-
-  const canSubmitBusiness = () => {
-    return businessData.tinNumber && 
-           businessData.businessName && 
-           businessData.businessType && 
-           businessFiles.tinCertificate;
-  };
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-4">
-      <div className="max-w-2xl mx-auto">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full mb-4 shadow-lg">
-            <FiShield className="text-2xl text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Identity Verification</h1>
-          <p className="text-gray-600">
-            {role === 'PROVIDER' 
-              ? 'Complete identity and business verification to access provider functions'
-              : 'Complete identity verification to access the platform'
-            }
-          </p>
-        </div>
-
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-gray-700">Progress</span>
-            <span className="text-sm text-gray-500">{getStepNumber()} of {getTotalSteps()}</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-gradient-to-r from-blue-500 to-indigo-600 h-2 rounded-full transition-all duration-500 ease-out"
-              style={{ width: getProgressWidth() }}
-            />
-          </div>
-        </div>
-
-        {verificationStatus?.success === false && (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-xl mb-6">
-            <div className="flex items-start gap-3">
-              <FiAlertCircle className="text-red-500 text-xl mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium text-red-800">Verification Failed</p>
-                <p className="text-sm text-red-600 mt-1">{verificationStatus.error}</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {verificationStatus?.success === true && currentStep !== 'business' && (
-          <div className="p-4 bg-green-50 border border-green-200 rounded-xl mb-6">
-            <div className="flex items-start gap-3">
-              <FiCheck className="text-green-500 text-xl mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium text-green-800">Verification Successful!</p>
-                <p className="text-sm text-green-600 mt-1">
-                  Match confidence: {verificationStatus.confidence}%
-                  {role === 'PROVIDER' && ' - Moving to business verification...'}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
-          {currentStep === 'selfie' && (
-            <SelfieStep
-              selfieImage={selfieImage}
-              onSelfieCapture={handleSelfieCapture}
-              onNext={nextStep}
-              canProceed={canProceedFromSelfie()}
-            />
-          )}
-          
-          {currentStep === 'id' && (
-            <IDStep
-              idFile={idFile}
-              onIdUpload={handleIdUpload}
-              onBack={prevStep}
-              onNext={nextStep}
-              isLoading={isLoading}
-              isProvider={role === 'PROVIDER'}
-              canProceed={canProceedFromId()}
-            />
-          )}
-          
-          {currentStep === 'business' && role === 'PROVIDER' && (
-            <BusinessStep
-              businessData={businessData}
-              businessFiles={businessFiles}
-              onDataChange={handleBusinessDataChange}
-              onFileUpload={handleBusinessFileUpload}
-              onBack={prevStep}
-              onSubmit={submitBusinessVerification}
-              isLoading={isLoading}
-              canSubmit={canSubmitBusiness()}
-              identityVerified={identityVerified}
-            />
-          )}
-        </div>
-
-        <SecurityNotice />
-      </div>
-    </div>
-  );
-};
-
-type SelfieStepProps = {
-  selfieImage: Blob | null;
-  onSelfieCapture: (blob: Blob) => void;
-  onNext: () => void;
-  canProceed: boolean;
-};
-
-const SelfieStep = ({ selfieImage, onSelfieCapture, onNext, canProceed }: SelfieStepProps) => (
-  <div className="space-y-6">
-    <div className="text-center">
-      <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-3">
-        <FiUser className="text-xl text-blue-600" />
-      </div>
-      <h2 className="text-xl font-semibold text-gray-900 mb-2">Face Verification</h2>
-      <p className="text-gray-600 text-sm">Take a clear selfie for identity confirmation</p>
-    </div>
-    
-    <div className="relative">
-      <Camera onCapture={onSelfieCapture} />
-      {selfieImage && (
-        <div className="absolute -top-2 -right-2 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
-          <FiCheck className="text-white text-sm" />
-        </div>
-      )}
-    </div>
-    
-    {selfieImage && (
-      <SuccessMessage
-        title="Selfie captured successfully!"
-        description="Ready to proceed to next step"
-      />
-    )}
-    
-    <button
-      onClick={onNext}
-      disabled={!canProceed}
-      className="w-full py-4 px-6 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 disabled:from-gray-300 disabled:to-gray-400 disabled:transform-none disabled:shadow-md flex items-center justify-center gap-2"
-    >
-      <span>Continue to ID Verification</span>
-      <FiArrowRight className="text-sm" />
-    </button>
-  </div>
-);
-
-type IDStepProps = {
-  idFile: File | null;
-  onIdUpload: (file: File) => void;
-  onBack: () => void;
-  onNext: () => void;
-  isLoading: boolean;
-  isProvider: boolean;
-  canProceed: boolean;
-};
-
-const IDStep = ({ idFile, onIdUpload, onBack, onNext, isLoading, isProvider, canProceed }: IDStepProps) => (
-  <div className="space-y-6">
-    <div className="text-center">
-      <div className="inline-flex items-center justify-center w-12 h-12 bg-indigo-100 rounded-full mb-3">
-        <FiFileText className="text-xl text-indigo-600" />
-      </div>
-      <h2 className="text-xl font-semibold text-gray-900 mb-2">ID Verification</h2>
-      <p className="text-gray-600 text-sm">Upload a government-issued ID document</p>
-    </div>
-    
-    <div className="relative">
-      <input
-        type="file"
-        id="id-upload"
-        accept="image/*"
-        onChange={(e) => e.target.files?.[0] && onIdUpload(e.target.files[0])}
-        disabled={isLoading}
-        className="hidden"
-      />
-      <label
-        htmlFor="id-upload"
-        className={`cursor-pointer block border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200 ${
-          isLoading 
-            ? 'border-gray-200 bg-gray-50 cursor-not-allowed' 
-            : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
-        }`}
-      >
-        <div className="space-y-4">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full">
-            <FiUpload className="text-2xl text-gray-400" />
-          </div>
-          <div>
-            <p className="text-blue-600 font-semibold text-lg">Upload ID Document</p>
-            <p className="text-gray-500 text-sm mt-1">Ghana Card, Passport, or Driver's License</p>
-          </div>
-        </div>
-      </label>
-      {idFile && (
-        <div className="absolute -top-2 -right-2 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
-          <FiCheck className="text-white text-sm" />
-        </div>
-      )}
-    </div>
-    
-    {idFile && (
-      <SuccessMessage
-        title="Document uploaded"
-        description={idFile.name}
-        truncate
-      />
-    )}
-    
-    <div className="flex gap-3">
-      <button
-        onClick={onBack}
-        disabled={isLoading}
-        className="px-6 py-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-all duration-200 flex items-center gap-2 disabled:opacity-50"
-      >
-        <FiArrowLeft className="text-sm" />
-        <span>Back</span>
-      </button>
-      <button
-        onClick={onNext}
-        disabled={!canProceed || isLoading}
-        className="flex-1 py-4 px-6 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 disabled:from-gray-300 disabled:to-gray-400 disabled:transform-none disabled:shadow-md flex items-center justify-center gap-3"
-      >
-        {isLoading ? (
-          <>
-            <FiLoader className="animate-spin text-lg" />
-            <span>Verifying Identity...</span>
-          </>
-        ) : (
-          <>
-            <FiShield className="text-lg" />
-            <span>Verify Identity</span>
-          </>
-        )}
-      </button>
-    </div>
-  </div>
-);
-
-type BusinessStepProps = {
-  businessData: any;
-  businessFiles: any;
-  onDataChange: (field: string, value: string) => void;
-  onFileUpload: (field: string, file: File) => void;
-  onBack: () => void;
-  onSubmit: () => void;
-  isLoading: boolean;
-  canSubmit: boolean;
-  identityVerified: boolean;
-};
 
 const BusinessStep = ({ 
   businessData, 
@@ -810,13 +693,6 @@ const BusinessStep = ({
   </div>
 );
 
-type FileUploadProps = {
-  label: string;
-  file: File | null;
-  onFileUpload: (file: File) => void;
-  required?: boolean;
-};
-
 const FileUpload = ({ label, file, onFileUpload, required = false }: FileUploadProps) => {
   const inputId = `file-${label.toLowerCase().replace(/\s+/g, '-')}`;
   
@@ -854,12 +730,6 @@ const FileUpload = ({ label, file, onFileUpload, required = false }: FileUploadP
   );
 };
 
-type SuccessMessageProps = {
-  title: string;
-  description: string;
-  truncate?: boolean;
-};
-
 const SuccessMessage = ({ title, description, truncate = false }: SuccessMessageProps) => (
   <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
     <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
@@ -877,8 +747,7 @@ const SecurityNotice = () => (
     <div className="flex items-start gap-3">
       <FiShield className="text-blue-500 mt-0.5 flex-shrink-0" />
       <div>
-        <p className="text-sm font-medium text-blue-800">Secure & Private</p>
-        <p className="text-xs text-blue-600 mt-1">
+     <p className="text-xs text-blue-600 mt-1">
           Your data is encrypted and processed securely. Business documents are reviewed by our verification team within 24-48 hours.
         </p>
       </div>
