@@ -184,9 +184,7 @@ export const authOptions: AuthOptions = {
 
       return session;
     },
-     redirect({ url, baseUrl }) {
-    return `${baseUrl}/pending-approval`; 
-  }
+  
   },
 
   events: {
