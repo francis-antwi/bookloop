@@ -166,7 +166,7 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
         if (file) businessFormData.append(key, file);
       });
 
-      const response = await axios.post('/api/verify-business', businessFormData, {
+      const response = await axios.post('/api/verify', businessFormData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 120000
       });
