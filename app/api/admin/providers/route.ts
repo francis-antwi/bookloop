@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
-import prisma from "@/app/libs/prismadb";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-export async function GET() {
-  const session = await getServerSession(authOptions);
+import prisma from "@/app/libs/prismadb";
+
+export async function GET(req: Request) {
+  const session = await getServerSession(authOptions); // keep as is if using app router
+  // const session = await getServerSession({ req, ...authOptions }); // fallback option
+
+  console.log("✅ Admin session:", session);
 
   if (!session || session.user.role !== "ADMIN") {
+    console.warn("🛑 Forbidden: user not admin or session missing");
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
@@ -26,9 +31,7 @@ export async function GET() {
         },
       },
     },
-    orderBy: {
-      createdAt: "desc",
-    },
+    orderBy: { createdAt: "desc" },
   });
 
   const data = providers.map((p) => ({
@@ -36,8 +39,7 @@ export async function GET() {
     name: p.name,
     email: p.email,
     phone: p.contactPhone,
-    status:
-      p.businessVerification?.verified || p.verified ? "APPROVED" : "PENDING",
+    status: p.businessVerification?.verified ? "APPROVED" : p.verified ? "APPROVED" : "PENDING",
     businessName: p.businessVerification?.businessName || "",
     submittedAt: p.businessVerification?.submittedAt,
   }));
