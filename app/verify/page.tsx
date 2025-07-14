@@ -24,11 +24,10 @@ import Camera from '../components/inputs/Camera';
 import Categories, { categories } from '../components/navbar/Categories';
 
 interface VerificationStepsProps {
-  role: string;
   onComplete: () => void;
 }
 
-const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
+const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
   const router = useRouter();
   const { data: session } = useSession();
   const [currentStep, setCurrentStep] = useState<'selfie' | 'id' | 'business'>('selfie');
@@ -58,16 +57,6 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
     vatCertificate: null as File | null,
     ssnitCert: null as File | null
   });
-
-  // Auto-advance to business step for providers after identity verification
-  useEffect(() => {
-    if (identityVerified && role === 'PROVIDER' && currentStep === 'id') {
-      // Small delay to show success message before moving to business step
-      setTimeout(() => {
-        setCurrentStep('business');
-      }, 2000);
-    }
-  }, [identityVerified, role, currentStep]);
 
   const handleSelfieCapture = (blob: Blob) => {
     setSelfieImage(blob);
@@ -122,7 +111,6 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
       verificationFormData.append('idImage', idFile);
       verificationFormData.append('email', session?.user?.email || '');
       verificationFormData.append('name', session?.user?.name || '');
-      verificationFormData.append('role', role);
 
       const response = await axios.post('/api/verify', verificationFormData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -140,14 +128,9 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
       setIdentityVerified(true);
       toast.success('Identity verification complete!');
 
-      // For non-providers, complete the verification process
-      if (role !== 'PROVIDER') {
-        setTimeout(() => {
-          onComplete();
-          router.push('/');
-        }, 2000);
-      }
-      // For providers, the useEffect will handle moving to business step
+      setTimeout(() => {
+        setCurrentStep('business');
+      }, 1500);
 
     } catch (error: any) {
       const errorMsg = error.response?.data?.error || error.message || 'Verification failed';
@@ -228,7 +211,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
     return 3;
   };
 
-  const getTotalSteps = () => role === 'PROVIDER' ? 3 : 2;
+  const getTotalSteps = () => 3;
 
   const getProgressWidth = () => {
     const progress = (getStepNumber() / getTotalSteps()) * 100;
@@ -253,10 +236,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Identity Verification</h1>
           <p className="text-gray-600">
-            {role === 'PROVIDER' 
-              ? 'Complete identity and business verification to access provider functions'
-              : 'Complete identity verification to access the platform'
-            }
+            Complete all steps to verify your identity and business information
           </p>
         </div>
 
@@ -287,16 +267,14 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
               <span className="ml-2 text-sm text-gray-600">ID Document</span>
             </div>
             
-            {role === 'PROVIDER' && (
-              <div className="flex items-center">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                  getStepNumber() >= 3 ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-500'
-                }`}>
-                  3
-                </div>
-                <span className="ml-2 text-sm text-gray-600">Business</span>
+            <div className="flex items-center">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                getStepNumber() >= 3 ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-500'
+              }`}>
+                3
               </div>
-            )}
+              <span className="ml-2 text-sm text-gray-600">Business</span>
+            </div>
           </div>
           
           <div className="w-full bg-gray-200 rounded-full h-2">
@@ -320,26 +298,13 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
         )}
 
         {verificationStatus?.success === true && currentStep === 'id' && (
-          <div className={`p-4 border rounded-xl mb-6 ${
-            role === 'PROVIDER' 
-              ? 'bg-blue-50 border-blue-200' 
-              : 'bg-green-50 border-green-200'
-          }`}>
+          <div className="p-4 bg-green-50 border-green-200 border rounded-xl mb-6">
             <div className="flex items-start gap-3">
-              <FiCheck className={`text-xl mt-0.5 flex-shrink-0 ${
-                role === 'PROVIDER' ? 'text-blue-500' : 'text-green-500'
-              }`} />
+              <FiCheck className="text-green-500 text-xl mt-0.5 flex-shrink-0" />
               <div>
-                <p className={`font-medium ${
-                  role === 'PROVIDER' ? 'text-blue-800' : 'text-green-800'
-                }`}>
-                  {role === 'PROVIDER' ? 'Identity Verified!' : 'Verification Successful!'}
-                </p>
-                <p className={`text-sm mt-1 ${
-                  role === 'PROVIDER' ? 'text-blue-600' : 'text-green-600'
-                }`}>
-                  Match confidence: {verificationStatus.confidence}%
-                  {role === 'PROVIDER' && ' - Moving to business verification...'}
+                <p className="font-medium text-green-800">Identity Verified!</p>
+                <p className="text-sm text-green-600 mt-1">
+                  Match confidence: {verificationStatus.confidence}% - Moving to business verification...
                 </p>
               </div>
             </div>
@@ -363,12 +328,11 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
               onBack={prevStep}
               onNext={nextStep}
               isLoading={isLoading}
-              isProvider={role === 'PROVIDER'}
               canProceed={canProceedFromId()}
             />
           )}
           
-          {currentStep === 'business' && role === 'PROVIDER' && (
+          {currentStep === 'business' && (
             <BusinessStep
               businessData={businessData}
               businessFiles={businessFiles}
@@ -403,7 +367,6 @@ type IDStepProps = {
   onBack: () => void;
   onNext: () => void;
   isLoading: boolean;
-  isProvider: boolean;
   canProceed: boolean;
 };
 
@@ -470,7 +433,7 @@ const SelfieStep = ({ selfieImage, onSelfieCapture, onNext, canProceed }: Selfie
   </div>
 );
 
-const IDStep = ({ idFile, onIdUpload, onBack, onNext, isLoading, isProvider, canProceed }: IDStepProps) => (
+const IDStep = ({ idFile, onIdUpload, onBack, onNext, isLoading, canProceed }: IDStepProps) => (
   <div className="space-y-6">
     <div className="text-center">
       <div className="inline-flex items-center justify-center w-12 h-12 bg-indigo-100 rounded-full mb-3">
@@ -544,9 +507,7 @@ const IDStep = ({ idFile, onIdUpload, onBack, onNext, isLoading, isProvider, can
         ) : (
           <>
             <FiShield className="text-lg" />
-            <span>
-              {isProvider ? 'Verify & Continue to Business' : 'Verify Identity'}
-            </span>
+            <span>Verify & Continue to Business</span>
           </>
         )}
       </button>
@@ -786,7 +747,7 @@ const SuccessMessage = ({ title, description, truncate = false }: SuccessMessage
     <div className="flex items-start gap-3">
       <FiCheck className="text-green-500 text-xl mt-0.5 flex-shrink-0" />
       <div>
-        <p className="font-medium text-green-800">{title}</p>
+       <p className="font-medium text-green-800">{title}</p>
         <p className={`text-sm text-green-600 mt-1 ${truncate ? 'truncate' : ''}`}>
           {description}
         </p>
@@ -796,19 +757,14 @@ const SuccessMessage = ({ title, description, truncate = false }: SuccessMessage
 );
 
 const SecurityNotice = () => (
-  <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
-    <div className="flex items-start gap-4">
-      <div className="inline-flex items-center justify-center w-10 h-10 bg-blue-100 rounded-full flex-shrink-0">
-        <FiShield className="text-lg text-blue-600" />
-      </div>
+  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+    <div className="flex items-start gap-3">
+      <FiShield className="text-blue-500 text-xl mt-0.5 flex-shrink-0" />
       <div>
-        <h3 className="font-semibold text-blue-900 mb-2">Security & Privacy</h3>
-        <ul className="text-sm text-blue-800 space-y-1">
-          <li>• All documents are encrypted and stored securely</li>
-          <li>• Your personal information is protected by industry-standard security</li>
-          <li>• Verification typically takes 1-2 business days</li>
-          <li>• You'll receive email updates on verification status</li>
-        </ul>
+        <p className="font-medium text-blue-800">Security Notice</p>
+        <p className="text-sm text-blue-600 mt-1">
+          Your personal information is encrypted and securely stored. We comply with all data protection regulations.
+        </p>
       </div>
     </div>
   </div>
