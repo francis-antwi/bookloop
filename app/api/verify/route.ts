@@ -22,17 +22,22 @@ export async function POST(req: Request) {
   try {
     const formData = await req.formData();
 
-    const verificationStep = formData.get("verificationStep")?.toString() || "identity";
-    const email = formData.get("email")?.toString() || null;
-    const role = formData.get("role")?.toString() || "CUSTOMER";
-    const shouldRegister = formData.get("shouldRegister")?.toString() === "true";
+    // --- LOGGING ---
+    console.log("⚙️ [VERIFY]: Received FormData entries:");
+    for (const pair of formData.entries()) {
+      console.log(`  - ${pair[0]}: ${typeof pair[1] === 'object' && pair[1] !== null && 'name' in pair[1] ? (pair[1] as File).name : pair[1]}`);
+    }
 
+    // === Identity-related Fields ===
     const selfieFile = formData.get("selfie") as File | null;
     const idFile = formData.get("idImage") as File | null;
-
+    const role = formData.get("role")?.toString() || "CUSTOMER";
+    const shouldRegister = formData.get("shouldRegister")?.toString() === "true";
+    const oauthEmail = formData.get("email")?.toString() || null;
     const oauthName = formData.get("name")?.toString() || null;
     const oauthContactPhone = formData.get("contactPhone")?.toString() || null;
 
+    // === Business-related Fields ===
     const tinNumber = formData.get("tinNumber")?.toString() || null;
     const registrationNumber = formData.get("registrationNumber")?.toString() || null;
     const businessName = formData.get("businessName")?.toString() || null;
@@ -44,96 +49,85 @@ export async function POST(req: Request) {
     const vatCertificateFile = formData.get("vatCertificate") as File | null;
     const ssnitCertFile = formData.get("ssnitCert") as File | null;
 
+    // === Upload business documents to Cloudinary ===
+    const [
+      tinCertificateUrl,
+      incorporationCertUrl,
+      vatCertificateUrl,
+      ssnitCertUrl,
+    ] = await Promise.all([
+      tinCertificateFile ? uploadToCloudinary(tinCertificateFile, "business/tin") : null,
+      incorporationCertFile ? uploadToCloudinary(incorporationCertFile, "business/incorporation") : null,
+      vatCertificateFile ? uploadToCloudinary(vatCertificateFile, "business/vat") : null,
+      ssnitCertFile ? uploadToCloudinary(ssnitCertFile, "business/ssnit") : null,
+    ]);
+
     const session = await getServerSession(authOptions);
-    const isGoogleAuth = !!(session?.user?.email && session.user.email === email);
+    const isGoogleAuth = !!(session?.user?.email && session.user.email === oauthEmail);
 
-    // === Step 1: Identity Verification ===
-    if (verificationStep === "identity" || verificationStep === "full") {
-      if (!selfieFile || !idFile) {
-        return NextResponse.json({ error: "Missing selfie or ID file" }, { status: 400 });
-      }
+// === Only validate selfie/ID presence if this is an identity verification step ===
+const verificationStep = formData.get("verificationStep")?.toString() || "identity";
 
-      const [selfieUrl, idUrl] = await Promise.all([
-        uploadToCloudinary(selfieFile, "selfies"),
-        uploadToCloudinary(idFile, "ids"),
-      ]);
+if (verificationStep === "identity" && (!selfieFile || !idFile)) {
+  console.error("❌ [VERIFY ERROR]: Missing selfie or ID file for identity verification.");
+  return NextResponse.json({ error: "Missing identity files" }, { status: 400 });
+}
 
-      const ocrResponse = await sendOriginalToTaggun(idFile);
-      const extractedData = extractIDInfo(ocrResponse);
-      const validationResult = validateExtractedData(extractedData);
 
-      if (!validationResult.isValid) {
-        return NextResponse.json({ error: "Invalid ID document", details: validationResult.errors }, { status: 422 });
-      }
+    // === Upload identity documents to Cloudinary ===
+    console.log("⚙️ [VERIFY]: Uploading selfie and ID to Cloudinary...");
+    const [selfieUrl, idUrl] = await Promise.all([
+      uploadToCloudinary(selfieFile, "selfies"),
+      uploadToCloudinary(idFile, "ids"),
+    ]);
+    console.log(`✅ [VERIFY]: Uploads done. Selfie: ${selfieUrl}, ID: ${idUrl}`);
 
-      const matchResult = await matchFace(selfieUrl, idUrl);
-      if (!matchResult.isMatch) {
-        return NextResponse.json({ error: "Face does not match ID", confidence: matchResult.confidence }, { status: 401 });
-      }
+    // === OCR ID image using Taggun ===
+    console.log("⚙️ [VERIFY]: Sending ID image to Taggun...");
+    const ocrResponse = await sendOriginalToTaggun(idFile);
+    console.log("✅ [VERIFY]: OCR response received.");
 
-      if (shouldRegister && email) {
-        const user = await createUserIfNeeded({
-          email,
-          name: oauthName || extractedData.idName || undefined,
-          contactPhone: oauthContactPhone || undefined,
-          role: role as UserRole,
-          selfieImage: selfieUrl,
-          idImage: idUrl,
-          idName: extractedData.idName,
-          idNumber: extractedData.idNumber || extractedData.personalIdNumber,
-          personalIdNumber: extractedData.personalIdNumber,
-          idType: extractedData.idType,
-          idDOB: extractedData.idDOB,
-          idExpiryDate: extractedData.idExpiryDate,
-          idIssueDate: extractedData.idIssueDate,
-          idIssuer: extractedData.idIssuer,
-          nationality: extractedData.nationality,
-          gender: extractedData.gender,
-          placeOfIssue: extractedData.placeOfIssue,
-          rawText: extractedData.rawText,
-          verified: true,
-        });
+    const extractedData = extractIDInfo(ocrResponse);
+    console.log("⚙️ [VERIFY]: Extracted ID data:", extractedData);
 
-        return NextResponse.json({
-          success: true,
-          verified: true,
-          step: "identity",
-          user,
-          selfieUrl,
-          imageUrl: idUrl,
-          extractedData,
-        });
-      }
-
-      return NextResponse.json({
-        success: true,
-        verified: true,
-        step: "identity",
-        selfieUrl,
-        imageUrl: idUrl,
-        matchConfidence: matchResult.confidence,
-        extractedData,
-      });
+    const validationResult = validateExtractedData(extractedData);
+    if (!validationResult.isValid) {
+      console.error("❌ [VERIFY ERROR]: ID validation failed:", validationResult.errors);
+      return NextResponse.json({ error: "Invalid ID document", details: validationResult.errors }, { status: 422 });
     }
 
-    // === Step 2: Business Verification ===
-    if ((verificationStep === "business" || verificationStep === "full") && email && role === "PROVIDER") {
-      const [
-        tinCertificateUrl,
-        incorporationCertUrl,
-        vatCertificateUrl,
-        ssnitCertUrl,
-      ] = await Promise.all([
-        tinCertificateFile ? uploadToCloudinary(tinCertificateFile, "business/tin") : null,
-        incorporationCertFile ? uploadToCloudinary(incorporationCertFile, "business/incorporation") : null,
-        vatCertificateFile ? uploadToCloudinary(vatCertificateFile, "business/vat") : null,
-        ssnitCertFile ? uploadToCloudinary(ssnitCertFile, "business/ssnit") : null,
-      ]);
+    // === Face Match ===
+    console.log("⚙️ [VERIFY]: Performing face match...");
+    const matchResult = await matchFace(selfieUrl, idUrl);
+    if (!matchResult.isMatch) {
+      console.error("❌ [VERIFY ERROR]: Face mismatch. Confidence:", matchResult.confidence);
+      return NextResponse.json({ error: "Face does not match ID", confidence: matchResult.confidence }, { status: 401 });
+    }
 
+    // === Create or update user (with optional business verification) ===
+    if (shouldRegister && oauthEmail) {
+      console.log("⚙️ [VERIFY]: Registering user with role:", role);
       const user = await createUserIfNeeded({
-        email,
-        role: "PROVIDER",
-        businessVerification: {
+        email: oauthEmail,
+        name: oauthName || extractedData.idName || undefined,
+        contactPhone: oauthContactPhone || undefined,
+        role: role as UserRole,
+        selfieImage: selfieUrl,
+        idImage: idUrl,
+        idName: extractedData.idName,
+        idNumber: extractedData.idNumber || extractedData.personalIdNumber,
+        personalIdNumber: extractedData.personalIdNumber,
+        idType: extractedData.idType,
+        idDOB: extractedData.idDOB,
+        idExpiryDate: extractedData.idExpiryDate,
+        idIssueDate: extractedData.idIssueDate,
+        idIssuer: extractedData.idIssuer,
+        nationality: extractedData.nationality,
+        gender: extractedData.gender,
+        placeOfIssue: extractedData.placeOfIssue,
+        rawText: extractedData.rawText,
+        verified: true,
+        businessVerification: role === "PROVIDER" ? {
           create: {
             tinNumber,
             registrationNumber,
@@ -147,33 +141,53 @@ export async function POST(req: Request) {
             verified: false,
             submittedAt: new Date(),
           },
-        },
+        } : undefined,
       });
 
+      console.log("✅ [VERIFY]: User created/updated successfully.");
       return NextResponse.json({
         success: true,
-        verified: false,
-        step: "business",
-        businessData: {
-          tinNumber,
-          registrationNumber,
-          businessName,
-          businessType,
-          businessAddress,
-          tinCertificateUrl,
-          incorporationCertUrl,
-          vatCertificateUrl,
-          ssnitCertUrl,
-        },
+        verified: true,
         user,
+        selfieUrl,
+        imageUrl: idUrl,
+        extractedData,
       });
     }
 
-    return NextResponse.json({ error: "Invalid request or missing data" }, { status: 400 });
+    // === If not registering, return verification result only ===
+    console.log("✅ [VERIFY]: Identity verified. No registration.");
+    return NextResponse.json({
+      success: true,
+      verified: true,
+      selfieUrl,
+      imageUrl: idUrl,
+      matchConfidence: matchResult.confidence,
+      extractedData: {
+        ...extractedData,
+        selfieUrl,
+        idUrl,
+        faceConfidence: matchResult.confidence,
+      },
+    });
   } catch (err: any) {
-    console.error("❌ [VERIFY ERROR]:", err);
+    console.error("❌ [VERIFY ERROR]: An error occurred during verification.");
     if (axios.isAxiosError(err)) {
-      console.error("Axios Error:", err.response?.data);
+      console.error("  Axios Error Details:", {
+        message: err.message,
+        status: err.response?.status,
+        data: err.response?.data,
+        headers: err.response?.headers,
+        config: err.config,
+      });
+    } else if (err instanceof Error) {
+      console.error("  Standard Error Details:", {
+        message: err.message,
+        name: err.name,
+        stack: err.stack,
+      });
+    } else {
+      console.error("  Unknown Error Type:", err);
     }
     return NextResponse.json({ error: err.message || "Verification failed" }, { status: 500 });
   }
