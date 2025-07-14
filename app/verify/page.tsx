@@ -130,11 +130,9 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
       setIdentityVerified(true);
 
       if (role === 'PROVIDER') {
-        toast.success('Identity verified! Please complete business verification.');
-        // Automatically move to business step after successful identity verification
-        setTimeout(() => {
-          setCurrentStep('business');
-        }, 1500);
+        toast.success('Identity verified! Moving to business verification...');
+        // Immediately move to business step after successful identity verification
+        setCurrentStep('business');
       } else {
         toast.success('Verification complete!');
         setTimeout(() => {
@@ -217,8 +215,8 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
     if (currentStep === 'selfie' && selfieImage) {
       setCurrentStep('id');
     } else if (currentStep === 'id' && idFile) {
-      // Don't automatically move to business step here
-      // Let the submitIdentityVerification handle the flow
+      // For ID step, we need to submit verification first
+      // The submitIdentityVerification function will handle moving to business step
       submitIdentityVerification();
     }
   };
@@ -295,7 +293,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
                 <p className="font-medium text-green-800">Verification Successful!</p>
                 <p className="text-sm text-green-600 mt-1">
                   Match confidence: {verificationStatus.confidence}%
-                  {role === 'PROVIDER' && ' - Proceeding to business verification...'}
+                  {role === 'PROVIDER' && ' - Moving to business verification...'}
                 </p>
               </div>
             </div>
