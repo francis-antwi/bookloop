@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   FiUpload,
   FiCheck,
@@ -97,58 +97,197 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
     setBusinessFiles(prev => ({ ...prev, [field]: file }));
   };
 
-  const submitIdentityVerification = async () => {
-    if (!selfieImage || !idFile) {
-      toast.error('Please complete all verification steps');
-      return;
+ // Key changes to fix the auto-advance issue:
+
+// 1. Update the submitIdentityVerification function to ensure proper flow
+const submitIdentityVerification = async () => {
+  if (!selfieImage || !idFile) {
+    toast.error('Please complete all verification steps');
+    return;
+  }
+
+  setIsLoading(true);
+  setVerificationStatus(null);
+
+  try {
+    const verificationFormData = new FormData();
+    verificationFormData.append('selfie', new File([selfieImage], 'selfie.jpg', { type: 'image/jpeg' }));
+    verificationFormData.append('idImage', idFile);
+    verificationFormData.append('email', session?.user?.email || '');
+    verificationFormData.append('name', session?.user?.name || '');
+    verificationFormData.append('role', role);
+
+    const response = await axios.post('/api/verify', verificationFormData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000
+    });
+
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Identity verification failed');
     }
 
-    setIsLoading(true);
-    setVerificationStatus(null);
+    setVerificationStatus({ 
+      success: true, 
+      confidence: response.data.matchConfidence 
+    });
+    setIdentityVerified(true);
 
-    try {
-      const verificationFormData = new FormData();
-      verificationFormData.append('selfie', new File([selfieImage], 'selfie.jpg', { type: 'image/jpeg' }));
-      verificationFormData.append('idImage', idFile);
-      verificationFormData.append('email', session?.user?.email || '');
-      verificationFormData.append('name', session?.user?.name || '');
-      verificationFormData.append('role', role);
-
-      const response = await axios.post('/api/verify', verificationFormData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 60000
-      });
-
-      if (!response.data.success) {
-        throw new Error(response.data.error || 'Identity verification failed');
-      }
-
-      setVerificationStatus({ 
-        success: true, 
-        confidence: response.data.matchConfidence 
-      });
-      setIdentityVerified(true);
-
-      if (role === 'PROVIDER') {
-        toast.success('Identity verified! Moving to business verification...');
-        // Immediately move to business step after successful identity verification
+    if (role === 'PROVIDER') {
+      toast.success('Identity verified! Moving to business verification...');
+      // Add a small delay to show the success message, then move to business step
+      setTimeout(() => {
         setCurrentStep('business');
-      } else {
-        toast.success('Verification complete!');
-        setTimeout(() => {
-          onComplete();
-          router.push('/');
-        }, 1500);
-      }
-
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.error || error.message || 'Verification failed';
-      setVerificationStatus({ success: false, error: errorMsg });
-      toast.error(errorMsg);
-    } finally {
-      setIsLoading(false);
+      }, 1000);
+    } else {
+      toast.success('Verification complete!');
+      setTimeout(() => {
+        onComplete();
+        router.push('/');
+      }, 1500);
     }
-  };
+
+  } catch (error: any) {
+    const errorMsg = error.response?.data?.error || error.message || 'Verification failed';
+    setVerificationStatus({ success: false, error: errorMsg });
+    toast.error(errorMsg);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+// 2. Update the nextStep function to handle the flow better
+const nextStep = () => {
+  if (currentStep === 'selfie' && selfieImage) {
+    setCurrentStep('id');
+  } else if (currentStep === 'id' && idFile) {
+    // Don't change step here - let submitIdentityVerification handle it
+    submitIdentityVerification();
+  }
+};
+
+// 3. Update the success message display condition
+{verificationStatus?.success === true && currentStep === 'id' && role !== 'PROVIDER' && (
+  <div className="p-4 bg-green-50 border border-green-200 rounded-xl mb-6">
+    <div className="flex items-start gap-3">
+      <FiCheck className="text-green-500 text-xl mt-0.5 flex-shrink-0" />
+      <div>
+        <p className="font-medium text-green-800">Verification Successful!</p>
+        <p className="text-sm text-green-600 mt-1">
+          Match confidence: {verificationStatus.confidence}%
+        </p>
+      </div>
+    </div>
+  </div>
+)}
+
+{verificationStatus?.success === true && currentStep === 'id' && role === 'PROVIDER' && (
+  <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl mb-6">
+    <div className="flex items-start gap-3">
+      <FiCheck className="text-blue-500 text-xl mt-0.5 flex-shrink-0" />
+      <div>
+        <p className="font-medium text-blue-800">Identity Verified!</p>
+        <p className="text-sm text-blue-600 mt-1">
+          Match confidence: {verificationStatus.confidence}% - Moving to business verification...
+        </p>
+      </div>
+    </div>
+  </div>
+)}
+
+// 4. Alternative approach - you could also add a useEffect to handle the transition
+useEffect(() => {
+  if (verificationStatus?.success === true && role === 'PROVIDER' && currentStep === 'id') {
+    const timer = setTimeout(() => {
+      setCurrentStep('business');
+    }, 1500);
+    return () => clearTimeout(timer);
+  }
+}, [verificationStatus, role, currentStep]);
+
+// 5. Update the IDStep component to show loading state appropriately
+const IDStep = ({ idFile, onIdUpload, onBack, onNext, isLoading, isProvider, canProceed }: IDStepProps) => (
+  <div className="space-y-6">
+    <div className="text-center">
+      <div className="inline-flex items-center justify-center w-12 h-12 bg-indigo-100 rounded-full mb-3">
+        <FiFileText className="text-xl text-indigo-600" />
+      </div>
+      <h2 className="text-xl font-semibold text-gray-900 mb-2">ID Verification</h2>
+      <p className="text-gray-600 text-sm">Upload a government-issued ID document</p>
+    </div>
+    
+    <div className="relative">
+      <input
+        type="file"
+        id="id-upload"
+        accept="image/*"
+        onChange={(e) => e.target.files?.[0] && onIdUpload(e.target.files[0])}
+        disabled={isLoading}
+        className="hidden"
+      />
+      <label
+        htmlFor="id-upload"
+        className={`cursor-pointer block border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200 ${
+          isLoading 
+            ? 'border-gray-200 bg-gray-50 cursor-not-allowed' 
+            : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
+        }`}
+      >
+        <div className="space-y-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full">
+            <FiUpload className="text-2xl text-gray-400" />
+          </div>
+          <div>
+            <p className="text-blue-600 font-semibold text-lg">Upload ID Document</p>
+            <p className="text-gray-500 text-sm mt-1">Ghana Card, Passport, or Driver's License</p>
+          </div>
+        </div>
+      </label>
+      {idFile && (
+        <div className="absolute -top-2 -right-2 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+          <FiCheck className="text-white text-sm" />
+        </div>
+      )}
+    </div>
+    
+    {idFile && (
+      <SuccessMessage
+        title="Document uploaded"
+        description={idFile.name}
+        truncate
+      />
+    )}
+    
+    <div className="flex gap-3">
+      <button
+        onClick={onBack}
+        disabled={isLoading}
+        className="px-6 py-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-all duration-200 flex items-center gap-2 disabled:opacity-50"
+      >
+        <FiArrowLeft className="text-sm" />
+        <span>Back</span>
+      </button>
+      <button
+        onClick={onNext}
+        disabled={!canProceed || isLoading}
+        className="flex-1 py-4 px-6 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 disabled:from-gray-300 disabled:to-gray-400 disabled:transform-none disabled:shadow-md flex items-center justify-center gap-3"
+      >
+        {isLoading ? (
+          <>
+            <FiLoader className="animate-spin text-lg" />
+            <span>Verifying Identity...</span>
+          </>
+        ) : (
+          <>
+            <FiShield className="text-lg" />
+            <span>
+              {isProvider ? 'Verify & Continue to Business' : 'Verify Identity'}
+            </span>
+          </>
+        )}
+      </button>
+    </div>
+  </div>
+);
 
   const submitBusinessVerification = async () => {
     if (!businessData.tinNumber || !businessData.businessName || !businessData.businessType) {
