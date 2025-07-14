@@ -109,7 +109,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
       verificationFormData.append('name', session?.user?.name || '');
       verificationFormData.append('role', role);
 
-      const response = await axios.post('/api/verify', verificationFormData, {
+      const response = await axios.post('/api/verify/identity', verificationFormData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 60000
       });
@@ -129,7 +129,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
       } else {
         toast.success('Verification complete!');
         onComplete();
-        router.push('/');
+        router.push('/dashboard');
       }
 
     } catch (error: any) {
@@ -162,7 +162,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
         if (file) businessFormData.append(key, file);
       });
 
-      const response = await axios.post('/api/verify', businessFormData, {
+      const response = await axios.post('/api/verify/business', businessFormData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 120000
       });
@@ -199,8 +199,12 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
   const nextStep = () => {
     if (currentStep === 'selfie') {
       setCurrentStep('id');
-    } else if (currentStep === 'id' && role === 'PROVIDER') {
-      submitIdentityVerification();
+    } else if (currentStep === 'id') {
+      if (role === 'PROVIDER') {
+        submitIdentityVerification();
+      } else {
+        submitIdentityVerification();
+      }
     }
   };
 
@@ -253,7 +257,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
           </div>
         )}
 
-        {verificationStatus?.success === true && (
+        {verificationStatus?.success === true && currentStep !== 'business' && (
           <div className="p-4 bg-green-50 border border-green-200 rounded-xl mb-6">
             <div className="flex items-start gap-3">
               <FiCheck className="text-green-500 text-xl mt-0.5 flex-shrink-0" />
