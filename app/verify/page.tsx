@@ -58,12 +58,16 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
     vatCertificate: null as File | null,
     ssnitCert: null as File | null
   });
-  useEffect(() => {
-  if (identityVerified && role === 'PROVIDER') {
-    setCurrentStep('business');
-  }
-}, [identityVerified, role]);
 
+  // Auto-advance to business step for providers after identity verification
+  useEffect(() => {
+    if (identityVerified && role === 'PROVIDER' && currentStep === 'id') {
+      // Small delay to show success message before moving to business step
+      setTimeout(() => {
+        setCurrentStep('business');
+      }, 2000);
+    }
+  }, [identityVerified, role, currentStep]);
 
   const handleSelfieCapture = (blob: Blob) => {
     setSelfieImage(blob);
@@ -129,21 +133,21 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
         throw new Error(response.data.error || 'Identity verification failed');
       }
 
-  setVerificationStatus({ 
-  success: true, 
-  confidence: response.data.matchConfidence 
-});
-setIdentityVerified(true);
+      setVerificationStatus({ 
+        success: true, 
+        confidence: response.data.matchConfidence 
+      });
+      setIdentityVerified(true);
+      toast.success('Identity verification complete!');
 
-toast.success('Verification complete!');
-setIdentityVerified(true);
-
-if (currentStep === 'id') {
-  setTimeout(() => {
-    onComplete();
-    router.push('/');
-  }, 1000); 
-}
+      // For non-providers, complete the verification process
+      if (role !== 'PROVIDER') {
+        setTimeout(() => {
+          onComplete();
+          router.push('/');
+        }, 2000);
+      }
+      // For providers, the useEffect will handle moving to business step
 
     } catch (error: any) {
       const errorMsg = error.response?.data?.error || error.message || 'Verification failed';
@@ -256,11 +260,45 @@ if (currentStep === 'id') {
           </p>
         </div>
 
+        {/* Progress Bar */}
         <div className="mb-8">
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-4">
             <span className="text-sm font-medium text-gray-700">Progress</span>
             <span className="text-sm text-gray-500">{getStepNumber()} of {getTotalSteps()}</span>
           </div>
+          
+          {/* Step indicators */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                getStepNumber() >= 1 ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-500'
+              }`}>
+                {getStepNumber() > 1 ? <FiCheck className="text-sm" /> : '1'}
+              </div>
+              <span className="ml-2 text-sm text-gray-600">Selfie</span>
+            </div>
+            
+            <div className="flex items-center">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                getStepNumber() >= 2 ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-500'
+              }`}>
+                {getStepNumber() > 2 ? <FiCheck className="text-sm" /> : '2'}
+              </div>
+              <span className="ml-2 text-sm text-gray-600">ID Document</span>
+            </div>
+            
+            {role === 'PROVIDER' && (
+              <div className="flex items-center">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                  getStepNumber() >= 3 ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-500'
+                }`}>
+                  3
+                </div>
+                <span className="ml-2 text-sm text-gray-600">Business</span>
+              </div>
+            )}
+          </div>
+          
           <div className="w-full bg-gray-200 rounded-full h-2">
             <div
               className="bg-gradient-to-r from-blue-500 to-indigo-600 h-2 rounded-full transition-all duration-500 ease-out"
@@ -401,7 +439,7 @@ const SelfieStep = ({ selfieImage, onSelfieCapture, onNext, canProceed }: Selfie
       <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-3">
         <FiUser className="text-xl text-blue-600" />
       </div>
-      <h2 className="text-xl font-semibold text-gray-900 mb-2">Face Verification</h2>
+      <h2 className="text-xl font-semibold text-gray-900 mb-2">Step 1: Face Verification</h2>
       <p className="text-gray-600 text-sm">Take a clear selfie for identity confirmation</p>
     </div>
     
@@ -438,7 +476,7 @@ const IDStep = ({ idFile, onIdUpload, onBack, onNext, isLoading, isProvider, can
       <div className="inline-flex items-center justify-center w-12 h-12 bg-indigo-100 rounded-full mb-3">
         <FiFileText className="text-xl text-indigo-600" />
       </div>
-      <h2 className="text-xl font-semibold text-gray-900 mb-2">ID Verification</h2>
+      <h2 className="text-xl font-semibold text-gray-900 mb-2">Step 2: ID Verification</h2>
       <p className="text-gray-600 text-sm">Upload a government-issued ID document</p>
     </div>
     
@@ -532,7 +570,7 @@ const BusinessStep = ({
       <div className="inline-flex items-center justify-center w-12 h-12 bg-purple-100 rounded-full mb-3">
         <FiBriefcase className="text-xl text-purple-600" />
       </div>
-      <h2 className="text-xl font-semibold text-gray-900 mb-2">Business Verification</h2>
+      <h2 className="text-xl font-semibold text-gray-900 mb-2">Step 3: Business Verification</h2>
       <p className="text-gray-600 text-sm">Provide your business information and documents</p>
     </div>
 
@@ -541,7 +579,7 @@ const BusinessStep = ({
         <div className="flex items-start gap-3">
           <FiCheck className="text-green-500 text-xl mt-0.5 flex-shrink-0" />
           <div>
-            <p className="font-medium text-green-800">Identity Verified</p>
+            <p className="font-medium text-green-800">Identity Verified ✓</p>
             <p className="text-sm text-green-600 mt-1">
               Your identity has been verified. Please complete business verification below.
             </p>
@@ -714,45 +752,63 @@ const FileUpload = ({ label, file, onFileUpload, required = false }: FileUploadP
         />
         <label
           htmlFor={inputId}
-          className="cursor-pointer block border-2 border-dashed border-gray-300 hover:border-blue-400 rounded-lg p-4 text-center transition-all duration-200 hover:bg-blue-50"
+          className="cursor-pointer block border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-400 hover:bg-blue-50 transition-all duration-200"
         >
-          <div className="flex items-center justify-center gap-3">
-            <FiUpload className="text-gray-400" />
-            <span className="text-sm text-gray-600">
-              {file ? file.name : 'Choose file or drag here'}
-            </span>
+          <div className="space-y-2">
+            <div className="inline-flex items-center justify-center w-10 h-10 bg-gray-100 rounded-full">
+              <FiUpload className="text-lg text-gray-400" />
+            </div>
+            <div>
+              <p className="text-blue-600 font-medium">Upload {label}</p>
+              <p className="text-gray-500 text-xs">PDF, JPEG, or PNG (max 10MB)</p>
+            </div>
           </div>
         </label>
         {file && (
-          <div className="absolute -top-1 -right-1 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+          <div className="absolute -top-2 -right-2 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
             <FiCheck className="text-white text-xs" />
           </div>
         )}
       </div>
+      {file && (
+        <SuccessMessage
+          title="Document uploaded"
+          description={file.name}
+          truncate
+        />
+      )}
     </div>
   );
 };
 
 const SuccessMessage = ({ title, description, truncate = false }: SuccessMessageProps) => (
-  <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
-    <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-      <FiCheck className="text-white text-sm" />
-    </div>
-    <div className={truncate ? 'flex-1' : ''}>
-      <p className="font-medium text-green-800">{title}</p>
-      <p className={`text-sm text-green-600 ${truncate ? 'truncate' : ''}`}>{description}</p>
+  <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
+    <div className="flex items-start gap-3">
+      <FiCheck className="text-green-500 text-xl mt-0.5 flex-shrink-0" />
+      <div>
+        <p className="font-medium text-green-800">{title}</p>
+        <p className={`text-sm text-green-600 mt-1 ${truncate ? 'truncate' : ''}`}>
+          {description}
+        </p>
+      </div>
     </div>
   </div>
 );
 
 const SecurityNotice = () => (
-  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-    <div className="flex items-start gap-3">
-      <FiShield className="text-blue-500 mt-0.5 flex-shrink-0" />
+  <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
+    <div className="flex items-start gap-4">
+      <div className="inline-flex items-center justify-center w-10 h-10 bg-blue-100 rounded-full flex-shrink-0">
+        <FiShield className="text-lg text-blue-600" />
+      </div>
       <div>
-     <p className="text-xs text-blue-600 mt-1">
-          Your data is encrypted and processed securely. Business documents are reviewed by our verification team within 24-48 hours.
-        </p>
+        <h3 className="font-semibold text-blue-900 mb-2">Security & Privacy</h3>
+        <ul className="text-sm text-blue-800 space-y-1">
+          <li>• All documents are encrypted and stored securely</li>
+          <li>• Your personal information is protected by industry-standard security</li>
+          <li>• Verification typically takes 1-2 business days</li>
+          <li>• You'll receive email updates on verification status</li>
+        </ul>
       </div>
     </div>
   </div>
