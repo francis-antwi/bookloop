@@ -19,12 +19,9 @@ import {
 } from 'react-icons/fi';
 import { useSession } from 'next-auth/react';
 import axios from 'axios';
+import toast from 'react-hot-toast';
+import Camera from '../components/inputs/Camera';
 import Categories, { categories } from '../components/navbar/Categories';
-
-const toast = {
-  error: (msg: string) => console.error('Error:', msg),
-  success: (msg: string) => console.log('Success:', msg)
-};
 
 interface VerificationStepsProps {
   role: string;
@@ -297,68 +294,13 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
   );
 };
 
-// Mock Camera component for demo
-const Camera = ({ onCapture }: { onCapture: (blob: Blob) => void }) => {
-  const [isActive, setIsActive] = useState(false);
-  
-  const handleCapture = () => {
-    // Mock capture - in real app this would use camera
-    const canvas = document.createElement('canvas');
-    canvas.width = 640;
-    canvas.height = 480;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.fillStyle = '#f0f0f0';
-      ctx.fillRect(0, 0, 640, 480);
-      ctx.fillStyle = '#333';
-      ctx.font = '20px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText('Mock Selfie Captured', 320, 240);
-    }
-    
-    canvas.toBlob((blob) => {
-      if (blob) {
-        onCapture(blob);
-        setIsActive(false);
-      }
-    }, 'image/jpeg', 0.8);
-  };
-
-  return (
-    <div className="relative bg-gray-100 rounded-xl overflow-hidden">
-      <div className="aspect-video flex items-center justify-center">
-        {isActive ? (
-          <div className="text-center">
-            <div className="w-48 h-36 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-lg flex items-center justify-center mb-4">
-              <FiUser className="text-4xl text-gray-400" />
-            </div>
-            <button
-              onClick={handleCapture}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <FiUser className="inline mr-2" />
-              Capture Selfie
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={() => setIsActive(true)}
-            className="flex flex-col items-center gap-4 p-8 text-gray-500 hover:text-gray-700 transition-colors"
-          >
-            <FiUser className="text-6xl" />
-            <span className="text-lg font-medium">Start Camera</span>
-          </button>
-        )}
-      </div>
-    </div>
-  );
-};
-
-const SelfieStep = ({ selfieImage, onSelfieCapture, onNext }: {
+type SelfieStepProps = {
   selfieImage: Blob | null;
   onSelfieCapture: (blob: Blob) => void;
   onNext: () => void;
-}) => (
+};
+
+const SelfieStep = ({ selfieImage, onSelfieCapture, onNext }: SelfieStepProps) => (
   <div className="space-y-6">
     <div className="text-center">
       <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-3">
@@ -378,15 +320,10 @@ const SelfieStep = ({ selfieImage, onSelfieCapture, onNext }: {
     </div>
     
     {selfieImage && (
-      <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
-        <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-          <FiCheck className="text-white text-sm" />
-        </div>
-        <div>
-          <p className="font-medium text-green-800">Selfie captured successfully!</p>
-          <p className="text-sm text-green-600">Ready to proceed to next step</p>
-        </div>
-      </div>
+      <SuccessMessage
+        title="Selfie captured successfully!"
+        description="Ready to proceed to next step"
+      />
     )}
     
     <button
@@ -400,14 +337,16 @@ const SelfieStep = ({ selfieImage, onSelfieCapture, onNext }: {
   </div>
 );
 
-const IDStep = ({ idFile, onIdUpload, onBack, onNext, isLoading, isProvider }: {
+type IDStepProps = {
   idFile: File | null;
   onIdUpload: (file: File) => void;
   onBack: () => void;
   onNext: () => void;
   isLoading: boolean;
   isProvider: boolean;
-}) => (
+};
+
+const IDStep = ({ idFile, onIdUpload, onBack, onNext, isLoading, isProvider }: IDStepProps) => (
   <div className="space-y-6">
     <div className="text-center">
       <div className="inline-flex items-center justify-center w-12 h-12 bg-indigo-100 rounded-full mb-3">
@@ -448,15 +387,11 @@ const IDStep = ({ idFile, onIdUpload, onBack, onNext, isLoading, isProvider }: {
     </div>
     
     {idFile && (
-      <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
-        <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-          <FiCheck className="text-white text-sm" />
-        </div>
-        <div className="flex-1">
-          <p className="font-medium text-green-800">Document uploaded</p>
-          <p className="text-sm text-green-600 truncate">{idFile.name}</p>
-        </div>
-      </div>
+      <SuccessMessage
+        title="Document uploaded"
+        description={idFile.name}
+        truncate
+      />
     )}
     
     <div className="flex gap-3">
@@ -552,19 +487,18 @@ const BusinessStep = ({ businessData, businessFiles, onDataChange, onFileUpload,
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Business Type *
         </label>
-    <select
-  value={businessData.businessType}
-  onChange={(e) => onDataChange('businessType', e.target.value)}
-  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
->
-  <option value="">Select business type</option>
-  {categories.map((cat) => (
-    <option key={cat.label} value={cat.label}>
-      {cat.label}
-    </option>
-  ))}
-</select>
-
+        <select
+          value={businessData.businessType}
+          onChange={(e) => onDataChange('businessType', e.target.value)}
+          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        >
+          <option value="">Select business type</option>
+          {categories.map((cat) => (
+            <option key={cat.label} value={cat.label}>
+              {cat.label}
+            </option>
+          ))}
+        </select>
       </div>
       
       <div>
@@ -652,12 +586,14 @@ const BusinessStep = ({ businessData, businessFiles, onDataChange, onFileUpload,
   </div>
 );
 
-const FileUpload = ({ label, file, onFileUpload, required = false }: {
+type FileUploadProps = {
   label: string;
   file: File | null;
   onFileUpload: (file: File) => void;
   required?: boolean;
-}) => {
+};
+
+const FileUpload = ({ label, file, onFileUpload, required = false }: FileUploadProps) => {
   const inputId = `file-${label.toLowerCase().replace(/\s+/g, '-')}`;
   
   return (
@@ -693,6 +629,24 @@ const FileUpload = ({ label, file, onFileUpload, required = false }: {
     </div>
   );
 };
+
+type SuccessMessageProps = {
+  title: string;
+  description: string;
+  truncate?: boolean;
+};
+
+const SuccessMessage = ({ title, description, truncate = false }: SuccessMessageProps) => (
+  <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
+    <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+      <FiCheck className="text-white text-sm" />
+    </div>
+    <div className={truncate ? 'flex-1' : ''}>
+      <p className="font-medium text-green-800">{title}</p>
+      <p className={`text-sm text-green-600 ${truncate ? 'truncate' : ''}`}>{description}</p>
+    </div>
+  </div>
+);
 
 const SecurityNotice = () => (
   <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
