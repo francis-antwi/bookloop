@@ -92,22 +92,10 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
     setBusinessFiles(prev => ({ ...prev, [field]: file }));
   };
 
-  const submitVerification = async () => {
+  const submitIdentityVerification = async () => {
     if (!selfieImage || !idFile) {
       toast.error('Please complete all verification steps');
       return;
-    }
-
-    if (role === 'PROVIDER') {
-      // Validate business data
-      if (!businessData.tinNumber || !businessData.businessName || !businessData.businessType) {
-        toast.error('Please fill in all required business information');
-        return;
-      }
-      if (!businessFiles.tinCertificate) {
-        toast.error('TIN Certificate is required');
-        return;
-      }
     }
 
     setIsLoading(true);
@@ -120,48 +108,75 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
       verificationFormData.append('email', session?.user?.email || '');
       verificationFormData.append('name', session?.user?.name || '');
       verificationFormData.append('role', role);
-      verificationFormData.append('shouldRegister', 'true');
-
-      // Add business data for providers
-      if (role === 'PROVIDER') {
-        Object.entries(businessData).forEach(([key, value]) => {
-          if (value) verificationFormData.append(key, value);
-        });
-
-        // Add business files
-        Object.entries(businessFiles).forEach(([key, file]) => {
-          if (file) verificationFormData.append(key, file);
-        });
-      }
 
       const response = await axios.post('/api/verify', verificationFormData, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 120000 // Increased timeout for business verification
+        timeout: 60000
       });
 
       if (!response.data.success) {
-        throw new Error(response.data.error || 'Verification failed');
+        throw new Error(response.data.error || 'Identity verification failed');
       }
 
-      setVerificationStatus({ success: true, confidence: response.data.matchConfidence });
-      
+      setVerificationStatus({ 
+        success: true, 
+        confidence: response.data.matchConfidence 
+      });
+
       if (role === 'PROVIDER') {
-        toast.success('Verification submitted! Business documents are under review.');
+        toast.success('Identity verified! Please complete business verification.');
+        setCurrentStep('business');
       } else {
         toast.success('Verification complete!');
-      }
-      
-      setTimeout(() => {
         onComplete();
-        router.push('/pending-approval');
-      }, 2000);
+        router.push('/');
+      }
 
     } catch (error: any) {
-      const errorData = error.response?.data;
-      const errorMsg = errorData?.error || error.message || 'Verification failed';
-
-      console.error('❌ Verification error:', errorMsg);
+      const errorMsg = error.response?.data?.error || error.message || 'Verification failed';
       setVerificationStatus({ success: false, error: errorMsg });
+      toast.error(errorMsg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const submitBusinessVerification = async () => {
+    if (!businessData.tinNumber || !businessData.businessName || !businessData.businessType) {
+      toast.error('Please fill in all required business information');
+      return;
+    }
+    if (!businessFiles.tinCertificate) {
+      toast.error('TIN Certificate is required');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const businessFormData = new FormData();
+      Object.entries(businessData).forEach(([key, value]) => {
+        if (value) businessFormData.append(key, value);
+      });
+      Object.entries(businessFiles).forEach(([key, file]) => {
+        if (file) businessFormData.append(key, file);
+      });
+
+      const response = await axios.post('/api/verify', businessFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 120000
+      });
+
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Business verification failed');
+      }
+
+      toast.success('Business verification submitted for review!');
+      onComplete();
+      router.push('/pending-approval');
+
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.error || error.message || 'Business verification failed';
       toast.error(errorMsg);
     } finally {
       setIsLoading(false);
@@ -185,7 +200,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
     if (currentStep === 'selfie') {
       setCurrentStep('id');
     } else if (currentStep === 'id' && role === 'PROVIDER') {
-      setCurrentStep('business');
+      submitIdentityVerification();
     }
   };
 
@@ -246,7 +261,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
                 <p className="font-medium text-green-800">Verification Successful!</p>
                 <p className="text-sm text-green-600 mt-1">
                   {role === 'PROVIDER' 
-                    ? 'Business documents submitted for review. You will be notified once approved.'
+                    ? 'Identity verified! Please complete business verification.'
                     : 'Your identity has been verified successfully.'
                   }
                 </p>
@@ -269,7 +284,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
               idFile={idFile}
               onIdUpload={handleIdUpload}
               onBack={prevStep}
-              onNext={role === 'PROVIDER' ? nextStep : submitVerification}
+              onNext={nextStep}
               isLoading={isLoading}
               isProvider={role === 'PROVIDER'}
             />
@@ -282,7 +297,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
               onDataChange={handleBusinessDataChange}
               onFileUpload={handleBusinessFileUpload}
               onBack={prevStep}
-              onSubmit={submitVerification}
+              onSubmit={submitBusinessVerification}
               isLoading={isLoading}
             />
           )}
