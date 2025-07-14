@@ -74,9 +74,9 @@ const RoleSelector = () => {
 
       const redirectPath = err?.response?.data?.redirect;
       if (redirectPath) {
-        setTimeout(() => router.push(redirectPath), 1000);
+        setTimeout(() => router.push(redirectPath), 0);
       } else if (err?.response?.status === 401) {
-        setTimeout(() => router.push("/"), 1000);
+        setTimeout(() => router.push("/"), 0);
       }
     } finally {
       setIsLoading(false);
