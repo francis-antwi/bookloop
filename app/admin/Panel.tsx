@@ -653,75 +653,64 @@ const ReservationsContent = () => (
     </div>
   );
 
-  const Sidebar = () => (
-    <div className="w-64 bg-white border-r border-gray-200 p-6 space-y-8">
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-          <Home size={20} className="text-white" />
+ const Sidebar = () => (
+  <div className="w-64 bg-white border-r border-gray-200 p-6 space-y-8">
+    <div className="flex items-center gap-3">
+      <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+        <Home size={20} className="text-white" />
+      </div>
+      <div>
+        <p className="text-sm text-gray-500 capitalize">{userRole} Panel</p>
+      </div>
+    </div>
+
+    <nav className="space-y-2">
+      {[
+        { id: 'dashboard', label: 'Dashboard', icon: TrendingUp },
+        { id: 'listings', label: 'Listings', icon: Home },
+        { id: 'reservations', label: 'Reservations', icon: Calendar },
+        {
+          id: 'notifications',
+          label: 'Notifications',
+          icon: Bell,
+          badge: notifications.filter(n => !n.read).length,
+        },
+        { id: 'reviews', label: 'Business Reviews', icon: Star }, // ✅ Added here
+        { id: 'settings', label: 'Settings', icon: Settings },
+      ].map(item => (
+        <button
+          key={item.id}
+          onClick={() => setActiveTab(item.id)}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-colors ${
+            activeTab === item.id
+              ? 'bg-blue-50 text-blue-600 font-medium'
+              : 'text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          <item.icon size={20} />
+          <span className="flex-1">{item.label}</span>
+          {typeof item.badge === 'number' && item.badge > 0 && (
+            <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">
+              {item.badge}
+            </span>
+          )}
+        </button>
+      ))}
+    </nav>
+
+    <div className="pt-6 border-t border-gray-200">
+      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+        <div className="w-10 h-10 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center">
+          <Users size={16} className="text-white" />
         </div>
         <div>
-
-          <p className="text-sm text-gray-500 capitalize">{userRole} Panel</p>
-        </div>
-      </div>
-      <nav className="space-y-2">
-        {[
-          { id: 'dashboard', label: 'Dashboard', icon: TrendingUp },
-          { id: 'listings', label: 'Listings', icon: Home },
-          { id: 'reservations', label: 'Reservations', icon: Calendar },
-          {
-            id: 'notifications',
-            label: 'Notifications',
-            icon: Bell,
-            badge: notifications.filter(n => !n.read).length,
-          },
-          { id: 'settings', label: 'Settings', icon: Settings },
-        ].map(item => (
-          <button
-            key={item.id}
-            onClick={() => setActiveTab(item.id)}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-colors ${
-              activeTab === item.id
-                ? 'bg-blue-50 text-blue-600 font-medium'
-                : 'text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            <item.icon size={20} />
-            <span className="flex-1">{item.label}</span>
-            {typeof item.badge === 'number' && item.badge > 0 && (
-              <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">
-                {item.badge}
-              </span>
-            )}
-          </button>
-        ))}
-         {[... /* existing tabs */, { id: 'reviews', label: 'Business Reviews', icon: Star }].map(item => (
-          <button
-            key={item.id}
-            onClick={() => setActiveTab(item.id)}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-colors ${
-              activeTab === item.id ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            <item.icon size={20} />
-            <span className="flex-1">{item.label}</span>
-            {item.badge && <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">{item.badge}</span>}
-          </button>
-        ))}
-      </nav>
-      <div className="pt-6 border-t border-gray-200">
-        <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-          <div className="w-10 h-10 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center">
-            <Users size={16} className="text-white" />
-          </div>
-          <div>
-   
-            <p className="text-sm text-gray-500">{userRole}</p>
-          </div>
+          <p className="text-sm text-gray-500">{userRole}</p>
         </div>
       </div>
     </div>
-  );
+  </div>
+);
+
 
   const renderContent = () => {
     switch (activeTab) {
