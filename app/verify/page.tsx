@@ -58,6 +58,12 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
     vatCertificate: null as File | null,
     ssnitCert: null as File | null
   });
+  useEffect(() => {
+  if (identityVerified && role === 'PROVIDER') {
+    setCurrentStep('business');
+  }
+}, [identityVerified, role]);
+
 
   const handleSelfieCapture = (blob: Blob) => {
     setSelfieImage(blob);
@@ -123,24 +129,21 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
         throw new Error(response.data.error || 'Identity verification failed');
       }
 
-      setVerificationStatus({ 
-        success: true, 
-        confidence: response.data.matchConfidence 
-      });
-      setIdentityVerified(true);
+  setVerificationStatus({ 
+  success: true, 
+  confidence: response.data.matchConfidence 
+});
+setIdentityVerified(true);
 
-      if (role === 'PROVIDER') {
-        toast.success('Identity verified! Moving to business verification...');
-        setTimeout(() => {
-          setCurrentStep('business');
-        }, 1500);
-      } else {
-        toast.success('Verification complete!');
-        setTimeout(() => {
-          onComplete();
-          router.push('/');
-        }, 1500);
-      }
+toast.success('Verification complete!');
+setIdentityVerified(true);
+
+if (currentStep === 'id') {
+  setTimeout(() => {
+    onComplete();
+    router.push('/');
+  }, 1000); 
+}
 
     } catch (error: any) {
       const errorMsg = error.response?.data?.error || error.message || 'Verification failed';
