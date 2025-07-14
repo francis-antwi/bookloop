@@ -174,12 +174,8 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
       if (!response.data.success) {
         throw new Error(response.data.error || 'Business verification failed');
       }
-
-      toast.success('Business verification submitted for review!');
-      setTimeout(() => {
-        onComplete();
+        toast.success('Business verification submitted for review!');
         router.push('/pending-approval');
-      }, 1500);
 
     } catch (error: any) {
       const errorMsg = error.response?.data?.error || error.message || 'Business verification failed';
