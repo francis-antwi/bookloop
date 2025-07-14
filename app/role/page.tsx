@@ -35,53 +35,49 @@ const RoleSelector = () => {
       </div>
     );
   }
+const handleRoleSelect = async (role: string) => {
+  if (isLoading || !session?.user?.email || !session?.user?.id) {
+    router.replace("/");
+    return;
+  }
 
-  const handleRoleSelect = async (role: string) => {
-    if (isLoading || !session?.user?.email || !session?.user?.id) {
-      toast.error("Session error. Please sign in again.");
-      router.push("/");
-      return;
-    }
+  if (selectedRole === role) {
+    router.replace(role === "PROVIDER" ? "/verify" : "/");
+    return;
+  }
 
-    if (selectedRole === role) {
-      toast.success(`You are already a ${role.toLowerCase()}.`);
-      return;
-    }
+  setIsLoading(true);
+  setError(null);
 
-    setIsLoading(true);
-    setError(null);
+  try {
+    await axios.post("/api/role", {
+      role,
+      userId: session.user.id,
+    });
 
-    try {
-      const res = await axios.post("/api/role", {
-        role,
-        userId: session.user.id,
-      });
+    await update({ role });
 
-      await update({ role });
-      setSelectedRole(role);
-      toast.success(`Role updated to ${role.toLowerCase()} successfully!`);
+    // 🚀 Immediately redirect with no delay or extra logic
+    router.replace(role === "CUSTOMER" ? "/" : "/verify");
+  } catch (err: any) {
+    const redirectPath =
+      err?.response?.data?.redirect ||
+      (err?.response?.status === 401 ? "/" : null);
 
-      const redirectPath = res.data?.redirect || (role === "PROVIDER" ? "/verify" : "/");
-      router.push(redirectPath);
-    } catch (err: any) {
-      const message =
+    if (redirectPath) {
+      router.replace(redirectPath);
+    } else {
+      setError(
         err?.response?.data?.message ||
         err?.response?.data?.error ||
-        "Failed to update role. Please try again.";
-
-      setError(message);
-      toast.error(message);
-
-      const redirectPath = err?.response?.data?.redirect;
-      if (redirectPath) {
-        setTimeout(() => router.push(redirectPath), 0);
-      } else if (err?.response?.status === 401) {
-        setTimeout(() => router.push("/"), 0);
-      }
-    } finally {
-      setIsLoading(false);
+        "Failed to update role. Please try again."
+      );
     }
-  };
+  } finally {
+    setIsLoading(false); // Optional — has no effect if already redirected
+  }
+};
+
 
   const roles = [
     {
