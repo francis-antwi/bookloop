@@ -52,6 +52,16 @@ type ListingType = {
   status: "PENDING" | "APPROVED" | "REJECTED";
 };
 
+type Provider = {
+  id: string;
+  businessName: string;
+  name: string;
+  email: string;
+  phone: string;
+  submittedAt: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+};
+
 const ActionButton = ({
   onClick,
   variant = 'primary',
@@ -96,17 +106,18 @@ const StatusBadge = ({
       APPROVED: { bg: "bg-green-100", text: "text-green-800", icon: CheckCircle2 },
       REJECTED: { bg: "bg-red-100", text: "text-red-800", icon: XCircle },
     },
-   reservation: {
-  PENDING: { bg: "bg-yellow-100", text: "text-yellow-800", icon: Clock },
-  CONFIRMED: { bg: "bg-blue-100", text: "text-blue-800", icon: CheckCircle2 },
-  COMPLETED: { bg: "bg-green-100", text: "text-green-800", icon: CheckCircle2 },
-  CANCELLED: { bg: "bg-red-100", text: "text-red-800", icon: XCircle },
-}
-
+    reservation: {
+      PENDING: { bg: "bg-yellow-100", text: "text-yellow-800", icon: Clock },
+      CONFIRMED: { bg: "bg-blue-100", text: "text-blue-800", icon: CheckCircle2 },
+      COMPLETED: { bg: "bg-green-100", text: "text-green-800", icon: CheckCircle2 },
+      CANCELLED: { bg: "bg-red-100", text: "text-red-800", icon: XCircle },
+    }
   };
+  
   const { bg, text, icon: Icon } = type === "listing" 
     ? configs.listing[status as ListingType["status"]] || configs.listing.PENDING
     : configs.reservation[status as SimplifiedReservation["status"]] || configs.reservation.PENDING;
+  
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${bg} ${text}`}>
       <Icon size={12} />
@@ -115,7 +126,7 @@ const StatusBadge = ({
   );
 };
 
-const  AdminDashboard = () => {
+const AdminDashboard = () => {
   const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -123,15 +134,23 @@ const  AdminDashboard = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [listings, setListings] = useState<ListingType[]>([]);
   const [reservations, setReservations] = useState<SimplifiedReservation[]>([]);
+  const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState({
     listings: true,
     reservations: true,
-    notifications: true
+    notifications: true,
+    providers: true
   });
-  const [error, setError] = useState({
+  const [error, setError] = useState<{
+    listings: string | null;
+    reservations: string | null;
+    notifications: string | null;
+    providers: string | null;
+  }>({
     listings: null,
     reservations: null,
-    notifications: null
+    notifications: null,
+    providers: null
   });
   const [filter, setFilter] = useState<'all' | 'unread'>('unread');
 
@@ -215,6 +234,30 @@ const  AdminDashboard = () => {
     fetchNotifications();
   }, []);
 
+  // Fetch providers
+  useEffect(() => {
+    const fetchProviders = async () => {
+      try {
+        setLoading(prev => ({ ...prev, providers: true }));
+        setError(prev => ({ ...prev, providers: null }));
+        
+        const res = await fetch('/api/providers');
+        if (!res.ok) {
+          throw new Error(`API error: ${res.status} ${res.statusText}`);
+        }
+        const data = await res.json();
+        setProviders(data);
+      } catch (err) {
+        console.error('Failed to load providers:', err);
+        setError(prev => ({ ...prev, providers: err instanceof Error ? err.message : 'Failed to load providers' }));
+      } finally {
+        setLoading(prev => ({ ...prev, providers: false }));
+      }
+    };
+    
+    fetchProviders();
+  }, []);
+
   const handleReservationAction = async (
     reservationId: string,
     status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED'
@@ -229,7 +272,6 @@ const  AdminDashboard = () => {
       });
       if (!res.ok) throw new Error('Failed to update reservation');
    
-      
       // Update the local state
       setReservations(prev => 
         prev.map(reservation => 
@@ -263,6 +305,29 @@ const  AdminDashboard = () => {
     } catch (error) {
       console.error('Error updating listing:', error);
       alert('Failed to update listing status.');
+    }
+  };
+
+  const handleProviderApproval = async (id: string, status: 'APPROVED' | 'REJECTED') => {
+    try {
+      const res = await fetch(`/api/providers/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to update provider');
+      }
+      const updated = await res.json();
+      setProviders(prev =>
+        prev.map(provider =>
+          provider.id === id ? { ...provider, status: updated.status } : provider
+        )
+      );
+    } catch (error) {
+      console.error('Error updating provider:', error);
+      alert('Failed to update provider status.');
     }
   };
 
@@ -306,7 +371,6 @@ const  AdminDashboard = () => {
   const filteredNotifications = notifications.filter(n => 
     filter === 'all' ? true : !n.read
   );
-  const unreadCount = notifications.filter(n => !n.read).length;
 
   const DashboardContent = () => (
     <div className="space-y-6">
@@ -321,7 +385,6 @@ const  AdminDashboard = () => {
                 <p className="ml-2 text-gray-600">Loading reservations...</p>
               </div>
             ) : reservations.length > 0 ? (
-              // Make sure we're properly mapping through an array
               Array.isArray(reservations) && reservations.slice(0, 5).map(reservation => (
                 <div key={reservation.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
                   <div className="flex-1">
@@ -414,13 +477,14 @@ const  AdminDashboard = () => {
                     </td>
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-2 justify-end">
-                              <ActionButton
-                      variant="secondary"
-                      onClick={() => router.push(`/listings/${listing.id}`)}
-                    >
-                      <Eye size={14} className="inline mr-1" />
-                      View
-                    </ActionButton>       {listing.status === 'PENDING' && (
+                        <ActionButton
+                          variant="secondary"
+                          onClick={() => router.push(`/listings/${listing.id}`)}
+                        >
+                          <Eye size={14} className="inline mr-1" />
+                          View
+                        </ActionButton>
+                        {listing.status === 'PENDING' && (
                           <>
                             <ActionButton 
                               variant="success" 
@@ -453,85 +517,87 @@ const  AdminDashboard = () => {
       </div>
     </div>
   );
-const ReservationsContent = () => (
-  <div className="space-y-6">
-    <div className="flex items-center justify-between">
-      <h2 className="text-2xl font-bold text-gray-900">Reservations</h2>
-      <div className="flex items-center gap-3">
-        <select className="px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500">
-          <option>All Status</option>
-          <option>Pending</option>
-          <option>Confirmed</option>
-          <option>Completed</option>
-          <option>CANCELLED</option>
-        </select>
-      </div>
-    </div>
-    
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {loading.reservations ? (
-        <div className="col-span-full flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <p className="ml-2 text-gray-600">Loading reservations...</p>
+
+  const ReservationsContent = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold text-gray-900">Reservations</h2>
+        <div className="flex items-center gap-3">
+          <select className="px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500">
+            <option>All Status</option>
+            <option>Pending</option>
+            <option>Confirmed</option>
+            <option>Completed</option>
+            <option>CANCELLED</option>
+          </select>
         </div>
-      ) : reservations.length > 0 ? (
-        reservations.map(reservation => (
-          <div key={reservation.id} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <p className="font-medium text-gray-900">{reservation.listing}</p>
-                <p className="text-sm text-gray-500">{reservation.dates}</p>
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {loading.reservations ? (
+          <div className="col-span-full flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <p className="ml-2 text-gray-600">Loading reservations...</p>
+          </div>
+        ) : reservations.length > 0 ? (
+          reservations.map(reservation => (
+            <div key={reservation.id} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <p className="font-medium text-gray-900">{reservation.listing}</p>
+                  <p className="text-sm text-gray-500">{reservation.dates}</p>
+                </div>
+                <StatusBadge status={reservation.status} type="reservation" />
               </div>
-              <StatusBadge status={reservation.status} type="reservation" />
-            </div>
 
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-2xl font-bold text-gray-900">${reservation.totalPrice}</span>
-              <div className="flex items-center gap-1 text-gray-500">
-                <CreditCard size={16} />
-                <span className="text-sm">Paid</span>
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-2xl font-bold text-gray-900">${reservation.totalPrice}</span>
+                <div className="flex items-center gap-1 text-gray-500">
+                  <CreditCard size={16} />
+                  <span className="text-sm">Paid</span>
+                </div>
               </div>
-            </div>
 
-            <div className="flex gap-2">
-              {reservation.status === 'PENDING' && (
-                <>
+              <div className="flex gap-2">
+                {reservation.status === 'PENDING' && (
+                  <>
+                    <ActionButton 
+                      variant="success" 
+                      size="md"
+                      onClick={() => handleReservationAction(reservation.id, 'CONFIRMED')}
+                    >
+                      Confirm
+                    </ActionButton>
+                    <ActionButton 
+                      variant="danger" 
+                      size="md"
+                      onClick={() => handleReservationAction(reservation.id, 'CANCELLED')}
+                    >
+                      Cancel
+                    </ActionButton>
+                  </>
+                )}
+                {reservation.status === 'CONFIRMED' && (
                   <ActionButton 
                     variant="success" 
                     size="md"
-                    onClick={() => handleReservationAction(reservation.id, 'CONFIRMED')}
+                    onClick={() => handleReservationAction(reservation.id, 'COMPLETED')}
                   >
-                    Confirm
+                    Mark Complete
                   </ActionButton>
-                  <ActionButton 
-                    variant="danger" 
-                    size="md"
-                    onClick={() => handleReservationAction(reservation.id, 'CANCELLED')}
-                  >
-                    Cancel
-                  </ActionButton>
-                </>
-              )}
-              {reservation.status === 'CONFIRMED' && (
-                <ActionButton 
-                  variant="success" 
-                  size="md"
-                  onClick={() => handleReservationAction(reservation.id, 'COMPLETED')}
-                >
-                  Mark Complete
-                </ActionButton>
-              )}
+                )}
+              </div>
             </div>
+          ))
+        ) : (
+          <div className="col-span-full text-center p-8 text-gray-500">
+            No reservations found
           </div>
-        ))
-      ) : (
-        <div className="col-span-full text-center p-8 text-gray-500">
-          No reservations found
-        </div>
-      )}
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
+
   const BusinessReviewsContent = () => (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-900">Provider Applications</h2>
@@ -586,7 +652,6 @@ const ReservationsContent = () => (
       </div>
     </div>
   );
-
 
   const NotificationsContent = () => (
     <div className="space-y-6">
@@ -653,114 +718,90 @@ const ReservationsContent = () => (
     </div>
   );
 
- const Sidebar = () => (
-  <div className="w-64 bg-white border-r border-gray-200 p-6 space-y-8">
-    <div className="flex items-center gap-3">
-      <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-        <Home size={20} className="text-white" />
-      </div>
-      <div>
-        <p className="text-sm text-gray-500 capitalize">{userRole} Panel</p>
-      </div>
-    </div>
-
-    <nav className="space-y-2">
-      {[
-        { id: 'dashboard', label: 'Dashboard', icon: TrendingUp },
-        { id: 'listings', label: 'Listings', icon: Home },
-        { id: 'reservations', label: 'Reservations', icon: Calendar },
-        {
-          id: 'notifications',
-          label: 'Notifications',
-          icon: Bell,
-          badge: notifications.filter(n => !n.read).length,
-        },
-        { id: 'reviews', label: 'Business Reviews', icon: Star }, // ✅ Added here
-        { id: 'settings', label: 'Settings', icon: Settings },
-      ].map(item => (
-        <button
-          key={item.id}
-          onClick={() => setActiveTab(item.id)}
-          className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-colors ${
-            activeTab === item.id
-              ? 'bg-blue-50 text-blue-600 font-medium'
-              : 'text-gray-600 hover:bg-gray-50'
-          }`}
-        >
-          <item.icon size={20} />
-          <span className="flex-1">{item.label}</span>
-          {typeof item.badge === 'number' && item.badge > 0 && (
-            <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">
-              {item.badge}
-            </span>
-          )}
-        </button>
-      ))}
-    </nav>
-
-    <div className="pt-6 border-t border-gray-200">
-      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-        <div className="w-10 h-10 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center">
-          <Users size={16} className="text-white" />
+  const Sidebar = () => (
+    <div className="w-64 bg-white border-r border-gray-200 p-6 space-y-8">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+          <Home size={20} className="text-white" />
         </div>
         <div>
-          <p className="text-sm text-gray-500">{userRole}</p>
+          <p className="text-sm text-gray-500 capitalize">{userRole} Panel</p>
         </div>
       </div>
-    </div>
-  </div>
-);
 
+      <nav className="space-y-2">
+        {[
+          { id: 'dashboard', label: 'Dashboard', icon: TrendingUp },
+          { id: 'listings', label: 'Listings', icon: Home },
+          { id: 'reservations', label: 'Reservations', icon: Calendar },
+          {
+            id: 'notifications',
+            label: 'Notifications',
+            icon: Bell,
+            badge: notifications.filter(n => !n.read).length,
+          },
+          { id: 'reviews', label: 'Business Reviews', icon: Star },
+          { id: 'settings', label: 'Settings', icon: Settings },
+        ].map(item => (
+          <button
+            key={item.id}
+            onClick={() => setActiveTab(item.id)}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${
+              activeTab === item.id
+                ? 'bg-blue-50 text-blue-600'
+                : 'text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <item.icon size={20} />
+            <span>{item.label}</span>
+            {item.badge && item.badge > 0 && (
+              <span className="bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center ml-auto">
+                {item.badge}
+              </span>
+            )}
+          </button>
+        ))}
+      </nav>
+    </div>
+  );
 
   const renderContent = () => {
     switch (activeTab) {
+      case 'dashboard':
+        return <DashboardContent />;
       case 'listings':
         return <ListingsContent />;
       case 'reservations':
         return <ReservationsContent />;
       case 'notifications':
         return <NotificationsContent />;
-       case 'reviews': return <BusinessReviewsContent />;
+      case 'reviews':
+        return <BusinessReviewsContent />;
+      case 'settings':
+        return <div className="text-center text-gray-500 p-8">Settings coming soon...</div>;
       default:
         return <DashboardContent />;
     }
   };
 
+  if (sessionStatus === "loading") {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="flex h-screen bg-gray-50">
       <Sidebar />
-      <main className="flex-1 p-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 capitalize">
-                {activeTab === 'dashboard' ? 'Dashboard Overview' : activeTab}
-              </h1>
-              <p className="text-gray-500 mt-1">
-                {activeTab === 'dashboard' && 'Monitor your platform performance and activity'}
-                {activeTab === 'listings' && 'Manage and review property listings'}
-                {activeTab === 'reservations' && 'Track and manage bookings'}
-                {activeTab === 'notifications' && 'Stay updated with latest activities'}
-                {activeTab === 'reviews' && 'Review and approve provider businesses'}
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <button className="relative p-2 text-gray-600 hover:text-gray-900">
-                <Bell size={20} />
-                {notifications.filter(n => !n.read).length > 0 && (
-                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-                    {notifications.filter(n => !n.read).length}
-                  </span>
-                )}
-              </button>
-            </div>
-          </div>
-          
+      <div className="flex-1 overflow-auto">
+        <div className="p-8">
           {renderContent()}
         </div>
-      </main>
+      </div>
     </div>
   );
 };
 
-export default AdminDashboard;
+export default AdminDashboard
