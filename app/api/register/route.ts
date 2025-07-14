@@ -135,7 +135,9 @@ export async function POST(request: Request) {
             data: {
               role,
               isFaceVerified: true,
-              verified: true,
+              verified: false,
+              requiresApproval: true,
+              status: "PENDING_REVIEW",
               selfieImage: selfieImage || selfieUrl || null,
               idImage: idImage || imageUrl || null,
               faceConfidence: faceConfidence || null,
@@ -178,41 +180,62 @@ export async function POST(request: Request) {
     const hashedPassword = password ? await bcrypt.hash(password, 12) : null;
 
     const user = await prisma.user.create({
-      data: {
-        email: email || googleUserEmail,
-        name: displayName,
-        contactPhone: contactPhone || null,
-        hashedPassword,
-        role,
-        isFaceVerified: role === "PROVIDER",
-        verified: role === "PROVIDER" ? true : !!verified,
-        selfieImage: selfieImage || selfieUrl || null,
-        idImage: idImage || imageUrl || null,
-        faceConfidence: faceConfidence || null,
-        idName: idName || null,
-        idNumber: idNumber || personalIdNumber || null,
-        idDOB: parsedDOB,
-        idExpiryDate: parsedExpiry,
-        idIssueDate: parsedIssue,
-        idIssuer: idIssuer || null,
-        personalIdNumber: personalIdNumber || null,
-        nationality: nationality || null,
-        gender: gender || null,
-        placeOfIssue: placeOfIssue || null,
-        idType: idType || null,
-        rawText: rawText || null
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        contactPhone: true,
-        isFaceVerified: true,
-        verified: true,
-        createdAt: true
+  data: {
+    email: email || googleUserEmail,
+    name: displayName,
+    contactPhone: contactPhone || null,
+    hashedPassword,
+    role,
+    isFaceVerified: role === "PROVIDER",
+    verified: role === "PROVIDER" ? false : !!verified,
+    requiresApproval: role === "PROVIDER",
+    status: role === "PROVIDER" ? "PENDING_REVIEW" : "ACTIVE",
+
+    selfieImage: selfieImage || selfieUrl || null,
+    idImage: idImage || imageUrl || null,
+    faceConfidence: faceConfidence || null,
+    idName: idName || null,
+    idNumber: idNumber || personalIdNumber || null,
+    idDOB: parsedDOB,
+    idExpiryDate: parsedExpiry,
+    idIssueDate: parsedIssue,
+    idIssuer: idIssuer || null,
+    personalIdNumber: personalIdNumber || null,
+    nationality: nationality || null,
+    gender: gender || null,
+    placeOfIssue: placeOfIssue || null,
+    idType: idType || null,
+    rawText: rawText || null,
+
+    // Include this if your Prisma schema supports nested business verification
+    businessVerification: role === "PROVIDER" ? {
+      create: {
+        tinNumber: body.tinNumber,
+        registrationNumber: body.registrationNumber,
+        businessName: body.businessName,
+        businessType: body.businessType,
+        businessAddress: body.businessAddress,
+        tinCertificateUrl: body.tinCertificateUrl,
+        incorporationCertUrl: body.incorporationCertUrl,
+        vatCertificateUrl: body.vatCertificateUrl,
+        ssnitCertUrl: body.ssnitCertUrl,
+        verified: false,
+        submittedAt: new Date()
       }
-    });
+    } : undefined
+  },
+  select: {
+    id: true,
+    email: true,
+    name: true,
+    role: true,
+    contactPhone: true,
+    isFaceVerified: true,
+    verified: true,
+    createdAt: true
+  }
+});
+
 
     return NextResponse.json({
       success: true,

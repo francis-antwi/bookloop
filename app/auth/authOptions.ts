@@ -41,9 +41,17 @@ export const authOptions: AuthOptions = {
         );
 
         if (!isCorrectPassword) throw new Error("INVALID_CREDENTIALS");
+
+        // 🚫 BLOCK unverified PROVIDERs
+        if (user.role === UserRole.PROVIDER && !user.verified) {
+          throw new Error("NOT_VERIFIED");
+        }
+
+        // 🚫 BLOCK providers not face verified
         if (user.role === UserRole.PROVIDER && !user.isFaceVerified) {
           throw new Error("FACE_VERIFICATION_REQUIRED");
         }
+
         if (!user.role) throw new Error("MISSING_ROLE");
 
         return {
@@ -54,6 +62,7 @@ export const authOptions: AuthOptions = {
           role: user.role,
           isOtpVerified: user.isOtpVerified ?? true,
           isFaceVerified: user.isFaceVerified ?? false,
+          verified: user.verified ?? false,
         };
       },
     }),
@@ -82,30 +91,36 @@ export const authOptions: AuthOptions = {
   callbacks: {
     async signIn({ user, account }) {
       if (account?.provider === "google" && user.email) {
-        try {
-          const existingUser = await prisma.user.findUnique({
-            where: { email: user.email },
-          });
+        const existingUser = await prisma.user.findUnique({
+          where: { email: user.email },
+        });
 
-          if (!existingUser) {
-            await prisma.user.create({
-              data: {
-                email: user.email,
-                name: user.name ?? "",
-                image: user.image ?? null,
-                isOtpVerified: false,
-                isFaceVerified: false,
-              },
-            });
+        // BLOCK unverified PROVIDERs
+        if (existingUser?.role === "PROVIDER") {
+          if (!existingUser.verified || !existingUser.isFaceVerified) {
+            console.warn("🛑 PROVIDER not verified. Blocking sign in.");
+            return false; // Deny login
           }
-        } catch (error) {
-          console.error("Google sign-in error:", error);
-          return false;
+        }
+
+        // Create if not exists
+        if (!existingUser) {
+          await prisma.user.create({
+            data: {
+              email: user.email,
+              name: user.name ?? "",
+              image: user.image ?? null,
+              isOtpVerified: false,
+              isFaceVerified: false,
+              verified: false,
+            },
+          });
         }
       }
 
       return true;
     },
+
 
     async jwt({ token, user, trigger, session }) {
       // 🎯 Handle role update from session
@@ -118,6 +133,7 @@ export const authOptions: AuthOptions = {
 
         if (session.role === UserRole.PROVIDER) {
           token.isFaceVerified = false;
+          token.verified = false;
         }
       }
 
@@ -133,6 +149,7 @@ export const authOptions: AuthOptions = {
             role: true,
             isOtpVerified: true,
             isFaceVerified: true,
+            verified: true,
           },
         });
 
@@ -144,6 +161,7 @@ export const authOptions: AuthOptions = {
           token.role = dbUser.role;
           token.isOtpVerified = dbUser.isOtpVerified ?? false;
           token.isFaceVerified = dbUser.isFaceVerified ?? false;
+          token.verified = dbUser.verified ?? false;
         }
       }
 
@@ -160,11 +178,15 @@ export const authOptions: AuthOptions = {
           role: token.role as UserRole,
           isOtpVerified: token.isOtpVerified ?? false,
           isFaceVerified: token.isFaceVerified ?? false,
+          verified: token.verified ?? false,
         };
       }
 
       return session;
     },
+     redirect({ url, baseUrl }) {
+    return `${baseUrl}/pending-approval`; 
+  }
   },
 
   events: {
@@ -182,6 +204,7 @@ export const authOptions: AuthOptions = {
         console.log("📦 Session accessed:", {
           user: session.user?.email,
           role: session.user?.role,
+          verified: session.user?.verified,
           expires: session.expires,
         });
       }

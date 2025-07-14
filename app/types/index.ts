@@ -20,6 +20,7 @@ export type SafeUser = Omit<
   otpExpiresAt?: string | null;
   isOtpVerified: boolean;
 
+  // User identity fields
   role: UserRole;
   selfieImage: string | null;
   idImage: string | null;
@@ -34,11 +35,23 @@ export type SafeUser = Omit<
   idIssueDate: string | null;
   idIssuer: string | null;
   idType: string | null;
-  verified:boolean;
-  nationality: string | null;     // ✅ newly added
-  gender: string | null;          // ✅ newly added
-  placeOfIssue: string | null;    // ✅ newly added
-  rawText: string | null;         // ✅ newly added
+  verified: boolean;
+  nationality: string | null;
+  gender: string | null;
+  placeOfIssue: string | null;
+  rawText: string | null;
+
+  // Business verification fields
+  businessVerified?: boolean;
+  businessName?: string | null;
+  tinNumber?: string | null;
+  registrationNumber?: string | null;
+  tinCertificateUrl?: string | null;
+  incorporationCertUrl?: string | null;
+  vatCertificateUrl?: string | null;
+  ssnitCertUrl?: string | null;
+  businessType?: string | null;
+  businessAddress?: string | null;
 };
 
 export type SafeListing = Omit<Listing, "createdAt"> & {
@@ -60,5 +73,4 @@ export type SafeReservation = Omit<
   status: ReservationStatus;
   listing: SafeListing;
   cancellationRisk?: number | null;
-  
 };

@@ -45,7 +45,8 @@ model User {
   selfieImage       String?
   idImage           String?
   faceConfidence    Float?
-
+   status           String   @default("ACTIVE") // ACTIVE, PENDING_REVIEW, REJECTED, BANNED
+  requiresApproval Boolean  @default(false)
   idName            String?
   idNumber          String?
   personalIdNumber  String?
@@ -58,6 +59,7 @@ model User {
   gender            String?
   placeOfIssue      String?
   rawText           String?
+  businessVerification BusinessVerification?
 
   emailVerified     DateTime?
   image             String?
@@ -168,6 +170,26 @@ model Listing {
   reservations     Reservation[]
   reviews          Review[]       // ✅ Fix for deployment error
 }
+model BusinessVerification {
+  id                String     @id @default(uuid())
+  userId            String     @unique
+  tinNumber         String
+  registrationNumber String
+  tinCertificateUrl String?
+  incorporationCertUrl String?
+  vatCertificateUrl String?
+  ssnitCertUrl      String?
+  businessAddress   String?
+  businessName      String?
+  businessType      String?
+  verified          Boolean    @default(false)
+  verificationNotes String?
+  submittedAt       DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
 
 model Reservation {
   id             String             @id @default(uuid())

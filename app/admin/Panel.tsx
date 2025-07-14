@@ -96,12 +96,13 @@ const StatusBadge = ({
       APPROVED: { bg: "bg-green-100", text: "text-green-800", icon: CheckCircle2 },
       REJECTED: { bg: "bg-red-100", text: "text-red-800", icon: XCircle },
     },
-    reservation: {
-      PENDING: { bg: "bg-yellow-100", text: "text-yellow-800", icon: Clock },
-      APPROVED: { bg: "bg-blue-100", text: "text-blue-800", icon: CheckCircle2 },
-      COMPLETED: { bg: "bg-green-100", text: "text-green-800", icon: CheckCircle2 },
-      CANCELLED: { bg: "bg-red-100", text: "text-red-800", icon: XCircle },
-    },
+   reservation: {
+  PENDING: { bg: "bg-yellow-100", text: "text-yellow-800", icon: Clock },
+  CONFIRMED: { bg: "bg-blue-100", text: "text-blue-800", icon: CheckCircle2 },
+  COMPLETED: { bg: "bg-green-100", text: "text-green-800", icon: CheckCircle2 },
+  CANCELLED: { bg: "bg-red-100", text: "text-red-800", icon: XCircle },
+}
+
   };
   const { bg, text, icon: Icon } = type === "listing" 
     ? configs.listing[status as ListingType["status"]] || configs.listing.PENDING
@@ -114,7 +115,7 @@ const StatusBadge = ({
   );
 };
 
-const BookingDashboard = () => {
+const  AdminDashboard = () => {
   const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -531,6 +532,60 @@ const ReservationsContent = () => (
     </div>
   </div>
 );
+  const BusinessReviewsContent = () => (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-gray-900">Provider Applications</h2>
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-gray-50 border-b border-gray-200">
+            <tr>
+              <th className="text-left py-3 px-6">Business</th>
+              <th className="text-left py-3 px-6">Contact</th>
+              <th className="text-left py-3 px-6">Submitted</th>
+              <th className="text-left py-3 px-6">Status</th>
+              <th className="text-right py-3 px-6">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {providers.length > 0 ? providers.map(provider => (
+              <tr key={provider.id}>
+                <td className="py-4 px-6">
+                  <p className="font-medium text-gray-900">{provider.businessName || '—'}</p>
+                  <p className="text-sm text-gray-500">{provider.name}</p>
+                </td>
+                <td className="py-4 px-6">
+                  <p className="text-gray-700">{provider.email}</p>
+                  <p className="text-sm text-gray-500">{provider.phone}</p>
+                </td>
+                <td className="py-4 px-6 text-sm text-gray-600">{new Date(provider.submittedAt).toLocaleDateString()}</td>
+                <td className="py-4 px-6">
+                  <StatusBadge status={provider.status} type="listing" />
+                </td>
+                <td className="py-4 px-6 text-right">
+                  {provider.status === 'PENDING' && (
+                    <div className="flex gap-2 justify-end">
+                      <ActionButton
+                        variant="success"
+                        onClick={() => handleProviderApproval(provider.id, 'APPROVED')}
+                      >Approve</ActionButton>
+                      <ActionButton
+                        variant="danger"
+                        onClick={() => handleProviderApproval(provider.id, 'REJECTED')}
+                      >Reject</ActionButton>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            )) : (
+              <tr>
+                <td colSpan={5} className="text-center py-6 text-gray-500">No provider applications found.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 
 
   const NotificationsContent = () => (
@@ -640,6 +695,19 @@ const ReservationsContent = () => (
             )}
           </button>
         ))}
+         {[... /* existing tabs */, { id: 'reviews', label: 'Business Reviews', icon: Star }].map(item => (
+          <button
+            key={item.id}
+            onClick={() => setActiveTab(item.id)}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-colors ${
+              activeTab === item.id ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            <item.icon size={20} />
+            <span className="flex-1">{item.label}</span>
+            {item.badge && <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">{item.badge}</span>}
+          </button>
+        ))}
       </nav>
       <div className="pt-6 border-t border-gray-200">
         <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
@@ -663,6 +731,7 @@ const ReservationsContent = () => (
         return <ReservationsContent />;
       case 'notifications':
         return <NotificationsContent />;
+       case 'reviews': return <BusinessReviewsContent />;
       default:
         return <DashboardContent />;
     }
@@ -683,6 +752,7 @@ const ReservationsContent = () => (
                 {activeTab === 'listings' && 'Manage and review property listings'}
                 {activeTab === 'reservations' && 'Track and manage bookings'}
                 {activeTab === 'notifications' && 'Stay updated with latest activities'}
+                {activeTab === 'reviews' && 'Review and approve provider businesses'}
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -704,4 +774,4 @@ const ReservationsContent = () => (
   );
 };
 
-export default BookingDashboard;
+export default AdminDashboard;

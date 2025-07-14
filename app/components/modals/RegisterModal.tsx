@@ -11,11 +11,13 @@ import toast from 'react-hot-toast';
 import { 
   FiUser, FiMail, FiPhone, FiLock, FiEye, FiEyeOff, 
   FiCheck, FiArrowRight, FiArrowLeft, FiCamera,
-  FiUpload, FiUserCheck, FiShield, FiFileText, FiAlertCircle, FiLoader
+  FiUpload, FiUserCheck, FiShield, FiFileText, FiAlertCircle, FiLoader,
+  FiBriefcase, FiMapPin
 } from 'react-icons/fi';
 import Camera from '../inputs/Camera';
 import PhoneAuth from "@/app/components/PhoneAuth";
 import { useRouter } from 'next/navigation';
+import { categories } from '../navbar/Categories';
 
 interface VerificationResponse {
   success: boolean;
@@ -55,6 +57,12 @@ const RegisterModal = () => {
     error?: string;
   } | null>(null);
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);
+  const [businessFiles, setBusinessFiles] = useState({
+    tinCertificate: null as File | null,
+    incorporationCert: null as File | null,
+    vatCertificate: null as File | null,
+    ssnitCert: null as File | null
+  });
 
   const {
     register,
@@ -72,6 +80,12 @@ const RegisterModal = () => {
       contactPhone: '',
       password: '',
       role: '',
+      tinNumber: '',
+      registrationNumber: '',
+      businessName: '',
+      businessType: '',
+      businessAddress: '',
+      businessPhone: ''
     },
   });
 
@@ -137,6 +151,13 @@ const RegisterModal = () => {
       description: 'Upload a photo of your Ghana Card',
       providerOnly: true
     },
+    { 
+      field: 'businessInfo', 
+      label: 'Business Information',
+      icon: FiBriefcase,
+      description: 'Provide your business details',
+      providerOnly: true
+    },
   ];
 
   const getFilteredSteps = () => {
@@ -162,6 +183,18 @@ const RegisterModal = () => {
       return;
     }
     setIdFile(file);
+  };
+
+  const onFileUpload = (field: string, file: File) => {
+    if (!file.type.match(/image\/(jpeg|png|jpg)|application\/pdf/)) {
+      toast.error('Only JPEG/PNG/PDF files are allowed');
+      return;
+    }
+    if (file.size > 10000000) {
+      toast.error('File too large. Max 10MB.');
+      return;
+    }
+    setBusinessFiles(prev => ({ ...prev, [field]: file }));
   };
 
   const submitVerification = async () => {
@@ -255,7 +288,22 @@ const RegisterModal = () => {
           idIssuer: extractedData.idIssuer,
           gender: extractedData.gender,
           placeOfIssue: extractedData.placeOfIssue,
-          rawText: extractedData.rawText
+          rawText: extractedData.rawText,
+          requiresApproval: true, 
+          status: 'PENDING_REVIEW',
+          // Business data
+          tinNumber: data.tinNumber,
+          businessName: data.businessName,
+          businessType: data.businessType,
+          businessAddress: data.businessAddress,
+          businessPhone: data.businessPhone,
+          registrationNumber: data.registrationNumber
+        });
+
+        // Add business files to form data
+        const businessFormData = new FormData();
+        Object.entries(businessFiles).forEach(([key, file]) => {
+          if (file) businessFormData.append(key, file);
         });
       }
 
@@ -345,15 +393,185 @@ const RegisterModal = () => {
 
   const isStepValid = (stepIndex: number) => {
     const field = filteredSteps[stepIndex].field;
-    if (field === 'phoneVerification') return true
+    if (field === 'phoneVerification') return true;
     if (field === 'selfieImage') return !!selfieImageBlob;
     if (field === 'idImage') return !!idFile;
+    if (field === 'businessInfo') {
+      return (
+        !!watchedValues.tinNumber &&
+        !!watchedValues.businessName &&
+        !!watchedValues.businessType &&
+        !!businessFiles.tinCertificate
+      );
+    }
     if (field === 'role') return !!watchedValues.role && !errors.role;
     return watchedValues[field]?.trim().length > 0 && !errors[field];
   };
 
   const canProceed = isStepValid(currentStep);
   const allFieldsComplete = filteredSteps.every((_, i) => isStepValid(i));
+
+  const BusinessStep = () => (
+    <div className="space-y-4 sm:space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            TIN Number *
+          </label>
+          <input
+            type="text"
+            {...register('tinNumber', { required: 'TIN number is required' })}
+            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="Enter TIN number"
+            disabled={isLoading}
+          />
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Registration Number
+          </label>
+          <input
+            type="text"
+            {...register('registrationNumber')}
+            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="Enter registration number"
+            disabled={isLoading}
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Business Name *
+        </label>
+        <input
+          type="text"
+          {...register('businessName', { required: 'Business name is required' })}
+          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          placeholder="Enter business name"
+          disabled={isLoading}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Business Type *
+          </label>
+         <select
+         value={businessData.businessType}
+         onChange={(e) => onDataChange('businessType', e.target.value)}
+         className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+       >
+         <option value="">Select business type</option>
+         {categories.map((cat) => (
+           <option key={cat.label} value={cat.label}>
+             {cat.label}
+           </option>
+         ))}
+       </select>
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Business Phone
+          </label>
+          <input
+            type="tel"
+            {...register('businessPhone')}
+            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="Enter business phone"
+            disabled={isLoading}
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Business Address
+        </label>
+        <textarea
+          {...register('businessAddress')}
+          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          rows={3}
+          placeholder="Enter business address"
+          disabled={isLoading}
+        />
+      </div>
+
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold text-gray-900">Required Documents</h3>
+        
+        <FileUpload
+          label="TIN Certificate *"
+          file={businessFiles.tinCertificate}
+          onFileUpload={(file) => onFileUpload('tinCertificate', file)}
+          required
+        />
+        
+        <FileUpload
+          label="Certificate of Incorporation"
+          file={businessFiles.incorporationCert}
+          onFileUpload={(file) => onFileUpload('incorporationCert', file)}
+        />
+        
+        <FileUpload
+          label="VAT Certificate"
+          file={businessFiles.vatCertificate}
+          onFileUpload={(file) => onFileUpload('vatCertificate', file)}
+        />
+        
+        <FileUpload
+          label="SSNIT Certificate"
+          file={businessFiles.ssnitCert}
+          onFileUpload={(file) => onFileUpload('ssnitCert', file)}
+        />
+      </div>
+    </div>
+  );
+
+  const FileUpload = ({ label, file, onFileUpload, required = false }: {
+    label: string;
+    file: File | null;
+    onFileUpload: (file: File) => void;
+    required?: boolean;
+  }) => {
+    const inputId = `file-${label.toLowerCase().replace(/\s+/g, '-')}`;
+    
+    return (
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          {label}
+        </label>
+        <div className="relative">
+          <input
+            type="file"
+            id={inputId}
+            accept="image/*,.pdf"
+            onChange={(e) => e.target.files?.[0] && onFileUpload(e.target.files[0])}
+            className="hidden"
+          />
+          <label
+            htmlFor={inputId}
+            className="cursor-pointer block border-2 border-dashed border-gray-300 hover:border-blue-400 rounded-lg p-4 text-center transition-all duration-200 hover:bg-blue-50"
+          >
+            <div className="flex items-center justify-center gap-3">
+              <FiUpload className="text-gray-400" />
+              <span className="text-sm text-gray-600">
+                {file ? file.name : 'Choose file or drag here'}
+              </span>
+            </div>
+          </label>
+          {file && (
+            <div className="absolute -top-1 -right-1 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+              <FiCheck className="text-white text-xs" />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   if (!registerModal.isOpen) return null;
 
@@ -525,6 +743,8 @@ const RegisterModal = () => {
                   </div>
                 )}
               </div>
+            ) : currentField.field === 'businessInfo' ? (
+              <BusinessStep />
             ) : (
               <div className="space-y-1 sm:space-y-2">
                 <div className="relative">
