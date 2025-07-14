@@ -109,7 +109,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
       verificationFormData.append('name', session?.user?.name || '');
       verificationFormData.append('role', role);
 
-      const response = await axios.post('/api/verify/identity', verificationFormData, {
+      const response = await axios.post('/api/verify', verificationFormData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 60000
       });
@@ -129,7 +129,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
       } else {
         toast.success('Verification complete!');
         onComplete();
-        router.push('/dashboard');
+        router.push('/');
       }
 
     } catch (error: any) {
@@ -162,7 +162,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
         if (file) businessFormData.append(key, file);
       });
 
-      const response = await axios.post('/api/verify/business', businessFormData, {
+      const response = await axios.post('/api/verify', businessFormData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 120000
       });
