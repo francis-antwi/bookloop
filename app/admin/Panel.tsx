@@ -241,7 +241,7 @@ const AdminDashboard = () => {
         setLoading(prev => ({ ...prev, providers: true }));
         setError(prev => ({ ...prev, providers: null }));
         
-        const res = await fetch('/api/providers');
+        const res = await fetch('/api/admin/providers');
         if (!res.ok) {
           throw new Error(`API error: ${res.status} ${res.statusText}`);
         }
@@ -310,7 +310,7 @@ const AdminDashboard = () => {
 
   const handleProviderApproval = async (id: string, status: 'APPROVED' | 'REJECTED') => {
     try {
-      const res = await fetch(`/api/providers/${id}/status`, {
+      const res = await fetch(`/api/admin/providers/${id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
