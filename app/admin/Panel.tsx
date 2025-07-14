@@ -241,7 +241,10 @@ const AdminDashboard = () => {
         setLoading(prev => ({ ...prev, providers: true }));
         setError(prev => ({ ...prev, providers: null }));
         
-        const res = await fetch('/api/admin/providers');
+        const res = await fetch('/api/admin/providers', {
+          credentials: 'include',
+        });
+
         if (!res.ok) {
           throw new Error(`API error: ${res.status} ${res.statusText}`);
         }
