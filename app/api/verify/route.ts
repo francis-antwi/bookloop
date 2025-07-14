@@ -11,6 +11,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/auth/authOptions";
 import { UserRole } from "@prisma/client";
 
+// === Cloudinary Config ===
 cloudinary.config({
   cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!,
   api_key: process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY!,
@@ -21,13 +22,13 @@ export async function POST(req: Request) {
   try {
     const formData = await req.formData();
 
+    // --- LOGGING ---
     console.log("⚙️ [VERIFY]: Received FormData entries:");
     for (const pair of formData.entries()) {
-      console.log(
-        `  - ${pair[0]}: ${typeof pair[1] === 'object' && pair[1] !== null && 'name' in pair[1] ? (pair[1] as File).name : pair[1]}`
-      );
+      console.log(`  - ${pair[0]}: ${typeof pair[1] === 'object' && pair[1] !== null && 'name' in pair[1] ? (pair[1] as File).name : pair[1]}`);
     }
 
+    // === Identity-related Fields ===
     const selfieFile = formData.get("selfie") as File | null;
     const idFile = formData.get("idImage") as File | null;
     const role = formData.get("role")?.toString() || "CUSTOMER";
@@ -36,6 +37,7 @@ export async function POST(req: Request) {
     const oauthName = formData.get("name")?.toString() || null;
     const oauthContactPhone = formData.get("contactPhone")?.toString() || null;
 
+    // === Business-related Fields ===
     const tinNumber = formData.get("tinNumber")?.toString() || null;
     const registrationNumber = formData.get("registrationNumber")?.toString() || null;
     const businessName = formData.get("businessName")?.toString() || null;
@@ -47,6 +49,7 @@ export async function POST(req: Request) {
     const vatCertificateFile = formData.get("vatCertificate") as File | null;
     const ssnitCertFile = formData.get("ssnitCert") as File | null;
 
+    // === Upload business documents to Cloudinary ===
     const [
       tinCertificateUrl,
       incorporationCertUrl,
@@ -62,42 +65,45 @@ export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
     const isGoogleAuth = !!(session?.user?.email && session.user.email === oauthEmail);
 
+    // === Validate identity file presence ===
     if (!selfieFile || !idFile) {
       console.error("❌ [VERIFY ERROR]: Missing selfie or ID file.");
       return NextResponse.json({ error: "Missing files" }, { status: 400 });
     }
 
-    console.log("⚙️ [VERIFY]: Uploading files to Cloudinary...");
+    // === Upload identity documents to Cloudinary ===
+    console.log("⚙️ [VERIFY]: Uploading selfie and ID to Cloudinary...");
     const [selfieUrl, idUrl] = await Promise.all([
       uploadToCloudinary(selfieFile, "selfies"),
       uploadToCloudinary(idFile, "ids"),
     ]);
+    console.log(`✅ [VERIFY]: Uploads done. Selfie: ${selfieUrl}, ID: ${idUrl}`);
 
-    console.log(`✅ [VERIFY]: Cloudinary uploads complete. Selfie: ${selfieUrl}, ID: ${idUrl}`);
-
+    // === OCR ID image using Taggun ===
+    console.log("⚙️ [VERIFY]: Sending ID image to Taggun...");
     const ocrResponse = await sendOriginalToTaggun(idFile);
-    console.log("✅ [VERIFY]: Taggun OCR response received.");
+    console.log("✅ [VERIFY]: OCR response received.");
 
     const extractedData = extractIDInfo(ocrResponse);
-    console.log("⚙️ [VERIFY]: Extracted ID info:", extractedData);
+    console.log("⚙️ [VERIFY]: Extracted ID data:", extractedData);
 
     const validationResult = validateExtractedData(extractedData);
     if (!validationResult.isValid) {
-      return NextResponse.json({
-        error: "Invalid ID document",
-        details: validationResult.errors,
-      }, { status: 422 });
+      console.error("❌ [VERIFY ERROR]: ID validation failed:", validationResult.errors);
+      return NextResponse.json({ error: "Invalid ID document", details: validationResult.errors }, { status: 422 });
     }
 
+    // === Face Match ===
+    console.log("⚙️ [VERIFY]: Performing face match...");
     const matchResult = await matchFace(selfieUrl, idUrl);
     if (!matchResult.isMatch) {
-      return NextResponse.json({
-        error: "Face does not match ID",
-        confidence: matchResult.confidence,
-      }, { status: 401 });
+      console.error("❌ [VERIFY ERROR]: Face mismatch. Confidence:", matchResult.confidence);
+      return NextResponse.json({ error: "Face does not match ID", confidence: matchResult.confidence }, { status: 401 });
     }
 
-    if (shouldRegister && oauthEmail && role === "PROVIDER") {
+    // === Create or update user (with optional business verification) ===
+    if (shouldRegister && oauthEmail) {
+      console.log("⚙️ [VERIFY]: Registering user with role:", role);
       const user = await createUserIfNeeded({
         email: oauthEmail,
         name: oauthName || extractedData.idName || undefined,
@@ -118,7 +124,7 @@ export async function POST(req: Request) {
         placeOfIssue: extractedData.placeOfIssue,
         rawText: extractedData.rawText,
         verified: true,
-        businessVerification: {
+        businessVerification: role === "PROVIDER" ? {
           create: {
             tinNumber,
             registrationNumber,
@@ -132,9 +138,10 @@ export async function POST(req: Request) {
             verified: false,
             submittedAt: new Date(),
           },
-        },
+        } : undefined,
       });
 
+      console.log("✅ [VERIFY]: User created/updated successfully.");
       return NextResponse.json({
         success: true,
         verified: true,
@@ -145,6 +152,8 @@ export async function POST(req: Request) {
       });
     }
 
+    // === If not registering, return verification result only ===
+    console.log("✅ [VERIFY]: Identity verified. No registration.");
     return NextResponse.json({
       success: true,
       verified: true,
@@ -181,6 +190,7 @@ export async function POST(req: Request) {
   }
 }
 
+// === Helpers ===
 async function uploadToCloudinary(file: File, folder: string): Promise<string> {
   const buffer = Buffer.from(await file.arrayBuffer());
   const upload = await new Promise<{ secure_url: string }>((resolve, reject) => {
