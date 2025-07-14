@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/app/libs/prismadb";
 import { getServerSession } from "next-auth";
-import authOptions from "@/app/auth/authOptions";
-
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 export async function GET() {
   const session = await getServerSession(authOptions);
 
@@ -23,13 +22,13 @@ export async function GET() {
         select: {
           businessName: true,
           verified: true,
-          submittedAt: true
-        }
-      }
+          submittedAt: true,
+        },
+      },
     },
     orderBy: {
-      createdAt: "desc"
-    }
+      createdAt: "desc",
+    },
   });
 
   const data = providers.map((p) => ({
@@ -37,9 +36,10 @@ export async function GET() {
     name: p.name,
     email: p.email,
     phone: p.contactPhone,
-    status: p.businessVerification?.verified ? "APPROVED" : p.verified ? "APPROVED" : "PENDING",
+    status:
+      p.businessVerification?.verified || p.verified ? "APPROVED" : "PENDING",
     businessName: p.businessVerification?.businessName || "",
-    submittedAt: p.businessVerification?.submittedAt
+    submittedAt: p.businessVerification?.submittedAt,
   }));
 
   return NextResponse.json(data);
