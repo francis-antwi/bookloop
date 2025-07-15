@@ -12,19 +12,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await req.json();
-  const { role } = body;
+  const { role } = await req.json();
 
-  if (!role) {
-    return NextResponse.json({ error: "Role is required" }, { status: 400 });
-  }
-
-  if (!["CUSTOMER", "PROVIDER"].includes(role)) {
+  if (!role || !["CUSTOMER", "PROVIDER"].includes(role)) {
     return NextResponse.json(
-      {
-        error: "Invalid role. Allowed roles: CUSTOMER, PROVIDER",
-        redirect: "/role",
-      },
+      { error: "Invalid role. Allowed roles: CUSTOMER, PROVIDER", redirect: "/role" },
       { status: 400 }
     );
   }
@@ -34,23 +26,17 @@ export async function POST(req: NextRequest) {
       where: { email: token.email },
       select: {
         role: true,
-        isFaceVerified: true,
-        selfieImage: true,
-        idImage: true,
       },
     });
 
     if (!user) {
       return NextResponse.json(
-        {
-          error: "User not found",
-          redirect: "/",
-        },
+        { error: "User not found", redirect: "/" },
         { status: 404 }
       );
     }
 
-    // 🚫 Prevent changing to a different role once it's set
+    // 🚫 If role is already set and different, reject change
     if (user.role && user.role !== role) {
       return NextResponse.json(
         {
@@ -62,7 +48,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ✅ If the same role is already set, return redirect path
+    // ✅ If same role already set, just return redirect
     if (user.role === role) {
       return NextResponse.json(
         {
@@ -74,34 +60,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ✅ If PROVIDER, ensure all verification fields are met
-    if (role === "PROVIDER") {
-      const missingVerification =
-        !user.isFaceVerified || !user.selfieImage || !user.idImage;
-
-      if (missingVerification) {
-        return NextResponse.json(
-          {
-            error: "Verification required",
-            message:
-              "You must complete identity verification to become a provider.",
-            redirect: "/verify",
-          },
-          { status: 403 }
-        );
-      }
-    }
-
-    // ✅ Update the role
+    // ✅ Save role immediately
     await prisma.user.update({
       where: { email: token.email },
-      data: { role },
+      data: {
+        role,
+        ...(role === "PROVIDER" && {
+          verified: false,
+          requiresApproval: true,
+        }),
+      },
     });
 
     return NextResponse.json(
       {
         success: true,
-        message: "Role updated successfully",
+        message: "Role set successfully",
         redirect: role === "PROVIDER" ? "/verify" : "/",
       },
       { status: 200 }

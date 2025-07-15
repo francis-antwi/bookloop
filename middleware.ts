@@ -19,7 +19,6 @@ export default withAuth(
       "/my-listings",
       "/approvals",
       "/bookings",
-      
     ].some(path => pathname.startsWith(path));
 
     // 🧱 1. Not authenticated
@@ -33,17 +32,26 @@ export default withAuth(
       return NextResponse.redirect(new URL("/", req.url));
     }
 
-    // 🔄 3. Get role from token or DB
+    // 🔄 3. Get latest user role and verification status from DB
     let currentRole = token.role;
-    if (!currentRole && token.id) {
+    let isVerified = token.verified;
+    let isFaceVerified = token.isFaceVerified;
+
+    if (token.id) {
       try {
         const user = await prisma.user.findUnique({
           where: { id: token.id as string },
-          select: { role: true },
+          select: {
+            role: true,
+            verified: true,
+            isFaceVerified: true,
+          },
         });
         currentRole = user?.role ?? null;
+        isVerified = user?.verified ?? false;
+        isFaceVerified = user?.isFaceVerified ?? false;
       } catch (err) {
-        console.error("❌ Failed to fetch user role from DB:", err);
+        console.error("❌ Failed to fetch user from DB:", err);
       }
     }
 
@@ -72,10 +80,10 @@ export default withAuth(
 
     // ✅ 8. Verification logic for /verify
     if (isVerificationPage) {
-      if (currentRole === "PROVIDER" && (token.isFaceVerified || token.verified)) {
+      if (currentRole === "PROVIDER" && (isFaceVerified || isVerified)) {
         return NextResponse.redirect(new URL("/my-listings", req.url));
       }
-      if (currentRole === "CUSTOMER" && (token.isOtpVerified || token.verified)) {
+      if (currentRole === "CUSTOMER" && isVerified) {
         return NextResponse.redirect(new URL("/", req.url));
       }
       return NextResponse.next();
@@ -86,7 +94,7 @@ export default withAuth(
       if (currentRole !== "PROVIDER") {
         return NextResponse.redirect(new URL("/403", req.url));
       }
-      if (!token.isFaceVerified && !token.verified) {
+      if (!isFaceVerified && !isVerified) {
         return NextResponse.redirect(new URL("/verify", req.url));
       }
     }
