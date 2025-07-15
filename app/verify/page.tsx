@@ -143,50 +143,59 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
     }
   };
 
-  const submitBusinessVerification = async () => {
-    if (!businessData.tinNumber || !businessData.businessName || !businessData.businessType) {
-      toast.error('Please fill in all required business information');
-      return;
-    }
-    if (!businessFiles.tinCertificate) {
-      toast.error('TIN Certificate is required');
-      return;
-    }
+// Replace the submitBusinessVerification function with this updated version:
 
-    setIsLoading(true);
+const submitBusinessVerification = async () => {
+  if (!businessData.tinNumber || !businessData.businessName || !businessData.businessType) {
+    toast.error('Please fill in all required business information');
+    return;
+  }
+  if (!businessFiles.tinCertificate) {
+    toast.error('TIN Certificate is required');
+    return;
+  }
 
-    try {
-      const businessFormData = new FormData();
-      businessFormData.append('email', session?.user?.email || '');
-      businessFormData.append('verificationStep', 'business');
-      
-      Object.entries(businessData).forEach(([key, value]) => {
-        if (value) businessFormData.append(key, value);
-      });
-      
-      Object.entries(businessFiles).forEach(([key, file]) => {
-        if (file) businessFormData.append(key, file);
-      });
+  setIsLoading(true);
 
-      const response = await axios.post('/api/verify', businessFormData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 120000
-      });
-
-      if (!response.data.success) {
-        throw new Error(response.data.error || 'Business verification failed');
+  try {
+    const businessFormData = new FormData();
+    businessFormData.append('email', session?.user?.email || '');
+    businessFormData.append('verificationStep', 'business');
+    
+    // Explicitly set role to PROVIDER
+    businessFormData.append('role', 'PROVIDER');
+    
+    // Add other business data (excluding role since we're setting it explicitly)
+    Object.entries(businessData).forEach(([key, value]) => {
+      if (value && key !== 'role') {
+        businessFormData.append(key, value);
       }
-        toast.success('Business verification submitted for review!');
-        router.push('/pending-approval');
+    });
+    
+    // Add files
+    Object.entries(businessFiles).forEach(([key, file]) => {
+      if (file) businessFormData.append(key, file);
+    });
 
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.error || error.message || 'Business verification failed';
-      toast.error(errorMsg);
-    } finally {
-      setIsLoading(false);
+    const response = await axios.post('/api/verify', businessFormData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000
+    });
+
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Business verification failed');
     }
-  };
+    
+    toast.success('Business verification submitted for review!');
+    router.push('/pending-approval');
 
+  } catch (error: any) {
+    const errorMsg = error.response?.data?.error || error.message || 'Business verification failed';
+    toast.error(errorMsg);
+  } finally {
+    setIsLoading(false);
+  }
+};
   const nextStep = () => {
     if (currentStep === 'selfie' && selfieImage) {
       setCurrentStep('id');
@@ -546,44 +555,6 @@ const BusinessStep = ({
         </div>
       </div>
     )}
-
-    {/* Role Selection Section */}
-    <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
-      <div className="flex items-start gap-3">
-        <FiUsers className="text-blue-500 text-xl mt-0.5 flex-shrink-0" />
-        <div className="flex-1">
-          <p className="font-medium text-blue-800 mb-2">Account Type</p>
-          <div className="space-y-2">
-            <label className="flex items-center gap-3">
-              <input
-                type="radio"
-                name="role"
-                value="PROVIDER"
-                checked={businessData.role === 'provider'}
-                onChange={(e) => onDataChange('role', e.target.value)}
-                className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-              />
-              <span className="text-sm text-blue-700">
-                <strong>Service Provider</strong> - I provide services to customers
-              </span>
-            </label>
-            <label className="flex items-center gap-3">
-              <input
-                type="radio"
-                name="role"
-                value="customer"
-                checked={businessData.role === 'customer'}
-                onChange={(e) => onDataChange('role', e.target.value)}
-                className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-              />
-              <span className="text-sm text-blue-700">
-                <strong>Customer</strong> - I seek services from providers
-              </span>
-            </label>
-          </div>
-        </div>
-      </div>
-    </div>
 
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div>
