@@ -41,8 +41,11 @@ const handleRoleSelect = async (role: string) => {
     return;
   }
 
-  // ✨ Immediately reflect the new role for UI state
-  setSelectedRole(role);
+  if (selectedRole === role) {
+    router.replace(role === "PROVIDER" ? "/verify" : "/");
+    return;
+  }
+
   setIsLoading(true);
   setError(null);
 
@@ -52,11 +55,10 @@ const handleRoleSelect = async (role: string) => {
       userId: session.user.id,
     });
 
-    // Update session with new role
     await update({ role });
 
-    // ✅ Instantly redirect new providers to /verify
-    router.replace(role === "PROVIDER" ? "/verify" : "/");
+    // 🚀 Immediately redirect with no delay or extra logic
+    router.replace(role === "CUSTOMER" ? "/" : "/verify");
   } catch (err: any) {
     const redirectPath =
       err?.response?.data?.redirect ||
@@ -72,7 +74,7 @@ const handleRoleSelect = async (role: string) => {
       );
     }
   } finally {
-    setIsLoading(false); // Has no effect if redirected already
+    setIsLoading(false); // Optional — has no effect if already redirected
   }
 };
 
