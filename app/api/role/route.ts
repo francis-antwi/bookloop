@@ -1,3 +1,4 @@
+// /api/role/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import prisma from "@/app/libs/prismadb";
@@ -11,79 +12,72 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await req.json();
-  const { role } = body;
+  const { role } = await req.json();
 
   if (!role) {
     return NextResponse.json({ error: "Role is required" }, { status: 400 });
   }
-
   if (!["CUSTOMER", "PROVIDER"].includes(role)) {
-    return NextResponse.json({
-      error: "Invalid role. Allowed roles: CUSTOMER, PROVIDER",
-      redirect: "/role",
-    }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid role", redirect: "/role" },
+      { status: 400 }
+    );
   }
 
   try {
     const user = await prisma.user.findUnique({
       where: { email: token.email },
-      select: {
-        role: true,
-        isFaceVerified: true,
-        selfieImage: true,
-        idImage: true,
-      },
+      select: { role: true },
     });
 
     if (!user) {
-      return NextResponse.json({
-        error: "User not found",
-        redirect: "/",
-      }, { status: 404 });
+      return NextResponse.json({ error: "User not found", redirect: "/" }, { status: 404 });
     }
 
-    // Prevent switching to a different role
+    /* ---- 1. Role already set and different → block ---- */
     if (user.role && user.role !== role) {
-      return NextResponse.json({
-        error: "Role change not allowed",
-        message: `Your role is already set to '${user.role}'.`,
-        redirect: user.role === "PROVIDER" ? "/verify" : "/",
-      }, { status: 403 });
+      return NextResponse.json(
+        {
+          error: "Role change not allowed",
+          redirect: user.role === "PROVIDER" ? "/verify" : "/",
+        },
+        { status: 403 }
+      );
     }
 
-    // If role is already set
-    if (user.role === role) {
-      const isProvider = role === "PROVIDER";
-      const needsVerification = isProvider && (!user.isFaceVerified || !user.selfieImage || !user.idImage);
+    /* ---- 2. First‑time role assignment ---- */
+    if (!user.role) {
+      await prisma.user.update({
+        where: { email: token.email },
+        data: {
+          role,
+          ...(role === "PROVIDER" && {
+            verified: false,          // ⇠ not verified yet
+            requiresApproval: true,   // ⇠ admin must review
+          }),
+        },
+      });
 
-      return NextResponse.json({
-        success: true,
-        message: `Role already set to ${role}`,
-        redirect: isProvider ? (needsVerification ? "/verify" : "/") : "/",
-      }, { status: 200 });
+      return NextResponse.json(
+        {
+          success: true,
+          message: "Role set",
+          redirect: role === "PROVIDER" ? "/verify" : "/",
+        },
+        { status: 200 }
+      );
     }
 
-    // Update role for the first time
-    await prisma.user.update({
-      where: { email: token.email },
-      data: { role },
-    });
-
-    const isProvider = role === "PROVIDER";
-
-    return NextResponse.json({
-      success: true,
-      message: "Role updated successfully",
-      redirect: isProvider ? "/verify" : "/",
-    }, { status: 200 });
-
-  } catch (error) {
-    console.error("🔥 Role update error:", error);
-    return NextResponse.json({
-      error: "Internal Server Error",
-      message: "Failed to update role",
-      redirect: "/role",
-    }, { status: 500 });
+    /* ---- 3. Role already matches (existing user) ---- */
+    return NextResponse.json(
+      { success: true, message: `Role already ${role}`, redirect: "/" },
+      { status: 200 }
+    );
+  } catch (err) {
+    console.error("🔥 role POST error:", err);
+    return NextResponse.json(
+      { error: "Internal error", redirect: "/role" },
+      { status: 500 }
+    );
   }
 }
