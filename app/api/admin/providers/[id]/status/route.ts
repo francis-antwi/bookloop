@@ -3,7 +3,6 @@ import prisma from "@/app/libs/prismadb";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
-
 export async function PATCH(
   req: Request,
   { params }: { params: { id: string } }
@@ -24,13 +23,25 @@ export async function PATCH(
   const isApproved = status === "APPROVED";
 
   try {
-    // 1. Update user.verified
+    // 1. Update user.verified flag
     await prisma.user.update({
       where: { id },
       data: { verified: isApproved },
     });
 
-    // 2. Update BusinessVerification separately
+    // 2. Check if businessVerification exists before updating
+    const existingVerification = await prisma.businessVerification.findUnique({
+      where: { userId: id },
+    });
+
+    if (!existingVerification) {
+      return NextResponse.json(
+        { error: "Business verification record not found" },
+        { status: 404 }
+      );
+    }
+
+    // 3. Update businessVerification
     const verification = await prisma.businessVerification.update({
       where: { userId: id },
       data: {
