@@ -635,7 +635,7 @@ const AdminDashboard = () => {
                     <div className="flex gap-2 justify-end">
                     <ActionButton
                       variant="success"
-                      onClick={() => router.push('/admin/business-verifications')}
+                      onClick={() => router.push('/admin/verifications')}
                     >
                       👁️
                     </ActionButton>
