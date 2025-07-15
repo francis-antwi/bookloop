@@ -45,23 +45,69 @@ export default function UserBusinessVerificationPage() {
 
   return (
     <div className="p-6 space-y-4">
-      <h1 className="text-2xl font-bold">Business Verification for {data.provider.name}</h1>
+      <h1 className="text-2xl font-bold">
+        Business Verification for {data?.provider?.name || "N/A"}
+      </h1>
 
-      <p><strong>Email:</strong> {data.provider.email}</p>
-      <p><strong>Business Name:</strong> {data.businessName}</p>
-      <p><strong>Business Type:</strong> {data.businessType}</p>
-      <p><strong>TIN Number:</strong> {data.tinNumber}</p>
-      <p><strong>Registration Number:</strong> {data.registrationNumber}</p>
-      <p><strong>Submitted:</strong> {new Date(data.submittedAt).toLocaleDateString()}</p>
-      <p><strong>Status:</strong> {data.verified ? "✅ Verified" : "⏳ Pending"}</p>
+      <p><strong>Email:</strong> {data?.provider?.email || "N/A"}</p>
+      <p><strong>Business Name:</strong> {data?.businessName || "N/A"}</p>
+      <p><strong>Business Type:</strong> {data?.businessType || "N/A"}</p>
+      <p><strong>TIN Number:</strong> {data?.tinNumber || "N/A"}</p>
+      <p><strong>Registration Number:</strong> {data?.registrationNumber || "N/A"}</p>
+      <p><strong>Submitted:</strong> {data?.submittedAt ? new Date(data.submittedAt).toLocaleDateString() : "N/A"}</p>
+      <p><strong>Status:</strong> {data?.verified ? "✅ Verified" : "⏳ Pending"}</p>
 
       <div className="mt-4">
         <h2 className="font-semibold mb-2">Documents:</h2>
         <ul className="space-y-1">
-          {data.documents.tin && <li><a href={data.documents.tin} className="text-blue-600 underline">TIN Certificate</a></li>}
-          {data.documents.incorporation && <li><a href={data.documents.incorporation} className="text-blue-600 underline">Incorporation Certificate</a></li>}
-          {data.documents.vat && <li><a href={data.documents.vat} className="text-blue-600 underline">VAT Certificate</a></li>}
-          {data.documents.ssnit && <li><a href={data.documents.ssnit} className="text-blue-600 underline">SSNIT Certificate</a></li>}
+          {data?.documents?.tin && (
+            <li>
+              <a
+                href={data.documents.tin}
+                className="text-blue-600 underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                TIN Certificate
+              </a>
+            </li>
+          )}
+          {data?.documents?.incorporation && (
+            <li>
+              <a
+                href={data.documents.incorporation}
+                className="text-blue-600 underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Incorporation Certificate
+              </a>
+            </li>
+          )}
+          {data?.documents?.vat && (
+            <li>
+              <a
+                href={data.documents.vat}
+                className="text-blue-600 underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                VAT Certificate
+              </a>
+            </li>
+          )}
+          {data?.documents?.ssnit && (
+            <li>
+              <a
+                href={data.documents.ssnit}
+                className="text-blue-600 underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                SSNIT Certificate
+              </a>
+            </li>
+          )}
         </ul>
       </div>
 

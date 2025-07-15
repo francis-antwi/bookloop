@@ -633,12 +633,13 @@ const AdminDashboard = () => {
                 <td className="py-4 px-6 text-right">
                   {provider.status === 'PENDING' && (
                     <div className="flex gap-2 justify-end">
-                   <ActionButton
-  variant="success"
+  <button
   onClick={() => router.push(`/admin/verifications/${v.provider.id}`)}
+  className="bg-yellow-400 hover:bg-yellow-500 text-black px-3 py-1 rounded"
 >
   👁️ View
-</ActionButton>
+</button>
+
 
                       <ActionButton
                         variant="success"
