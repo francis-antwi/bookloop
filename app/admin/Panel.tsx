@@ -633,6 +633,12 @@ const AdminDashboard = () => {
                 <td className="py-4 px-6 text-right">
                   {provider.status === 'PENDING' && (
                     <div className="flex gap-2 justify-end">
+                    <ActionButton
+                      variant="success"
+                      onClick={() => router.push('/admin/business-verification')}
+                    >
+                      👁️
+                    </ActionButton>
                       <ActionButton
                         variant="success"
                         onClick={() => handleProviderApproval(provider.id, 'APPROVED')}
@@ -743,7 +749,7 @@ const AdminDashboard = () => {
             icon: Bell,
             badge: notifications.filter(n => !n.read).length,
           },
-          { id: 'reviews', label: 'Business Reviews', icon: Star },
+          { id: 'reviews', label: 'Business Approvals', icon: Star },
           { id: 'settings', label: 'Settings', icon: Settings },
         ].map(item => (
           <button
