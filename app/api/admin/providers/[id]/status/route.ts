@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import prisma from "@/app/libs/prismadb";
 import { getServerSession } from "next-auth";
 import authOptions from "@/app/auth/authOptions";
-import { UserRole } from "@prisma/client";
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
   const session = await getServerSession(authOptions);
 
   if (!session || session.user.role !== "ADMIN") {
@@ -12,36 +14,34 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
 
   const { id } = params;
-  const { status } = await req.json();
+  const { status, notes } = await req.json();
 
   if (!["APPROVED", "REJECTED"].includes(status)) {
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
   }
 
+  const isApproved = status === "APPROVED";
+
   try {
-    const user = await prisma.user.update({
+    // 1. Update user.verified
+    await prisma.user.update({
       where: { id },
-      data: {
-        verified: status === "APPROVED",
-        businessVerification: {
-          update: {
-            verified: status === "APPROVED",
-            reviewedAt: new Date(),
-          }
-        }
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        verified: true,
-        businessVerification: true
-      }
+      data: { verified: isApproved },
     });
 
-    return NextResponse.json(user);
+    // 2. Update BusinessVerification separately
+    const verification = await prisma.businessVerification.update({
+      where: { userId: id },
+      data: {
+        verified: isApproved,
+        verificationNotes: notes || null,
+        updatedAt: new Date(),
+      },
+    });
+
+    return NextResponse.json({ success: true, verification });
   } catch (error) {
-    console.error("Failed to update provider status", error);
+    console.error("❌ Failed to update provider verification", error);
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
   }
 }
