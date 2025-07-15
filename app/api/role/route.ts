@@ -19,13 +19,10 @@ export async function POST(req: NextRequest) {
   }
 
   if (!["CUSTOMER", "PROVIDER"].includes(role)) {
-    return NextResponse.json(
-      {
-        error: "Invalid role. Allowed roles: CUSTOMER, PROVIDER",
-        redirect: "/role",
-      },
-      { status: 400 }
-    );
+    return NextResponse.json({
+      error: "Invalid role. Allowed roles: CUSTOMER, PROVIDER",
+      redirect: "/role",
+    }, { status: 400 });
   }
 
   try {
@@ -40,77 +37,53 @@ export async function POST(req: NextRequest) {
     });
 
     if (!user) {
-      return NextResponse.json(
-        {
-          error: "User not found",
-          redirect: "/",
-        },
-        { status: 404 }
-      );
+      return NextResponse.json({
+        error: "User not found",
+        redirect: "/",
+      }, { status: 404 });
     }
 
-    // 🚫 Prevent changing to a different role once it's set
+    // Prevent switching to a different role
     if (user.role && user.role !== role) {
-      return NextResponse.json(
-        {
-          error: "Role change not allowed",
-          message: `Your role is already set to '${user.role}'.`,
-          redirect: user.role === "PROVIDER" ? "/verify" : "/",
-        },
-        { status: 403 }
-      );
+      return NextResponse.json({
+        error: "Role change not allowed",
+        message: `Your role is already set to '${user.role}'.`,
+        redirect: user.role === "PROVIDER" ? "/verify" : "/",
+      }, { status: 403 });
     }
 
-    // ✅ If the same role is already set, return redirect path
+    // If role is already set
     if (user.role === role) {
-      // For existing providers, check if they need verification
-      if (role === "PROVIDER") {
-        const needsVerification = !user.isFaceVerified || !user.selfieImage || !user.idImage;
-        return NextResponse.json(
-          {
-            success: true,
-            message: `Role already set to ${role}`,
-            redirect: needsVerification ? "/verify" : "/",
-          },
-          { status: 200 }
-        );
-      }
-      
-      return NextResponse.json(
-        {
-          success: true,
-          message: `Role already set to ${role}`,
-          redirect: "/",
-        },
-        { status: 200 }
-      );
+      const isProvider = role === "PROVIDER";
+      const needsVerification = isProvider && (!user.isFaceVerified || !user.selfieImage || !user.idImage);
+
+      return NextResponse.json({
+        success: true,
+        message: `Role already set to ${role}`,
+        redirect: isProvider ? (needsVerification ? "/verify" : "/") : "/",
+      }, { status: 200 });
     }
 
-    // ✅ Update the role (REMOVED the verification check for new providers)
+    // Update role for the first time
     await prisma.user.update({
       where: { email: token.email },
       data: { role },
     });
 
-    console.log(`✅ Role updated to ${role} for user: ${token.email}`);
+    const isProvider = role === "PROVIDER";
 
-    return NextResponse.json(
-      {
-        success: true,
-        message: "Role updated successfully",
-        redirect: role === "PROVIDER" ? "/verify" : "/",
-      },
-      { status: 200 }
-    );
+    return NextResponse.json({
+      success: true,
+      message: "Role updated successfully",
+      redirect: isProvider ? "/verify" : "/",
+    }, { status: 200 });
+
   } catch (error) {
     console.error("🔥 Role update error:", error);
-    return NextResponse.json(
-      {
-        error: "Internal Server Error",
-        message: "Failed to update role",
-        redirect: "/role",
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      error: "Internal Server Error",
+      message: "Failed to update role",
+      redirect: "/role",
+    }, { status: 500 });
   }
 }
