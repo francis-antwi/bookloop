@@ -1,17 +1,12 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-
-
 import prisma from "@/app/libs/prismadb";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route"; // ✅ YES
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions); 
  
-  console.log("✅ Admin session:", session);
-
   if (!session || session.user.role !== "ADMIN") {
-    console.warn("🛑 Forbidden: user not admin or session missing");
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
@@ -27,8 +22,17 @@ export async function GET(req: Request) {
       businessVerification: {
         select: {
           businessName: true,
+          businessType: true,
+          businessAddress: true,
           verified: true,
           submittedAt: true,
+          verificationNotes: true,
+          tinNumber: true,
+          registrationNumber: true,
+          tinCertificateUrl: true,
+          incorporationCertUrl: true,
+          vatCertificateUrl: true,
+          ssnitCertUrl: true,
         },
       },
     },
@@ -40,9 +44,20 @@ export async function GET(req: Request) {
     name: p.name,
     email: p.email,
     phone: p.contactPhone,
-    status: p.businessVerification?.verified ? "APPROVED" : p.verified ? "APPROVED" : "PENDING",
-    businessName: p.businessVerification?.businessName || "",
+    status: p.businessVerification?.verified || p.verified ? "APPROVED" : "PENDING",
     submittedAt: p.businessVerification?.submittedAt,
+    businessName: p.businessVerification?.businessName || "",
+    businessType: p.businessVerification?.businessType || "",
+    businessAddress: p.businessVerification?.businessAddress || "",
+    verificationNotes: p.businessVerification?.verificationNotes || "",
+    tinNumber: p.businessVerification?.tinNumber || "",
+    registrationNumber: p.businessVerification?.registrationNumber || "",
+    documents: {
+      tinCertificate: p.businessVerification?.tinCertificateUrl || null,
+      vatCertificate: p.businessVerification?.vatCertificateUrl || null,
+      ssnitCertificate: p.businessVerification?.ssnitCertUrl || null,
+      incorporationCertificate: p.businessVerification?.incorporationCertUrl || null,
+    },
   }));
 
   return NextResponse.json(data);

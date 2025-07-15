@@ -1,27 +1,21 @@
-// app/api/admin/business-verifications/route.ts
-
 import { NextResponse } from "next/server";
-import prisma from "@/app/libs/prismadb";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/auth/authOptions";
+import prisma from "@/app/libs/prismadb";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
 
   if (!session || session.user.role !== "ADMIN") {
-    console.warn("🛑 Unauthorized access to business verifications");
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
-  const verifications = await prisma.businessVerification.findMany({
+  const submissions = await prisma.businessVerification.findMany({
     include: {
       user: {
         select: {
           name: true,
           email: true,
-          contactPhone: true,
-          verified: true,
-          isFaceVerified: true,
         },
       },
     },
@@ -30,26 +24,23 @@ export async function GET() {
     },
   });
 
-  const data = verifications.map((v) => ({
-    businessName: v.businessName,
-    businessType: v.businessType,
-    businessAddress: v.businessAddress,
-    tinNumber: v.tinNumber,
-    registrationNumber: v.registrationNumber,
-    verified: v.verified,
-    submittedAt: v.submittedAt,
+  const data = submissions.map((submission) => ({
     provider: {
-      name: v.user.name,
-      email: v.user.email,
-      contactPhone: v.user.contactPhone,
-      verified: v.user.verified,
-      faceVerified: v.user.isFaceVerified,
+      name: submission.user.name,
+      email: submission.user.email,
     },
+    businessName: submission.businessName || "",
+    businessType: submission.businessType || "",
+    businessAddress: submission.businessAddress || "",
+    tinNumber: submission.tinNumber || "",
+    registrationNumber: submission.registrationNumber || "",
+    submittedAt: submission.submittedAt,
+    verified: submission.verified,
     documents: {
-      tin: v.tinCertificateUrl,
-      incorporation: v.incorporationCertUrl,
-      vat: v.vatCertificateUrl,
-      ssnit: v.ssnitCertUrl,
+      tin: submission.tinCertificateUrl || null,
+      incorporation: submission.incorporationCertUrl || null,
+      vat: submission.vatCertificateUrl || null,
+      ssnit: submission.ssnitCertUrl || null,
     },
   }));
 

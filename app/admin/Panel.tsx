@@ -633,12 +633,13 @@ const AdminDashboard = () => {
                 <td className="py-4 px-6 text-right">
                   {provider.status === 'PENDING' && (
                     <div className="flex gap-2 justify-end">
-                    <ActionButton
-                      variant="success"
-                      onClick={() => router.push('/admin/verifications')}
-                    >
-                      👁️
-                    </ActionButton>
+                   <ActionButton
+  variant="success"
+  onClick={() => router.push(`/admin/verifications/${v.provider.id}`)}
+>
+  👁️ View
+</ActionButton>
+
                       <ActionButton
                         variant="success"
                         onClick={() => handleProviderApproval(provider.id, 'APPROVED')}
