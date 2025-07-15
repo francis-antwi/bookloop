@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/app/libs/prismadb";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { Prisma } from "@prisma/client";
 
 export async function PATCH(
   req: Request,
@@ -52,8 +53,22 @@ export async function PATCH(
     });
 
     return NextResponse.json({ success: true, verification });
-  } catch (error) {
-    console.error("❌ Failed to update provider verification", error);
-    return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
+  } catch (error: any) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      console.error("🧨 PrismaClientKnownRequestError:", {
+        code: error.code,
+        message: error.message,
+        meta: error.meta,
+      });
+    } else if (error instanceof Prisma.PrismaClientValidationError) {
+      console.error("📘 PrismaClientValidationError:", error.message);
+    } else {
+      console.error("❌ Unknown error:", error);
+    }
+
+    return NextResponse.json(
+      { error: error.message || "Something went wrong" },
+      { status: 500 }
+    );
   }
 }

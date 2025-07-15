@@ -311,28 +311,28 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleProviderApproval = async (id: string, status: 'APPROVED' | 'REJECTED') => {
-    try {
-      const res = await fetch(`/api/admin/providers/${id}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to update provider');
-      }
-      const updated = await res.json();
-      setProviders(prev =>
-        prev.map(provider =>
-          provider.id === id ? { ...provider, status: updated.status } : provider
-        )
-      );
-    } catch (error) {
-      console.error('Error updating provider:', error);
-      alert('Failed to update provider status.');
+const handleProviderApproval = async (id: string, status: 'APPROVED' | 'REJECTED') => {
+  try {
+    const res = await fetch(`/api/admin/providers/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Failed to update provider');
     }
-  };
+    const updated = await res.json();
+    setProviders(prev =>
+      prev.map(provider =>
+        provider.id === id ? { ...provider, status: updated.status } : provider
+      )
+    );
+  } catch (error) {
+    console.error('Error updating provider:', error);
+    alert('Failed to update provider status.');
+  }
+};
 
   const markNotificationRead = (id: string) => {
     setNotifications(prev =>
