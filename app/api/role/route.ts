@@ -7,7 +7,6 @@ const secret = process.env.NEXTAUTH_SECRET!;
 
 export async function POST(req: NextRequest) {
   const token = await getToken({ req, secret });
-
   if (!token?.email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -64,39 +63,36 @@ export async function POST(req: NextRequest) {
 
     // ✅ If the same role is already set, return redirect path
     if (user.role === role) {
+      // For existing providers, check if they need verification
+      if (role === "PROVIDER") {
+        const needsVerification = !user.isFaceVerified || !user.selfieImage || !user.idImage;
+        return NextResponse.json(
+          {
+            success: true,
+            message: `Role already set to ${role}`,
+            redirect: needsVerification ? "/verify" : "/",
+          },
+          { status: 200 }
+        );
+      }
+      
       return NextResponse.json(
         {
           success: true,
           message: `Role already set to ${role}`,
-          redirect: role === "PROVIDER" ? "/verify" : "/",
+          redirect: "/",
         },
         { status: 200 }
       );
     }
 
-    // ✅ If PROVIDER, ensure all verification fields are met
-    if (role === "PROVIDER") {
-      const missingVerification =
-        !user.isFaceVerified || !user.selfieImage || !user.idImage;
-
-      if (missingVerification) {
-        return NextResponse.json(
-          {
-            error: "Verification required",
-            message:
-              "You must complete identity verification to become a provider.",
-            redirect: "/verify",
-          },
-          { status: 403 }
-        );
-      }
-    }
-
-    // ✅ Update the role
+    // ✅ Update the role (REMOVED the verification check for new providers)
     await prisma.user.update({
       where: { email: token.email },
       data: { role },
     });
+
+    console.log(`✅ Role updated to ${role} for user: ${token.email}`);
 
     return NextResponse.json(
       {

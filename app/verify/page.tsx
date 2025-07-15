@@ -15,8 +15,7 @@ import {
   FiBriefcase,
   FiMapPin,
   FiPhone,
-  FiMail,
-  FiUsers
+  FiMail
 } from 'react-icons/fi';
 import { useSession } from 'next-auth/react';
 import axios from 'axios';
@@ -42,15 +41,14 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
     error?: string;
   } | null>(null);
 
-  // Business verification state with default role as provider
+  // Business verification state
   const [businessData, setBusinessData] = useState({
     tinNumber: '',
     registrationNumber: '',
     businessName: '',
     businessType: '',
     businessAddress: '',
-    contactPhone: '',
-    role: 'PROVIDER' // Default role set to provider
+    contactPhone: ''
   });
 
   const [businessFiles, setBusinessFiles] = useState({
@@ -143,59 +141,50 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
     }
   };
 
-// Replace the submitBusinessVerification function with this updated version:
-
-const submitBusinessVerification = async () => {
-  if (!businessData.tinNumber || !businessData.businessName || !businessData.businessType) {
-    toast.error('Please fill in all required business information');
-    return;
-  }
-  if (!businessFiles.tinCertificate) {
-    toast.error('TIN Certificate is required');
-    return;
-  }
-
-  setIsLoading(true);
-
-  try {
-    const businessFormData = new FormData();
-    businessFormData.append('email', session?.user?.email || '');
-    businessFormData.append('verificationStep', 'business');
-    
-    // Explicitly set role to PROVIDER
-    businessFormData.append('role', 'PROVIDER');
-    
-    // Add other business data (excluding role since we're setting it explicitly)
-    Object.entries(businessData).forEach(([key, value]) => {
-      if (value && key !== 'role') {
-        businessFormData.append(key, value);
-      }
-    });
-    
-    // Add files
-    Object.entries(businessFiles).forEach(([key, file]) => {
-      if (file) businessFormData.append(key, file);
-    });
-
-    const response = await axios.post('/api/verify', businessFormData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 120000
-    });
-
-    if (!response.data.success) {
-      throw new Error(response.data.error || 'Business verification failed');
+  const submitBusinessVerification = async () => {
+    if (!businessData.tinNumber || !businessData.businessName || !businessData.businessType) {
+      toast.error('Please fill in all required business information');
+      return;
     }
-    
-    toast.success('Business verification submitted for review!');
-    router.push('/pending-approval');
+    if (!businessFiles.tinCertificate) {
+      toast.error('TIN Certificate is required');
+      return;
+    }
 
-  } catch (error: any) {
-    const errorMsg = error.response?.data?.error || error.message || 'Business verification failed';
-    toast.error(errorMsg);
-  } finally {
-    setIsLoading(false);
-  }
-};
+    setIsLoading(true);
+
+    try {
+      const businessFormData = new FormData();
+      businessFormData.append('email', session?.user?.email || '');
+      businessFormData.append('verificationStep', 'business');
+      
+      Object.entries(businessData).forEach(([key, value]) => {
+        if (value) businessFormData.append(key, value);
+      });
+      
+      Object.entries(businessFiles).forEach(([key, file]) => {
+        if (file) businessFormData.append(key, file);
+      });
+
+      const response = await axios.post('/api/verify', businessFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 120000
+      });
+
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Business verification failed');
+      }
+        toast.success('Business verification submitted for review!');
+        router.push('/pending-approval');
+
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.error || error.message || 'Business verification failed';
+      toast.error(errorMsg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const nextStep = () => {
     if (currentStep === 'selfie' && selfieImage) {
       setCurrentStep('id');
@@ -241,9 +230,9 @@ const submitBusinessVerification = async () => {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full mb-4 shadow-lg">
             <FiShield className="text-2xl text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Provider Verification</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Identity Verification</h1>
           <p className="text-gray-600">
-            Complete all steps to verify your identity and business information as a service provider
+            Complete all steps to verify your identity and business information
           </p>
         </div>
 
@@ -718,33 +707,32 @@ const FileUpload = ({ label, file, onFileUpload, required = false }: FileUploadP
           onChange={(e) => e.target.files?.[0] && onFileUpload(e.target.files[0])}
           className="hidden"
         />
-       <label
+        <label
           htmlFor={inputId}
-          className="cursor-pointer block border border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-400 hover:bg-blue-50 transition-all duration-200"
+          className="cursor-pointer block border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-400 hover:bg-blue-50 transition-all duration-200"
         >
           <div className="space-y-2">
             <div className="inline-flex items-center justify-center w-10 h-10 bg-gray-100 rounded-full">
-              <FiUpload className="text-gray-400" />
+              <FiUpload className="text-lg text-gray-400" />
             </div>
             <div>
               <p className="text-blue-600 font-medium">Upload {label}</p>
-              <p className="text-gray-500 text-xs">PDF, JPEG, or PNG format</p>
+              <p className="text-gray-500 text-xs">PDF, JPEG, or PNG (max 10MB)</p>
             </div>
           </div>
         </label>
         {file && (
-          <div className="absolute -top-2 -right-2 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center shadow-md">
+          <div className="absolute -top-2 -right-2 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
             <FiCheck className="text-white text-xs" />
           </div>
         )}
       </div>
       {file && (
-        <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg">
-          <p className="text-sm text-green-800 font-medium">✓ {file.name}</p>
-          <p className="text-xs text-green-600">
-            {(file.size / 1024 / 1024).toFixed(2)} MB
-          </p>
-        </div>
+        <SuccessMessage
+          title="Document uploaded"
+          description={file.name}
+          truncate
+        />
       )}
     </div>
   );
@@ -755,7 +743,7 @@ const SuccessMessage = ({ title, description, truncate = false }: SuccessMessage
     <div className="flex items-start gap-3">
       <FiCheck className="text-green-500 text-xl mt-0.5 flex-shrink-0" />
       <div>
-        <p className="font-medium text-green-800">{title}</p>
+       <p className="font-medium text-green-800">{title}</p>
         <p className={`text-sm text-green-600 mt-1 ${truncate ? 'truncate' : ''}`}>
           {description}
         </p>
@@ -765,21 +753,14 @@ const SuccessMessage = ({ title, description, truncate = false }: SuccessMessage
 );
 
 const SecurityNotice = () => (
-  <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
-    <div className="flex items-start gap-4">
-      <div className="flex-shrink-0">
-        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-          <FiShield className="text-blue-600" />
-        </div>
-      </div>
-      <div className="flex-1">
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">Security & Privacy</h3>
-        <div className="space-y-2 text-sm text-gray-600">
-          <p>• All documents are encrypted and stored securely</p>
-          <p>• Your information is only used for verification purposes</p>
-          <p>• We comply with Ghana's Data Protection Act</p>
-          <p>• Documents are automatically deleted after verification</p>
-        </div>
+  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+    <div className="flex items-start gap-3">
+      <FiShield className="text-blue-500 text-xl mt-0.5 flex-shrink-0" />
+      <div>
+        <p className="font-medium text-blue-800">Security Notice</p>
+        <p className="text-sm text-blue-600 mt-1">
+          Your personal information is encrypted and securely stored. We comply with all data protection regulations.
+        </p>
       </div>
     </div>
   </div>
