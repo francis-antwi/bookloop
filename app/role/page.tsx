@@ -26,26 +26,14 @@ const RoleSelector = () => {
       router.push("/");
     }
   }, [status, router]);
-
-  if (status === "loading" || !session?.user) {
-    return (
-      <div className="max-w-md mx-auto space-y-6 p-6 text-center">
-        <FiLoader className="animate-spin text-2xl text-blue-500 mx-auto mb-4" />
-        <p className="text-gray-600">Loading your session...</p>
-      </div>
-    );
-  }
 const handleRoleSelect = async (role: string) => {
   if (isLoading || !session?.user?.email || !session?.user?.id) {
     router.replace("/");
     return;
   }
 
-  if (selectedRole === role) {
-    router.replace(role === "PROVIDER" ? "/verify" : "/");
-    return;
-  }
-
+  // ✨ Immediately reflect the new role for UI state
+  setSelectedRole(role);
   setIsLoading(true);
   setError(null);
 
@@ -55,10 +43,11 @@ const handleRoleSelect = async (role: string) => {
       userId: session.user.id,
     });
 
+    // Update session with new role
     await update({ role });
 
-    // 🚀 Immediately redirect with no delay or extra logic
-    router.replace(role === "CUSTOMER" ? "/" : "/verify");
+    // ✅ Instantly redirect new providers to /verify
+    router.replace(role === "PROVIDER" ? "/verify" : "/");
   } catch (err: any) {
     const redirectPath =
       err?.response?.data?.redirect ||
@@ -74,7 +63,7 @@ const handleRoleSelect = async (role: string) => {
       );
     }
   } finally {
-    setIsLoading(false); // Optional — has no effect if already redirected
+    setIsLoading(false); // Has no effect if redirected already
   }
 };
 
