@@ -15,7 +15,8 @@ import {
   FiBriefcase,
   FiMapPin,
   FiPhone,
-  FiMail
+  FiMail,
+  FiUsers
 } from 'react-icons/fi';
 import { useSession } from 'next-auth/react';
 import axios from 'axios';
@@ -41,14 +42,15 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
     error?: string;
   } | null>(null);
 
-  // Business verification state
+  // Business verification state with default role as provider
   const [businessData, setBusinessData] = useState({
     tinNumber: '',
     registrationNumber: '',
     businessName: '',
     businessType: '',
     businessAddress: '',
-    contactPhone: ''
+    contactPhone: '',
+    role: 'PROVIDER' // Default role set to provider
   });
 
   const [businessFiles, setBusinessFiles] = useState({
@@ -230,9 +232,9 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full mb-4 shadow-lg">
             <FiShield className="text-2xl text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Identity Verification</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Provider Verification</h1>
           <p className="text-gray-600">
-            Complete all steps to verify your identity and business information
+            Complete all steps to verify your identity and business information as a service provider
           </p>
         </div>
 
@@ -545,6 +547,44 @@ const BusinessStep = ({
       </div>
     )}
 
+    {/* Role Selection Section */}
+    <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+      <div className="flex items-start gap-3">
+        <FiUsers className="text-blue-500 text-xl mt-0.5 flex-shrink-0" />
+        <div className="flex-1">
+          <p className="font-medium text-blue-800 mb-2">Account Type</p>
+          <div className="space-y-2">
+            <label className="flex items-center gap-3">
+              <input
+                type="radio"
+                name="role"
+                value="PROVIDER"
+                checked={businessData.role === 'provider'}
+                onChange={(e) => onDataChange('role', e.target.value)}
+                className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+              />
+              <span className="text-sm text-blue-700">
+                <strong>Service Provider</strong> - I provide services to customers
+              </span>
+            </label>
+            <label className="flex items-center gap-3">
+              <input
+                type="radio"
+                name="role"
+                value="customer"
+                checked={businessData.role === 'customer'}
+                onChange={(e) => onDataChange('role', e.target.value)}
+                className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+              />
+              <span className="text-sm text-blue-700">
+                <strong>Customer</strong> - I seek services from providers
+              </span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -707,32 +747,33 @@ const FileUpload = ({ label, file, onFileUpload, required = false }: FileUploadP
           onChange={(e) => e.target.files?.[0] && onFileUpload(e.target.files[0])}
           className="hidden"
         />
-        <label
+       <label
           htmlFor={inputId}
-          className="cursor-pointer block border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-400 hover:bg-blue-50 transition-all duration-200"
+          className="cursor-pointer block border border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-400 hover:bg-blue-50 transition-all duration-200"
         >
           <div className="space-y-2">
             <div className="inline-flex items-center justify-center w-10 h-10 bg-gray-100 rounded-full">
-              <FiUpload className="text-lg text-gray-400" />
+              <FiUpload className="text-gray-400" />
             </div>
             <div>
               <p className="text-blue-600 font-medium">Upload {label}</p>
-              <p className="text-gray-500 text-xs">PDF, JPEG, or PNG (max 10MB)</p>
+              <p className="text-gray-500 text-xs">PDF, JPEG, or PNG format</p>
             </div>
           </div>
         </label>
         {file && (
-          <div className="absolute -top-2 -right-2 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+          <div className="absolute -top-2 -right-2 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center shadow-md">
             <FiCheck className="text-white text-xs" />
           </div>
         )}
       </div>
       {file && (
-        <SuccessMessage
-          title="Document uploaded"
-          description={file.name}
-          truncate
-        />
+        <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg">
+          <p className="text-sm text-green-800 font-medium">✓ {file.name}</p>
+          <p className="text-xs text-green-600">
+            {(file.size / 1024 / 1024).toFixed(2)} MB
+          </p>
+        </div>
       )}
     </div>
   );
@@ -743,7 +784,7 @@ const SuccessMessage = ({ title, description, truncate = false }: SuccessMessage
     <div className="flex items-start gap-3">
       <FiCheck className="text-green-500 text-xl mt-0.5 flex-shrink-0" />
       <div>
-       <p className="font-medium text-green-800">{title}</p>
+        <p className="font-medium text-green-800">{title}</p>
         <p className={`text-sm text-green-600 mt-1 ${truncate ? 'truncate' : ''}`}>
           {description}
         </p>
@@ -753,14 +794,21 @@ const SuccessMessage = ({ title, description, truncate = false }: SuccessMessage
 );
 
 const SecurityNotice = () => (
-  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-    <div className="flex items-start gap-3">
-      <FiShield className="text-blue-500 text-xl mt-0.5 flex-shrink-0" />
-      <div>
-        <p className="font-medium text-blue-800">Security Notice</p>
-        <p className="text-sm text-blue-600 mt-1">
-          Your personal information is encrypted and securely stored. We comply with all data protection regulations.
-        </p>
+  <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
+    <div className="flex items-start gap-4">
+      <div className="flex-shrink-0">
+        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+          <FiShield className="text-blue-600" />
+        </div>
+      </div>
+      <div className="flex-1">
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Security & Privacy</h3>
+        <div className="space-y-2 text-sm text-gray-600">
+          <p>• All documents are encrypted and stored securely</p>
+          <p>• Your information is only used for verification purposes</p>
+          <p>• We comply with Ghana's Data Protection Act</p>
+          <p>• Documents are automatically deleted after verification</p>
+        </div>
       </div>
     </div>
   </div>
