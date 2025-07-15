@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+
+
 import prisma from "@/app/libs/prismadb";
+import authOptions from "@/app/auth/authOptions";
 
 export async function GET(req: Request) {
-  const session = await getServerSession(authOptions); // keep as is if using app router
-  // const session = await getServerSession({ req, ...authOptions }); // fallback option
-
+  const session = await getServerSession(authOptions); 
+ 
   console.log("✅ Admin session:", session);
 
   if (!session || session.user.role !== "ADMIN") {
