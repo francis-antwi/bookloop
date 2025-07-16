@@ -1,24 +1,32 @@
 export function extractIDInfo(data: any) {
-    console.log("⚙️ [ID Extraction]: Starting ID info extraction from OCR response.");
-  const rawText = data?.text?.text;
+  console.log("⚙️ [ID Extraction]: Starting ID info extraction from OCR response.");
 
+  const rawText = data?.text?.text;
   if (typeof rawText !== "string") {
-    console.error("extractIDInfo: OCR text is not a string", rawText);
+    console.error("❌ [ID Extraction]: OCR text is not a string:", rawText);
     return {};
   }
 
-  const lines = rawText.split("\n").map((line: string) => line.trim()).filter(Boolean);
+  const lines = rawText
+    .split("\n")
+    .map((line: string) => line.trim())
+    .filter(Boolean);
   const fullText = lines.join(" ");
-    console.log("⚙️ [ID Extraction]: Full text for extraction:", fullText);
+  const lowerText = fullText.toLowerCase();
 
-  const getDate = (text: string) => {
+  console.log("📜 [ID Extraction]: Full text for processing:", fullText);
+
+  const parseDate = (text: string): string | null => {
     const match = text.match(/(\d{2})[\/\-](\d{2})[\/\-](\d{4})/);
-      console.warn(`⚠️ [ID Extraction - Date]: Could not parse date from text: "${text}"`);
-    return match ? `${match[3]}-${match[2]}-${match[1]}` : null;
-
+    if (match) {
+      const [, dd, mm, yyyy] = match;
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    console.warn(`⚠️ [ID Extraction - Date]: Failed to parse date from: "${text}"`);
+    return null;
   };
 
-  const extractMatch = (regex: RegExp, join = false) => {
+  const extractMatch = (regex: RegExp, join = false): string | null => {
     const match = fullText.match(regex);
     return match ? (join ? match.slice(1).join(" ") : match[1]) : null;
   };
@@ -26,32 +34,24 @@ export function extractIDInfo(data: any) {
   const surname = extractMatch(/Surname\/Nom\s+([A-Z]+)/i);
   const firstnames = extractMatch(/Firstnames\/Prénoms\s+([A-Z]+)/i);
   const idName = [firstnames, surname].filter(Boolean).join(" ");
-    console.log(`⚙️ [ID Extraction]: Extracted Name: "${idName}" (First: "${firstnames}", Last: "${surname}")`);
+  console.log(`🧾 [ID Extraction]: Name => "${idName}"`);
 
-  const idDOB = getDate(extractMatch(/Date of Birth.*?(\d{2}\/\d{2}\/\d{4})/i) ?? "");
-   console.log(`⚙️ [ID Extraction]: Extracted DOB: "${idDOB}"`);
-  const idIssueDate = getDate(extractMatch(/Date of Issuance.*?(\d{2}\/\d{2}\/\d{4})/i) ?? "");
-    console.log(`⚙️ [ID Extraction]: Extracted Issue Date: "${idIssueDate}"`);
-  const idExpiryDate = getDate(extractMatch(/Date of Expiry.*?(\d{2}\/\d{2}\/\d{4})/i) ?? "");
-  console.log(`⚙️ [ID Extraction]: Extracted Expiry Date: "${idExpiryDate}"`);
+  const idDOB = parseDate(extractMatch(/Date of Birth.*?(\d{2}[\/\-]\d{2}[\/\-]\d{4})/i) ?? "");
+  const idIssueDate = parseDate(extractMatch(/Date of Issuance.*?(\d{2}[\/\-]\d{2}[\/\-]\d{4})/i) ?? "");
+  const idExpiryDate = parseDate(extractMatch(/Date of Expiry.*?(\d{2}[\/\-]\d{2}[\/\-]\d{4})/i) ?? "");
 
   const idNumber =
     extractMatch(/Document Number.*?([A-Z0-9]+)/i) ??
-    extractMatch(/([A-Z]{2}[0-9]{7,})/); // fallback
-     console.log(`⚙️ [ID Extraction]: Extracted ID Number: "${idNumber}"`);
-
+    extractMatch(/([A-Z]{2}[0-9]{7,})/);
   const idIssuer =
     extractMatch(/Place of Issuance.*?([A-Z]+)/i) ??
-    extractMatch(/ACCRA|KUMASI|TAKORADI|TAMALE/i);
-      console.log(`⚙️ [ID Extraction]: Extracted Issuer: "${idIssuer}"`);
+    extractMatch(/\b(ACCRA|KUMASI|TAKORADI|TAMALE)\b/i);
 
-  const personalIdNumber = extractMatch(/(GHA-\d{12})/);
-
+  const personalIdNumber = extractMatch(/\b(GHA-\d{12})\b/);
   const gender = extractMatch(/Sex\/Sexe\s+([MF])\b/i);
   const nationality = extractMatch(/Nationality\/Nationalité\s+([A-Z]+)/i);
 
-  // ✅ Infer ID Type from rawText
-  const lowerText = rawText.toLowerCase();
+  // Infer ID type
   let idType: string | null = null;
   if (lowerText.includes("ghana card") || lowerText.includes("identity card")) {
     idType = "ghana_card";
@@ -61,17 +61,23 @@ export function extractIDInfo(data: any) {
     idType = "driver_license";
   }
 
+  console.log("✅ [ID Extraction]: Finished with parsed result:");
+  console.log({
+    idName, idNumber, idDOB, idIssueDate, idExpiryDate,
+    idIssuer, personalIdNumber, gender, nationality, idType
+  });
+
   return {
     idName: idName || null,
     idNumber: idNumber || null,
-    idDOB: idDOB || null,
-    idIssueDate: idIssueDate || null,
-    idExpiryDate: idExpiryDate || null,
+    idDOB,
+    idIssueDate,
+    idExpiryDate,
     idIssuer: idIssuer || null,
     personalIdNumber: personalIdNumber || null,
     gender: gender || null,
     nationality: nationality || null,
-    idType: idType || null,          // ✅ Add idType to output
+    idType,
     rawText,
   };
 }

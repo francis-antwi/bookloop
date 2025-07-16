@@ -19,8 +19,9 @@ import {
 import { useSession } from 'next-auth/react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import Camera from '../components/inputs/Camera';
+
 import Categories, { categories } from '../components/navbar/Categories';
+import Camera from '../components/inputs/Camera';
 
 interface VerificationStepsProps {
   onComplete: () => void;
@@ -212,7 +213,6 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
       onComplete();
     } catch (error: any) {
       const errorMsg = error.response?.data?.error || error.message || 'Business verification failed';
-      toast.error(errorMsg);
     } finally {
       setIsLoading(false);
     }
