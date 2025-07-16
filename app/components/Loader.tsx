@@ -94,6 +94,7 @@ const Loader: React.FC<LoaderProps> = ({
     transition-all
     duration-500
     ease-out
+    z-0
   `;
 
   return (
@@ -119,6 +120,7 @@ const Loader: React.FC<LoaderProps> = ({
             blur-xl
             scale-150
             animate-pulse
+            z-0
           `} 
         />
         
