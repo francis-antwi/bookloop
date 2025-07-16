@@ -1,7 +1,3 @@
-// ============================
-// ✅ NextAuth Configuration
-// ============================
-
 import NextAuth, { AuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
@@ -11,17 +7,15 @@ import { UserRole } from "@prisma/client";
 
 export const authOptions: AuthOptions = {
   providers: [
-    /* ——— Google ——— */
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
 
-    /* ——— Email / Password ——— */
     CredentialsProvider({
       name: "credentials",
       credentials: {
-        email:    { label: "Email",    type: "text"     },
+        email:    { label: "Email", type: "text" },
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
@@ -32,20 +26,16 @@ export const authOptions: AuthOptions = {
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
         });
+        if (!user || !user.hashedPassword) {
+          throw new Error("INVALID_CREDENTIALS");
+        }
 
-        if (!user || !user.hashedPassword) throw new Error("INVALID_CREDENTIALS");
-
-        const ok = await bcrypt.compare(credentials.password, user.hashedPassword);
-        if (!ok) throw new Error("INVALID_CREDENTIALS");
+        const isValid = await bcrypt.compare(credentials.password, user.hashedPassword);
+        if (!isValid) throw new Error("INVALID_CREDENTIALS");
 
         if (
           user.role === UserRole.PROVIDER &&
-          (
-            !user.verified ||
-            user.requiresApproval ||
-            !user.isFaceVerified ||
-            !user.businessVerified // ✅ NEW check
-          )
+          (!user.verified || user.requiresApproval || !user.isFaceVerified)
         ) {
           throw new Error("PROVIDER_NOT_APPROVED");
         }
@@ -62,7 +52,7 @@ export const authOptions: AuthOptions = {
           isFaceVerified:   user.isFaceVerified  ?? false,
           verified:         user.verified        ?? false,
           requiresApproval: user.requiresApproval?? false,
-          businessVerified: user.businessVerified?? false, // ✅ NEW
+          businessVerified: user.businessVerified?? false,
         };
       },
     }),
@@ -70,8 +60,8 @@ export const authOptions: AuthOptions = {
 
   pages: {
     signIn: "/",
-    error:  "/auth/error",
-    newUser:"/role",
+    error: "/auth/error",
+    newUser: "/role",
   },
 
   session: {
@@ -79,7 +69,11 @@ export const authOptions: AuthOptions = {
     maxAge: 30 * 24 * 60 * 60,
     updateAge: 24 * 60 * 60,
   },
-  jwt: { maxAge: 30 * 24 * 60 * 60 },
+
+  jwt: {
+    maxAge: 30 * 24 * 60 * 60,
+  },
+
   secret: process.env.NEXTAUTH_SECRET,
   debug: process.env.NODE_ENV === "development",
   trustHost: true,
@@ -89,9 +83,11 @@ export const authOptions: AuthOptions = {
       if (account?.provider === "google" && user.email) {
         const db = await prisma.user.findUnique({ where: { email: user.email } });
 
-        // Optional gatekeeping for Google providers — uncomment if needed:
-        // if (db?.role === UserRole.PROVIDER &&
-        //     (!db.verified || db.requiresApproval || !db.isFaceVerified || !db.businessVerified)) {
+        // // ✅ Optionally enforce provider gatekeeping via Google
+        // if (
+        //   db?.role === UserRole.PROVIDER &&
+        //   (!db.verified || db.requiresApproval || !db.isFaceVerified)
+        // ) {
         //   console.warn("🛑 PROVIDER not approved – Google login blocked.");
         //   return false;
         // }
@@ -99,18 +95,19 @@ export const authOptions: AuthOptions = {
         if (!db) {
           await prisma.user.create({
             data: {
-              email:  user.email,
-              name:   user.name  ?? "",
-              image:  user.image ?? null,
-              role:   null,
-              verified:         false,
-              isFaceVerified:   false,
+              email: user.email,
+              name: user.name ?? "",
+              image: user.image ?? null,
+              role: null,
+              verified: false,
+              isFaceVerified: false,
               requiresApproval: false,
-              businessVerified: false, // ✅ NEW
+              businessVerified: false,
             },
           });
         }
       }
+
       return true;
     },
 
@@ -119,18 +116,17 @@ export const authOptions: AuthOptions = {
         token.role = session.role;
         await prisma.user.update({
           where: { email: token.email! },
-          data:  { role: session.role },
+          data: { role: session.role },
         });
 
         if (session.role === UserRole.PROVIDER) {
-          token.isFaceVerified   = false;
-          token.verified         = false;
+          token.isFaceVerified = false;
+          token.verified = false;
           token.requiresApproval = true;
-          token.businessVerified = false; // ✅ NEW
         }
       }
 
-      const email = user?.email ?? token.email as string | undefined;
+      const email = user?.email ?? (token.email as string | undefined);
       if (email) {
         const db = await prisma.user.findUnique({
           where: { email },
@@ -138,7 +134,7 @@ export const authOptions: AuthOptions = {
             id: true, name: true, email: true, image: true, role: true,
             isOtpVerified: true, isFaceVerified: true,
             verified: true, requiresApproval: true,
-            businessVerified: true, // ✅ NEW
+            businessVerified: true,
           },
         });
 
@@ -148,11 +144,11 @@ export const authOptions: AuthOptions = {
           email: db.email,
           image: db.image,
           role: db.role,
-          isOtpVerified:    db.isOtpVerified,
-          isFaceVerified:   db.isFaceVerified,
-          verified:         db.verified,
+          isOtpVerified: db.isOtpVerified,
+          isFaceVerified: db.isFaceVerified,
+          verified: db.verified,
           requiresApproval: db.requiresApproval,
-          businessVerified: db.businessVerified, // ✅ NEW
+          businessVerified: db.businessVerified,
         });
       }
 
@@ -171,9 +167,10 @@ export const authOptions: AuthOptions = {
           isFaceVerified:   token.isFaceVerified  ?? false,
           verified:         token.verified        ?? false,
           requiresApproval: token.requiresApproval?? false,
-          businessVerified: token.businessVerified?? false, // ✅ NEW
+          businessVerified: token.businessVerified?? false, // ✅ ADDED
         };
       }
+
       return session;
     },
   },
@@ -192,7 +189,7 @@ export const authOptions: AuthOptions = {
           role: session.user?.role,
           verified: session.user?.verified,
           requiresApproval: session.user?.requiresApproval,
-          businessVerified: session.user?.businessVerified, // ✅ NEW
+          businessVerified: session.user?.businessVerified,
           expires: session.expires,
         });
       }

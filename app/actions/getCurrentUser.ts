@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { getToken } from "next-auth/jwt";
 import { cookies } from "next/headers";
 import prisma from "@/app/libs/prismadb";
-import { authOptions } from "../auth/authOptions"; // Ensure this path is correct relative to this file
+import { authOptions } from "../auth/authOptions";
 
 interface SessionUser {
   email?: string | null;
@@ -21,8 +21,7 @@ interface SanitizedUser {
   image: string | null;
   createdAt: string;
   updatedAt: string;
-  // Add other user fields like 'role', 'isOtpVerified', 'isFaceVerified' as needed
-  role?: string; // Assuming UserRole is a string
+  role?: string;
   isOtpVerified?: boolean;
   isFaceVerified?: boolean;
   businessVerified?: boolean;
@@ -39,12 +38,9 @@ export async function getSession() {
 
 export default async function getCurrentUser(): Promise<SanitizedUser | null> {
   try {
-    // Attempt to get email from session first
     const session = await getSession();
     const sessionEmail = session?.user?.email;
 
-    // Fallback to token if no session email is available
-    // Note: getToken can only be used in server-side contexts like API routes or getServerSideProps/Server Components
     const tokenEmail = !sessionEmail
       ? (await getFallbackToken())?.email
       : null;
@@ -52,11 +48,8 @@ export default async function getCurrentUser(): Promise<SanitizedUser | null> {
     const email = sessionEmail || tokenEmail;
     if (!email) return null;
 
-    // Fetch user from database
     const currentUser = await prisma.user.findUnique({
       where: { email },
-      // Include any other fields you expect to return to the client
-      // For example, if 'role' is part of SanitizedUser, ensure it's selected here
       select: {
         id: true,
         name: true,
@@ -65,17 +58,15 @@ export default async function getCurrentUser(): Promise<SanitizedUser | null> {
         image: true,
         createdAt: true,
         updatedAt: true,
-        role: true, // Assuming you need the role in the client
+        role: true,
         isOtpVerified: true,
         isFaceVerified: true,
-        businessVerified: boolean,
+        businessVerified: true, // ✅ FIXED: no type annotation
       },
     });
 
     if (!currentUser) return null;
 
-    // Sanitize and format dates, and include other relevant user data
-    // New: Aggressively serialize the user object to ensure no non-JSON-serializable data is passed
     return JSON.parse(JSON.stringify(sanitizeUser(currentUser)));
   } catch (error) {
     console.error("Error getting current user:", error);
@@ -97,7 +88,6 @@ async function getFallbackToken(): Promise<TokenUser | null> {
 }
 
 function sanitizeUser(user: any): SanitizedUser {
-  // Ensure all properties in SanitizedUser are handled
   return {
     id: user.id,
     name: user.name,
@@ -106,9 +96,9 @@ function sanitizeUser(user: any): SanitizedUser {
     image: user.image,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
-    role: user.role, // Include role
+    role: user.role,
     isOtpVerified: user.isOtpVerified,
     isFaceVerified: user.isFaceVerified,
-    businessVerified:user.businessVerified
+    businessVerified: user.businessVerified,
   };
 }
