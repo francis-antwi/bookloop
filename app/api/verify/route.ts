@@ -4,12 +4,14 @@ import axios from "axios";
 import FormData from "form-data";
 import { Readable } from "stream";
 import { validateExtractedData } from "../utils/idValidation";
-import { createUserIfNeeded } from "../utils/conditionalRegistration";
+// Removed createUserIfNeeded as it's now handled by /api/register
 import { extractIDInfo } from "../utils/extractIDInfo";
 import { matchFace } from "../utils/faceMatch";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/auth/authOptions";
-import { UserRole } from "@prisma/client";
+// UserRole is not directly used here for database operations anymore,
+// but kept for type clarity if needed for validation of incoming 'role' string.
+import { UserRole } from "@prisma/client"; 
 
 // === Cloudinary Config ===
 cloudinary.config({
@@ -35,44 +37,44 @@ export async function POST(req: Request) {
 
     // === Shared Fields ===
     const verificationStep = formData.get("verificationStep")?.toString() || "identity";
-    const role = formData.get("role")?.toString() || "CUSTOMER";
-    const shouldRegister = formData.get("shouldRegister")?.toString() === "true";
-    const oauthEmail = formData.get("email")?.toString() || null;
-    const oauthName = formData.get("name")?.toString() || null;
-    const oauthContactPhone = formData.get("contactPhone")?.toString() || null;
+    // role, shouldRegister, oauthEmail, oauthName, oauthContactPhone are now primarily for /api/register
+    // and not directly used for database writes in this /api/verify route.
+    // They might still be passed by frontend, but this route's responsibility is file processing.
 
-    const session = await getServerSession(authOptions);
-    const isGoogleAuth = !!(session?.user?.email && session.user.email === oauthEmail);
-
-    // === Business-related Fields ===
-    const tinNumber = formData.get("tinNumber")?.toString() || null;
-    const registrationNumber = formData.get("registrationNumber")?.toString() || null;
-    const businessName = formData.get("businessName")?.toString() || null;
-    const businessType = formData.get("businessType")?.toString() || null;
-    const businessAddress = formData.get("businessAddress")?.toString() || null;
-
+    // === Business-related Files & Uploads (always process if files are present) ===
     const tinCertificateFile = formData.get("tinCertificate") as File | null;
     const incorporationCertFile = formData.get("incorporationCert") as File | null;
     const vatCertificateFile = formData.get("vatCertificate") as File | null;
     const ssnitCertFile = formData.get("ssnitCert") as File | null;
 
-    const [
-      tinCertificateUrl,
-      incorporationCertUrl,
-      vatCertificateUrl,
-      ssnitCertUrl,
-    ] = await Promise.all([
-      tinCertificateFile ? uploadToCloudinary(tinCertificateFile, "business/tin") : null,
-      incorporationCertFile ? uploadToCloudinary(incorporationCertFile, "business/incorporation") : null,
-      vatCertificateFile ? uploadToCloudinary(vatCertificateFile, "business/vat") : null,
-      ssnitCertFile ? uploadToCloudinary(ssnitCertFile, "business/ssnit") : null,
-    ]);
+    let tinCertificateUrl: string | null = null;
+    let incorporationCertUrl: string | null = null;
+    let vatCertificateUrl: string | null = null;
+    let ssnitCertUrl: string | null = null;
+
+    // Only attempt to upload business files if they are actually provided
+    if (tinCertificateFile || incorporationCertFile || vatCertificateFile || ssnitCertFile) {
+        console.log("⚙️ [VERIFY]: Uploading business documents to Cloudinary...");
+        [
+            tinCertificateUrl,
+            incorporationCertUrl,
+            vatCertificateUrl,
+            ssnitCertUrl,
+        ] = await Promise.all([
+            tinCertificateFile ? uploadToCloudinary(tinCertificateFile, "business/tin") : Promise.resolve(null),
+            incorporationCertFile ? uploadToCloudinary(incorporationCertFile, "business/incorporation") : Promise.resolve(null),
+            vatCertificateFile ? uploadToCloudinary(vatCertificateFile, "business/vat") : Promise.resolve(null),
+            ssnitCertFile ? uploadToCloudinary(sssnitCertFile, "business/ssnit") : Promise.resolve(null),
+        ]);
+        console.log(`✅ [VERIFY]: Business document uploads done. TIN: ${tinCertificateUrl}, Inc: ${incorporationCertUrl}, VAT: ${vatCertificateUrl}, SSNIT: ${ssnitCertUrl}`);
+    }
+
 
     // === If identity verification, process identity files ===
     let selfieUrl: string | null = null;
     let idUrl: string | null = null;
     let extractedData: any = {};
-    let matchResult: any = null; // Initialize matchResult here
+    let matchConfidence: number | null = null; // Use matchConfidence directly
 
     if (verificationStep === "identity") {
       const selfieFile = formData.get("selfie") as File | null;
@@ -104,88 +106,45 @@ export async function POST(req: Request) {
       }
 
       console.log("⚙️ [VERIFY]: Performing face match...");
-      matchResult = await matchFace(selfieUrl, idUrl);
+      const matchResult = await matchFace(selfieUrl, idUrl);
+      matchConfidence = matchResult.confidence; // Assign to top-level matchConfidence
+
       if (!matchResult.isMatch) {
         console.error("❌ [VERIFY ERROR]: Face mismatch. Confidence:", matchResult.confidence);
         return NextResponse.json({ error: "Face does not match ID", confidence: matchResult.confidence }, { status: 401 });
       }
     }
 
-    // === User creation/updating ===
-    if (shouldRegister && oauthEmail) {
-      console.log("⚙️ [VERIFY]: Registering user with role:", role);
-
-      const user = await createUserIfNeeded({
-        email: oauthEmail,
-        name: oauthName || extractedData.idName || undefined,
-        contactPhone: oauthContactPhone || undefined,
-        role: role as UserRole,
-        selfieImage: selfieUrl || undefined,
-        idImage: idUrl || undefined,
-        // --- ADD THIS LINE ---
-        faceConfidence: matchResult ? matchResult.confidence : undefined, // Pass face confidence
-        // ---------------------
-        idName: extractedData.idName,
-        idNumber: extractedData.idNumber || extractedData.personalIdNumber,
-        personalIdNumber: extractedData.personalIdNumber,
-        idType: extractedData.idType,
-        idDOB: extractedData.idDOB,
-        idExpiryDate: extractedData.idExpiryDate,
-        idIssueDate: extractedData.idIssueDate,
-        idIssuer: extractedData.idIssuer,
-        nationality: extractedData.nationality,
-        gender: extractedData.gender,
-        placeOfIssue: extractedData.placeOfIssue,
-        rawText: extractedData.rawText,
-        verified: verificationStep === "identity",
-        businessVerification: role === "PROVIDER"
-          ? {
-              create: {
-                tinNumber,
-                registrationNumber,
-                businessName,
-                businessType,
-                businessAddress,
-                tinCertificateUrl,
-                incorporationCertUrl,
-                vatCertificateUrl,
-                ssnitCertUrl,
-                verified: false,
-                submittedAt: new Date(),
-              },
-            }
-          : undefined,
-      });
-
-      console.log("✅ [VERIFY]: User created/updated successfully.");
-      return NextResponse.json({
-        success: true,
-        verified: verificationStep === "identity",
-        user,
-        selfieUrl,
-        imageUrl: idUrl,
-        extractedData,
-      });
-    }
-
-    // === If not registering, return only the verification result ===
+    // === Return appropriate response based on verification step ===
+    // This /api/verify route's primary job is to process files and return URLs/results
+    // The actual user registration/update is handled by /api/register
     if (verificationStep === "identity") {
       return NextResponse.json({
         success: true,
         verified: true,
         selfieUrl,
-        imageUrl: idUrl,
-        matchConfidence: matchResult.confidence,
-        extractedData: {
-          ...extractedData,
-          selfieUrl,
-          idUrl,
-          faceConfidence: matchResult.confidence,
-        },
+        idUrl, // Explicitly return as idUrl for frontend consistency
+        matchConfidence, // Return the confidence
+        extractedData: { // Include extracted data for frontend to collect
+            ...extractedData,
+            // Do not include selfieUrl, idUrl, faceConfidence here again, they are top-level
+        },
       });
-    }
+    } else if (verificationStep === "business") {
+        // Return all generated business document URLs
+        return NextResponse.json({ 
+            success: true, 
+            message: "Business documents processed.",
+            tinCertificateUrl,
+            incorporationCertUrl,
+            vatCertificateUrl,
+            ssnitCertUrl,
+        });
+    }
 
-    return NextResponse.json({ success: true, message: "Business docs submitted." });
+    // Fallback if verificationStep is unknown or not provided
+    console.warn("⚠️ [VERIFY]: Unknown verificationStep or missing. Defaulting to success with no specific data.");
+    return NextResponse.json({ success: true, message: "Verification step completed." });
 
   } catch (err: any) {
     console.error("❌ [VERIFY ERROR]: An error occurred during verification.");
@@ -212,10 +171,15 @@ export async function POST(req: Request) {
 
 // === Helpers ===
 async function uploadToCloudinary(file: File, folder: string): Promise<string> {
+    console.log(`⚙️ [Cloudinary]: Uploading file "${file.name}" to folder "${folder}"...`);
   const buffer = Buffer.from(await file.arrayBuffer());
   const upload = await new Promise<{ secure_url: string }>((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream({ folder }, (error, result) => {
-      if (error || !result) return reject(error);
+      if (error || !result) {
+        console.error(`❌ [Cloudinary]: Upload failed for file "${file.name}":`, error);
+        return reject(error);
+      }
+      console.log(`✅ [Cloudinary]: Upload successful for "${file.name}". URL: ${result.secure_url}`);
       resolve(result as any);
     });
     Readable.from(buffer).pipe(stream);
@@ -224,6 +188,7 @@ async function uploadToCloudinary(file: File, folder: string): Promise<string> {
 }
 
 async function sendOriginalToTaggun(idFile: File) {
+    console.log(`⚙️ [Taggun]: Sending file "${idFile.name}" to Taggun for OCR...`);
   const buffer = Buffer.from(await idFile.arrayBuffer());
 
   const form = new FormData();
