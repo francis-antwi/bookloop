@@ -89,7 +89,6 @@ export async function PATCH(
         type: "system",
         message,
         email: provider.email,
-        contactPhone: provider.phone,
         adminOnly: false,
       },
     });
