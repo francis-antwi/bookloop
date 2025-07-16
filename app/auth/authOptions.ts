@@ -89,12 +89,12 @@ export const authOptions: AuthOptions = {
       if (account?.provider === "google" && user.email) {
         const db = await prisma.user.findUnique({ where: { email: user.email } });
 
-        /* Gate‑keep providers logging in via Google */
-        if (db?.role === UserRole.PROVIDER &&
-            (!db.verified || db.requiresApproval || !db.isFaceVerified)) {
-          console.warn("🛑 PROVIDER not approved – Google login blocked.");
-          return false;
-        }
+        // /* Gate‑keep providers logging in via Google */
+        // if (db?.role === UserRole.PROVIDER &&
+        //     (!db.verified || db.requiresApproval || !db.isFaceVerified)) {
+        //   console.warn("🛑 PROVIDER not approved – Google login blocked.");
+        //   return false;
+        // }
 
         /* If first‑time Google user, create basic record */
         if (!db) {
