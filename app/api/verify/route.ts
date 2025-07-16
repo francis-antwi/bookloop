@@ -45,7 +45,7 @@ export async function POST(req: Request) {
     const tinCertificateFile = formData.get("tinCertificate") as File | null;
     const incorporationCertFile = formData.get("incorporationCert") as File | null;
     const vatCertificateFile = formData.get("vatCertificate") as File | null;
-    const ssnitCertFile = formData.get("ssnitCert") as File | null;
+    const ssnitCertFile = formData.get("ssnitCert") as File | null; // Corrected variable name
 
     let tinCertificateUrl: string | null = null;
     let incorporationCertUrl: string | null = null;
@@ -59,12 +59,12 @@ export async function POST(req: Request) {
             tinCertificateUrl,
             incorporationCertUrl,
             vatCertificateUrl,
-            ssnitCertUrl,
+            ssnitCertUrl, // Corrected variable name here
         ] = await Promise.all([
             tinCertificateFile ? uploadToCloudinary(tinCertificateFile, "business/tin") : Promise.resolve(null),
             incorporationCertFile ? uploadToCloudinary(incorporationCertFile, "business/incorporation") : Promise.resolve(null),
             vatCertificateFile ? uploadToCloudinary(vatCertificateFile, "business/vat") : Promise.resolve(null),
-            ssnitCertFile ? uploadToCloudinary(sssnitCertFile, "business/ssnit") : Promise.resolve(null),
+            ssnitCertFile ? uploadToCloudinary(ssnitCertFile, "business/ssnit") : Promise.resolve(null), // Corrected variable name here
         ]);
         console.log(`✅ [VERIFY]: Business document uploads done. TIN: ${tinCertificateUrl}, Inc: ${incorporationCertUrl}, VAT: ${vatCertificateUrl}, SSNIT: ${ssnitCertUrl}`);
     }
