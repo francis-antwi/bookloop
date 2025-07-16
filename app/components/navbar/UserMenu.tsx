@@ -5,7 +5,7 @@ import { AiOutlineMenu } from "react-icons/ai";
 import { useRouter } from "next/navigation";
 import Avatar from "../Avatar";
 import MenuItem from "./MenuItem";
-import { User } from "@prisma/client"; // Ensure User type includes 'verified' and 'requiresApproval'
+import { User } from "@prisma/client";
 import useRegisterModal from "@/app/hooks/useRegisterModal";
 import useLoginModal from "@/app/hooks/useLoginModal";
 import useRentModal from "@/app/hooks/useRental";
@@ -13,7 +13,6 @@ import { signOut, useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FiMail, FiHome, FiHeart, FiCalendar, FiList, FiCheck, FiBell, FiLogOut, FiUser, FiPlus } from "react-icons/fi";
 import axios from "axios";
-
 interface UserMenuProps {
   currentUser?: User | null;
 }
@@ -29,19 +28,19 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuItemsRef = useRef<(HTMLDivElement | null)[]>([]);
-  const { data: session, update } = useSession();
-  const [unreadCount, setUnreadCount] = useState(0);
+  const { data: session, update } = useSession(); 
+const [unreadCount, setUnreadCount] = useState(0);
 
-  useEffect(() => {
-    if (!currentUser) return;
+useEffect(() => {
+  if (!currentUser) return;
 
-    axios.get('/api/messages/inbox')
-      .then((res) => {
-        const unread = res.data.filter((c: any) => c.unread).length;
-        setUnreadCount(unread);
-      })
-      .catch(() => setUnreadCount(0));
-  }, [currentUser]);
+  axios.get('/api/messages/inbox')
+    .then((res) => {
+      const unread = res.data.filter((c: any) => c.unread).length;
+      setUnreadCount(unread);
+    })
+    .catch(() => setUnreadCount(0));
+}, [currentUser]);
 
   const toggleOpen = useCallback(() => {
     setIsOpen((value) => !value);
@@ -52,18 +51,8 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
     if (!currentUser) {
       return loginModal.onOpen();
     }
-    // Only allow rent if the user is a verified provider and doesn't require approval
-    if (currentUser.role === "PROVIDER" && currentUser.verified && !currentUser.requiresApproval) {
-      rentModal.onOpen();
-    } else {
-      // Optionally, show a toast or redirect if they are a provider but not yet approved
-      if (currentUser.role === "PROVIDER") {
-        router.push('/pending-approval'); // Redirect to pending approval page
-      } else {
-        loginModal.onOpen(); // Or some other message for non-providers
-      }
-    }
-  }, [currentUser, loginModal, rentModal, router]);
+    rentModal.onOpen();
+  }, [currentUser, loginModal, rentModal]);
 
   useEffect(() => {
     const handleInteraction = (event: MouseEvent | KeyboardEvent | TouchEvent) => {
@@ -145,9 +134,8 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
     }
   };
 
-  // Determine if the current user is a fully verified provider (identity + business + admin approval)
   const isVerifiedProvider =
-    currentUser?.role === "PROVIDER" && currentUser?.verified && !currentUser?.requiresApproval;
+    currentUser?.role === "PROVIDER" && currentUser?.isFaceVerified;
 
   const menuItems = currentUser
     ? [
@@ -161,23 +149,24 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
             ]
           : []),
         {
-          onClick: () => router.push("/chat/inbox"),
-          label: (
-            <div className="flex justify-between items-center w-full">
-              <span className="flex items-center gap-2">
-                <FiMail className="w-4 h-4" />
-                Inbox
-              </span>
-              {unreadCount > 0 && (
-                <span className="ml-2 text-xs font-semibold text-white bg-red-500 rounded-full w-5 h-5 flex items-center justify-center">
-                  {unreadCount}
-                </span>
-              )}
-            </div>
-          ),
-        },
+       
+  onClick: () => router.push("/chat/inbox"),
+  label: (
+    <div className="flex justify-between items-center w-full">
+      <span className="flex items-center gap-2">
+        <FiMail className="w-4 h-4" />
+        Inbox
+      </span>
+      {unreadCount > 0 && (
+        <span className="ml-2 text-xs font-semibold text-white bg-red-500 rounded-full w-5 h-5 flex items-center justify-center">
+          {unreadCount}
+        </span>
+      )}
+    </div>
+  ),
+},
+
         { onClick: () => router.push("/notifications"), label: "Notifications", icon: <FiBell className="w-4 h-4" /> },
-        // Only show "Get Listed" if the user is a fully verified provider
         ...(isVerifiedProvider
           ? [{ onClick: onRent, label: "Get Listed", icon: <FiPlus className="w-4 h-4" /> }]
           : []),
@@ -196,7 +185,6 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
   return (
     <div className="relative" ref={dropdownRef}>
       <div className="flex flex-row items-center gap-3">
-        {/* Only show "Get Listed" button if the user is a fully verified provider */}
         {isVerifiedProvider && (
           <button
             onClick={onRent}
@@ -316,15 +304,15 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
                       label={
                         <div className="flex items-center gap-3 py-1">
                           <div className={`transition-colors duration-200 ${
-                            item.label === "Logout"
-                              ? "text-red-500 group-hover:text-red-600"
+                            item.label === "Logout" 
+                              ? "text-red-500 group-hover:text-red-600" 
                               : "text-gray-500 group-hover:text-blue-600"
                           }`}>
                             {item.icon}
                           </div>
                           <span className={`font-medium ${
-                            item.label === "Logout"
-                              ? "text-red-600"
+                            item.label === "Logout" 
+                              ? "text-red-600" 
                               : "text-gray-700 group-hover:text-gray-900"
                           }`}>
                             {item.label === "Logout" && isSigningOut
@@ -339,8 +327,8 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
                         </div>
                       }
                       className={`rounded-xl transition-all duration-200 hover:bg-gray-50 ${
-                        item.label === "Logout"
-                          ? "hover:bg-red-50 border-t border-gray-100 mt-2"
+                        item.label === "Logout" 
+                          ? "hover:bg-red-50 border-t border-gray-100 mt-2" 
                           : "hover:bg-blue-50"
                       }`}
                       role="menuitem"

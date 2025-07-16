@@ -45,7 +45,7 @@ model User {
   selfieImage       String?
   idImage           String?
   faceConfidence    Float?
-   status           String   @default("ACTIVE") // ACTIVE, PENDING_REVIEW, REJECTED, BANNED
+  status           String   @default("ACTIVE") // ACTIVE, PENDING_REVIEW, REJECTED, BANNED
   requiresApproval Boolean  @default(false)
   idName            String?
   idNumber          String?
