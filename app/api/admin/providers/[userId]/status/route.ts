@@ -93,10 +93,12 @@ export async function PATCH(
       },
     });
 
-    return NextResponse.json({
-      success: true,
-      verification: updatedVerification,
-    });
+return NextResponse.json({
+  success: true,
+  businessVerified: updatedUser.businessVerified, // ✅ Include this
+  verification: updatedVerification,
+});
+
 
   } catch (error) {
     console.error("❌ Error during provider approval update:", error);

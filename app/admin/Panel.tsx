@@ -334,18 +334,17 @@ const handleProviderApproval = async (id: string, status: 'APPROVED' | 'REJECTED
 
     const updated = await res.json();
 
-    setProviders(prev =>
-      prev.map(provider =>
-        provider.id === id
-          ? { ...provider, status: updated.verification.verified ? 'APPROVED' : 'REJECTED', businessVerified: updated.businessVerified }
-          : provider
-      )
-    );
-  } catch (error) {
-    console.error('Error updating provider:', error);
-    alert('Failed to update provider status.');
-  }
-};
+setProviders(prev =>
+  prev.map(provider =>
+    provider.id === id
+      ? {
+          ...provider,
+          status: updated.verification.verified ? 'APPROVED' : 'REJECTED',
+          businessVerified: updated.businessVerified,
+        }
+      : provider
+  )
+);
 
   const markNotificationRead = (id: string) => {
     setNotifications(prev =>
