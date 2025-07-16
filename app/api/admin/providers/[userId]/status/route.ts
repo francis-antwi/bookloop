@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/app/libs/prismadb";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { NotificationType } from "@prisma/client";
 
 export async function PATCH(
   req: Request,
@@ -83,15 +84,15 @@ export async function PATCH(
       ? "🎉 Your business application has been approved. You can now list your services!"
       : `❌ Your business application was rejected.${notes ? ` Reason: ${notes}` : ""}`;
 
-    await prisma.notification.create({
-      data: {
-        userId: provider.id,
-        type: "system",
-        message,
-        email: provider.email,
-        adminOnly: false,
-      },
-    });
+await prisma.notification.create({
+  data: {
+    userId: provider.id,
+    type: NotificationType.SYSTEM, // ✅ Correct enum usage
+    message,
+    email: provider.email,
+    adminOnly: false,
+  },
+});
 
 return NextResponse.json({
   success: true,
