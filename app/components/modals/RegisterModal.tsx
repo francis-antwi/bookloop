@@ -298,7 +298,7 @@ const RegisterModal = () => {
           businessType: data.businessType,
           businessAddress: data.businessAddress,
           businessPhone: data.businessPhone,
-          registrationNumber: data.registrationNumber
+          registrationNumber: data.registrationNumber,
           businessVerified: false,
 
         });
