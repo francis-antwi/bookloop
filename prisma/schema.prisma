@@ -41,12 +41,12 @@ model User {
   isOtpVerified     Boolean    @default(false)
   isFaceVerified    Boolean    @default(false)
   verified          Boolean    @default(false)
-   trustScore       Float?
+  trustScore        Float?
   selfieImage       String?
   idImage           String?
   faceConfidence    Float?
-  status           String   @default("ACTIVE") // ACTIVE, PENDING_REVIEW, REJECTED, BANNED
-  requiresApproval Boolean  @default(false)
+  status            String     @default("ACTIVE") // ACTIVE, PENDING_REVIEW, REJECTED, BANNED
+  requiresApproval  Boolean    @default(false)
   idName            String?
   idNumber          String?
   personalIdNumber  String?
@@ -59,24 +59,45 @@ model User {
   gender            String?
   placeOfIssue      String?
   rawText           String?
-  businessVerification BusinessVerification?
-
+  businessVerified  Boolean?   @default(false)
   emailVerified     DateTime?
   image             String?
   resetToken        String?
   resetTokenExpiry  DateTime?
 
-  favouriteIds      String[]     @default([])
+  favouriteIds      String[]   @default([])
   accounts          Account[]
   listings          Listing[]
   reservations      Reservation[]
   notifications     Notification[]
   reviews           Review[]
-  sentMessages      Message[]    @relation("SentMessages")
-  receivedMessages  Message[]    @relation("ReceivedMessages")
+  sentMessages      Message[]  @relation("SentMessages")
+  receivedMessages  Message[]  @relation("ReceivedMessages")
 
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  businessVerification BusinessVerification? @relation("UserToBusinessVerification")
+
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+}
+
+model BusinessVerification {
+  id                  String   @id @default(uuid())
+  userId              String   @unique
+  tinNumber           String
+  registrationNumber  String
+  tinCertificateUrl   String?
+  incorporationCertUrl String?
+  vatCertificateUrl   String?
+  ssnitCertUrl        String?
+  businessAddress     String?
+  businessName        String?
+  businessType        String?
+  verified            Boolean  @default(false)
+  verificationNotes   String?
+  submittedAt         DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user                User     @relation("UserToBusinessVerification", fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model OTPVerification {
@@ -119,7 +140,7 @@ model Account {
   idIssuer           String?
 
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  reviews            Review[]  // ✅ Now has proper relation
+  reviews            Review[]
 
   @@unique([provider, providerAccountId])
 }
@@ -137,7 +158,7 @@ model Listing {
   contactPhone     String?
   address          String?
   status           ListingStatus  @default(PENDING)
-  suggestedPrice    Float?
+  suggestedPrice   Float?
   bedrooms         Int?
   bathrooms        Int?
   furnished        Boolean?
@@ -168,51 +189,32 @@ model Listing {
 
   user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   reservations     Reservation[]
-  reviews          Review[]       // ✅ Fix for deployment error
+  reviews          Review[]
 }
-model BusinessVerification {
-  id                String     @id @default(uuid())
-  userId            String     @unique
-  tinNumber         String
-  registrationNumber String
-  tinCertificateUrl String?
-  incorporationCertUrl String?
-  vatCertificateUrl String?
-  ssnitCertUrl      String?
-  businessAddress   String?
-  businessName      String?
-  businessType      String?
-  verified          Boolean    @default(false)
-  verificationNotes String?
-  submittedAt       DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
-
-  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
 
 model Reservation {
-  id             String             @id @default(uuid())
-  userId         String
-  listingId      String
-  startDate      DateTime
-  endDate        DateTime
-  totalPrice     Int
-  createdAt      DateTime           @default(now())
-  email          String?
-  contactPhone   String?
-  fraudRisk      Float?
-  status         ReservationStatus  @default(PENDING)
+  id               String             @id @default(uuid())
+  userId           String
+  listingId        String
+  startDate        DateTime
+  endDate          DateTime
+  totalPrice       Int
+  createdAt        DateTime           @default(now())
+  email            String?
+  contactPhone     String?
+  fraudRisk        Float?
+  status           ReservationStatus  @default(PENDING)
   cancellationRisk Float?
-  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  listing        Listing            @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing          Listing            @relation(fields: [listingId], references: [id], onDelete: Cascade)
 }
 
 model Review {
   id          String     @id @default(uuid())
   userId      String
   listingId   String
-  accountId   String?    
+  accountId   String?
 
   rating      Int
   comment     String
@@ -224,7 +226,6 @@ model Review {
 
   @@unique([userId, listingId])
 }
-
 
 model Notification {
   id             String            @id @default(uuid())

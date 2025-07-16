@@ -195,6 +195,7 @@ export async function POST(request: Request) {
       verified: actualRole === UserRole.PROVIDER ? false : !!verified, // Providers need admin approval
       requiresApproval: actualRole === UserRole.PROVIDER,
       status: actualRole === UserRole.PROVIDER ? "PENDING_REVIEW" : "ACTIVE",
+      businessVerified: actualRole === UserRole.PROVIDER ? false : undefined
     };
 
     // Conditionally add identity verification fields if present in the current payload

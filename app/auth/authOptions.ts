@@ -1,4 +1,4 @@
- // ============================
+// ============================
 // ✅ NextAuth Configuration
 // ============================
 
@@ -29,25 +29,24 @@ export const authOptions: AuthOptions = {
           throw new Error("MISSING_CREDENTIALS");
         }
 
-        /* ── Look‑up user ───────────────────────────── */
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
         });
+
         if (!user || !user.hashedPassword) throw new Error("INVALID_CREDENTIALS");
 
-        /* ── Verify password ────────────────────────── */
         const ok = await bcrypt.compare(credentials.password, user.hashedPassword);
         if (!ok) throw new Error("INVALID_CREDENTIALS");
 
-        /* ── Gate‑keep providers ────────────────────── */
         if (
           user.role === UserRole.PROVIDER &&
-          (!user.verified || user.requiresApproval || !user.isFaceVerified)
+          (
+            !user.verified ||
+            user.requiresApproval ||
+            !user.isFaceVerified ||
+            !user.businessVerified // ✅ NEW check
+          )
         ) {
-          // three separate reasons funneled into one error:
-          //  - face not verified
-          //  - admin hasn’t flipped "requiresApproval"
-          //  - verified flag still false
           throw new Error("PROVIDER_NOT_APPROVED");
         }
 
@@ -63,50 +62,51 @@ export const authOptions: AuthOptions = {
           isFaceVerified:   user.isFaceVerified  ?? false,
           verified:         user.verified        ?? false,
           requiresApproval: user.requiresApproval?? false,
+          businessVerified: user.businessVerified?? false, // ✅ NEW
         };
       },
     }),
   ],
 
-  /* ——— Custom pages ——— */
   pages: {
     signIn: "/",
     error:  "/auth/error",
     newUser:"/role",
   },
 
-  /* ——— Session & JWT ——— */
-  session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60, updateAge: 24 * 60 * 60 },
-  jwt:     { maxAge: 30 * 24 * 60 * 60 },
-  secret:  process.env.NEXTAUTH_SECRET,
-  debug:   process.env.NODE_ENV === "development",
+  session: {
+    strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60,
+    updateAge: 24 * 60 * 60,
+  },
+  jwt: { maxAge: 30 * 24 * 60 * 60 },
+  secret: process.env.NEXTAUTH_SECRET,
+  debug: process.env.NODE_ENV === "development",
   trustHost: true,
 
-  /* ——— Callbacks ——— */
   callbacks: {
-    /* -------- signIn for OAuth providers -------- */
     async signIn({ user, account }) {
       if (account?.provider === "google" && user.email) {
         const db = await prisma.user.findUnique({ where: { email: user.email } });
 
-        // /* Gate‑keep providers logging in via Google */
+        // Optional gatekeeping for Google providers — uncomment if needed:
         // if (db?.role === UserRole.PROVIDER &&
-        //     (!db.verified || db.requiresApproval || !db.isFaceVerified)) {
+        //     (!db.verified || db.requiresApproval || !db.isFaceVerified || !db.businessVerified)) {
         //   console.warn("🛑 PROVIDER not approved – Google login blocked.");
         //   return false;
         // }
 
-        /* If first‑time Google user, create basic record */
         if (!db) {
           await prisma.user.create({
             data: {
               email:  user.email,
               name:   user.name  ?? "",
               image:  user.image ?? null,
-              role:   null,                  // they’ll pick later
+              role:   null,
               verified:         false,
               isFaceVerified:   false,
               requiresApproval: false,
+              businessVerified: false, // ✅ NEW
             },
           });
         }
@@ -114,23 +114,22 @@ export const authOptions: AuthOptions = {
       return true;
     },
 
-    /* -------- JWT: enrich & react to updates -------- */
     async jwt({ token, user, trigger, session }) {
-      /* Handle role‑picker UI saving role into session → token */
       if (trigger === "update" && session?.role) {
         token.role = session.role;
         await prisma.user.update({
           where: { email: token.email! },
           data:  { role: session.role },
         });
+
         if (session.role === UserRole.PROVIDER) {
           token.isFaceVerified   = false;
           token.verified         = false;
           token.requiresApproval = true;
+          token.businessVerified = false; // ✅ NEW
         }
       }
 
-      /* Always refresh token from DB */
       const email = user?.email ?? token.email as string | undefined;
       if (email) {
         const db = await prisma.user.findUnique({
@@ -139,21 +138,27 @@ export const authOptions: AuthOptions = {
             id: true, name: true, email: true, image: true, role: true,
             isOtpVerified: true, isFaceVerified: true,
             verified: true, requiresApproval: true,
+            businessVerified: true, // ✅ NEW
           },
         });
+
         if (db) Object.assign(token, {
-          id: db.id, name: db.name, email: db.email, image: db.image,
+          id: db.id,
+          name: db.name,
+          email: db.email,
+          image: db.image,
           role: db.role,
           isOtpVerified:    db.isOtpVerified,
           isFaceVerified:   db.isFaceVerified,
           verified:         db.verified,
           requiresApproval: db.requiresApproval,
+          businessVerified: db.businessVerified, // ✅ NEW
         });
       }
+
       return token;
     },
 
-    /* -------- Session object to client -------- */
     async session({ session, token }) {
       if (session.user) {
         session.user = {
@@ -166,13 +171,13 @@ export const authOptions: AuthOptions = {
           isFaceVerified:   token.isFaceVerified  ?? false,
           verified:         token.verified        ?? false,
           requiresApproval: token.requiresApproval?? false,
+          businessVerified: token.businessVerified?? false, // ✅ NEW
         };
       }
       return session;
     },
   },
 
-  /* ——— Events (for logging) ——— */
   events: {
     async signIn({ user, account }) {
       console.log("✅ Signed in:", user.email, "via", account?.provider);
@@ -187,6 +192,7 @@ export const authOptions: AuthOptions = {
           role: session.user?.role,
           verified: session.user?.verified,
           requiresApproval: session.user?.requiresApproval,
+          businessVerified: session.user?.businessVerified, // ✅ NEW
           expires: session.expires,
         });
       }

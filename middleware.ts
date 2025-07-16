@@ -1,7 +1,7 @@
 import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import prisma from "@/app/libs/prismadb"; // Make sure this is a shared singleton
+import prisma from "@/app/libs/prismadb";
 
 export default withAuth(
   async function middleware(req: NextRequest) {
@@ -32,6 +32,7 @@ export default withAuth(
     let isVerified = token.verified;
     let isFaceVerified = token.isFaceVerified;
     let requiresApproval = false;
+    let isBusinessVerified = false;
 
     if (token.id) {
       try {
@@ -42,12 +43,15 @@ export default withAuth(
             verified: true,
             isFaceVerified: true,
             requiresApproval: true,
+            businessVerified: true, // ✅ include
           },
         });
+
         currentRole = user?.role ?? null;
         isVerified = user?.verified ?? false;
         isFaceVerified = user?.isFaceVerified ?? false;
         requiresApproval = user?.requiresApproval ?? false;
+        isBusinessVerified = user?.businessVerified ?? false;
       } catch (err) {
         console.error("❌ Failed to fetch user from DB:", err);
       }
@@ -79,18 +83,20 @@ export default withAuth(
     // ✅ 8. Verification logic for /verify
     if (isVerificationPage) {
       if (currentRole === "PROVIDER" && (isFaceVerified || isVerified)) {
-        if (requiresApproval) {
+        if (requiresApproval || !isBusinessVerified) {
           return NextResponse.redirect(new URL("/pending-approval", req.url));
         }
         return NextResponse.redirect(new URL("/my-listings", req.url));
       }
+
       if (currentRole === "CUSTOMER" && isVerified) {
         return NextResponse.redirect(new URL("/", req.url));
       }
+
       return NextResponse.next();
     }
 
-    // 🔒 9. Restrict provider-only pages and enforce full approval
+    // 🔒 9. Restrict provider-only pages and enforce full approval + business verified
     if (isProviderPage) {
       if (currentRole !== "PROVIDER") {
         return NextResponse.redirect(new URL("/403", req.url));
@@ -100,13 +106,13 @@ export default withAuth(
         return NextResponse.redirect(new URL("/verify", req.url));
       }
 
-      if ((isFaceVerified || isVerified) && requiresApproval) {
+      if ((isFaceVerified || isVerified) && (requiresApproval || !isBusinessVerified)) {
         return NextResponse.redirect(new URL("/pending-approval", req.url));
       }
     }
 
-    // 🔄 10. If provider tries accessing / or /verify or /pending-approval after approval, redirect to /my-listings
-    if (currentRole === "PROVIDER" && (isFaceVerified || isVerified) && !requiresApproval) {
+    // 🔄 10. If provider tries accessing / or /verify or /pending-approval after full approval, redirect to /my-listings
+    if (currentRole === "PROVIDER" && (isFaceVerified || isVerified) && !requiresApproval && isBusinessVerified) {
       const unnecessaryPaths = ["/", "/verify", "/pending-approval"];
       if (unnecessaryPaths.includes(pathname)) {
         return NextResponse.redirect(new URL("/my-listings", req.url));

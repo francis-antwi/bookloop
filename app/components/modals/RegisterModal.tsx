@@ -291,6 +291,7 @@ const RegisterModal = () => {
           rawText: extractedData.rawText,
           requiresApproval: true, 
           status: 'PENDING_REVIEW',
+
           // Business data
           tinNumber: data.tinNumber,
           businessName: data.businessName,
@@ -298,6 +299,8 @@ const RegisterModal = () => {
           businessAddress: data.businessAddress,
           businessPhone: data.businessPhone,
           registrationNumber: data.registrationNumber
+          businessVerified: false,
+
         });
 
         // Add business files to form data

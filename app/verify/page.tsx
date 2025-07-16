@@ -52,7 +52,8 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
     businessName: '',
     businessType: '',
     businessAddress: '',
-    contactPhone: ''
+    contactPhone: '',
+    
   });
 
   const [businessFiles, setBusinessFiles] = useState({
@@ -139,6 +140,8 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
           ...response.data.extractedData,
           verified: true,
           extractionComplete: true,
+          businessVerified: false
+
         };
         console.log("📦 [FRONTEND]: Collected Identity Data (after update):", JSON.stringify(updatedData, null, 2));
         return updatedData;

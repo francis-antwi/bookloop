@@ -25,6 +25,7 @@ interface SanitizedUser {
   role?: string; // Assuming UserRole is a string
   isOtpVerified?: boolean;
   isFaceVerified?: boolean;
+  businessVerified?: boolean;
 }
 
 export async function getSession() {
@@ -67,6 +68,7 @@ export default async function getCurrentUser(): Promise<SanitizedUser | null> {
         role: true, // Assuming you need the role in the client
         isOtpVerified: true,
         isFaceVerified: true,
+        businessVerified: boolean;
       },
     });
 
@@ -107,5 +109,6 @@ function sanitizeUser(user: any): SanitizedUser {
     role: user.role, // Include role
     isOtpVerified: user.isOtpVerified,
     isFaceVerified: user.isFaceVerified,
+    businessVerified:user.businessVerified
   };
 }

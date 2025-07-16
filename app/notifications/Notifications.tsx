@@ -207,7 +207,8 @@ const NotificationsContent = () => {
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
               }`}
             >
-              Unread ({unreadCount})
+              Unread ({unreadCount > 99 ? "99+" : unreadCount}
+)
             </button>
           </div>
         </div>
