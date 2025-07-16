@@ -6,37 +6,27 @@ import { getServerSession } from "next-auth";
 import authOptions from "@/app/auth/authOptions";
 
 function parseDate(dateStr: string): Date | null {
-  // Added console.log to debug date parsing
   console.log(`⚙️ [parseDate]: Attempting to parse date string: "${dateStr}"`);
   try {
     const parts = dateStr.split(/[\/\-\.]/).map(p => p.trim());
     if (parts.length === 3) {
-      // Assuming DD/MM/YYYY or YYYY-MM-DD or DD-MM-YYYY format
-      // Let's ensure consistent YYYY-MM-DD for Date constructor
       let day = parts[0];
       let month = parts[1];
       let year = parts[2];
 
-      // Check for common formats and reorder if necessary (e.g., DD/MM/YYYY)
-      // If year is first (like 2002-08-25), it's already YYYY-MM-DD
-      // If year is last (like 25/08/2002), assume DD/MM/YYYY
+      // Heuristic to determine YYYY-MM-DD from DD/MM/YYYY or YYYY-MM-DD
       if (year.length === 4 && parseInt(year) > 1900 && parseInt(year) < 2100) {
-        // Likely YYYY-MM-DD or DD/MM/YYYY where year is last
-        // If it's DD/MM/YYYY, reorder to YYYY-MM-DD
-        if (parseInt(day) > 12 && parseInt(month) <= 12) { // Heuristic: if day > 12, it's likely DD/MM/YYYY
-            [day, month, year] = [parts[0], parts[1], parts[2]]; // Keep as is, will be reordered below
-        } else if (parseInt(month) > 12) { // If month > 12, it's likely MM/DD/YYYY, but we expect DD/MM/YYYY or YYYY-MM-DD
-            // This case might indicate an unexpected format or an error in OCR output
-            console.warn(`⚠️ [parseDate]: Unusual month value (${month}) for date string: "${dateStr}"`);
+        // If year is last (e.g., 25/08/2002), assume DD/MM/YYYY and reorder
+        if (parseInt(day) > 12 && parseInt(month) <= 12) {
+            [day, month, year] = [parts[0], parts[1], parts[2]];
         }
       } else if (day.length === 4 && parseInt(day) > 1900 && parseInt(day) < 2100) {
-          // Likely YYYY-MM-DD where year is first
+          // If year is first (e.g., 2002-08-25), it's already YYYY-MM-DD
           [year, month, day] = [parts[0], parts[1], parts[2]];
       } else {
-          // Default to DD/MM/YYYY if no clear year first pattern
+          // Default to DD/MM/YYYY if no clear pattern
           [day, month, year] = [parts[0], parts[1], parts[2]];
       }
-
 
       if (year.length === 2) year = parseInt(year) > 30 ? `19${year}` : `20${year}`;
       
@@ -64,7 +54,6 @@ export async function POST(request: Request) {
     const googleUserName = session?.user?.name || null;
 
     const body = await request.json();
-    // CRITICAL LOG: Check this output in your server logs!
     console.log("📦 [REGISTER]: Received Registration payload:", JSON.stringify(body, null, 2));
     errorContext.requestBody = body;
 
@@ -73,9 +62,9 @@ export async function POST(request: Request) {
       name,
       contactPhone,
       password,
-      role = "CUSTOMER",
-      selfieImage, // This will be the Cloudinary URL from /api/verify
-      idImage,     // This will be the Cloudinary URL from /api/verify
+      role = "CUSTOMER", // Default to CUSTOMER if not provided in payload
+      selfieImage, 
+      idImage,     
       faceConfidence,
       idName,
       idNumber,
@@ -84,20 +73,31 @@ export async function POST(request: Request) {
       idIssuer,
       idIssueDate,
       personalIdNumber,
-      // imageUrl and selfieUrl are likely not needed here if /api/verify sends the direct URLs as selfieImage/idImage
-      // but keeping them in destructuring for safety if your frontend sends them directly
-      imageUrl,
-      selfieUrl,
       nationality,
       gender,
       placeOfIssue,
       idType,
       rawText,
-      verified,
-      extractionComplete
+      verified, // This 'verified' flag from frontend is for identity verification completion
+      extractionComplete, // Indicates OCR and face match were successful
+      
+      // Business fields
+      tinNumber,
+      registrationNumber,
+      businessName,
+      businessType,
+      businessAddress,
+      tinCertificateUrl,
+      incorporationCertUrl,
+      vatCertificateUrl,
+      ssnitCertUrl,
+      isFullProviderRegistration // Flag from frontend to indicate full submission
     } = body;
 
     const displayName = isGoogleAuth && googleUserName ? googleUserName : name;
+    // Determine the actual role for this registration/update.
+    // If isFullProviderRegistration is true, force role to PROVIDER.
+    const actualRole: UserRole = isFullProviderRegistration ? UserRole.PROVIDER : (Object.values(UserRole).includes(role) ? role : UserRole.CUSTOMER);
 
     if (!displayName || (!email && !isGoogleAuth)) {
       console.warn("⚠️ [REGISTER]: Missing required fields for registration.", { displayName, email, isGoogleAuth });
@@ -110,8 +110,8 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    if (!Object.values(UserRole).includes(role)) {
-      console.warn("⚠️ [REGISTER]: Invalid user role provided:", role);
+    if (!Object.values(UserRole).includes(actualRole)) { // Validate actualRole
+      console.warn("⚠️ [REGISTER]: Invalid user role provided:", actualRole);
       return NextResponse.json({ error: "Invalid user role" }, { status: 400 });
     }
 
@@ -129,35 +129,38 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Phone already registered" }, { status: 409 });
     }
 
-    // Parse dates received from the payload
+    // Parse dates
     const parsedDOB = idDOB ? parseDate(idDOB) : null;
     const parsedExpiry = idExpiryDate ? parseDate(idExpiryDate) : null;
     const parsedIssue = idIssueDate ? parseDate(idIssueDate) : null;
-
-    // Log parsed dates to confirm they are Date objects or null
     console.log("⚙️ [REGISTER]: Parsed Dates - DOB:", parsedDOB, "Expiry:", parsedExpiry, "Issue:", parsedIssue);
 
-
-    if (role === "PROVIDER") {
-      console.log("⚙️ [REGISTER]: Processing as PROVIDER role. Checking verification data.");
+    // Dynamic validation based on actualRole and data presence
+    if (actualRole === UserRole.PROVIDER) {
+      console.log("⚙️ [REGISTER]: Processing as PROVIDER role. Performing comprehensive validation.");
       const missing = [];
 
-      // Note: selfieImage and idImage here refer to the URLs passed from /api/verify
-      if (!selfieImage && !selfieUrl) missing.push("selfieImage (URL)");
-      if (!idImage && !imageUrl) missing.push("idImage (URL)");
-      // Ensure faceConfidence is a number and meets a minimum threshold
+      // Identity verification checks (required for PROVIDER)
+      if (!selfieImage) missing.push("selfieImage (URL)");
+      if (!idImage) missing.push("idImage (URL)");
       if (typeof faceConfidence !== 'number' || faceConfidence < 0.5) missing.push("faceConfidence (must be >= 0.5)");
       if (!idName) missing.push("idName");
       if (!idNumber && !personalIdNumber) missing.push("idNumber or personalIdNumber");
       if (!idType) missing.push("idType");
 
+      // Business verification checks (required for PROVIDER)
+      if (!tinNumber) missing.push("tinNumber");
+      if (!businessName) missing.push("businessName");
+      if (!businessType) missing.push("businessType");
+      if (!tinCertificateUrl) missing.push("tinCertificateUrl"); // Assuming this is required for business
+
       if (missing.length > 0) {
-        console.error("❌ [REGISTER ERROR]: Missing provider verification data:", missing);
+        console.error("❌ [REGISTER ERROR]: Missing PROVIDER verification data:", missing);
         return NextResponse.json({
-          error: "Missing provider verification data",
+          error: "Missing required verification data for Provider role",
           missing,
           payload: body,
-          message: "User not saved. Verification incomplete."
+          message: "User not saved. Provider verification incomplete."
         }, { status: 400 });
       }
 
@@ -169,7 +172,9 @@ export async function POST(request: Request) {
         console.warn("⚠️ [REGISTER]: Invalid date of birth (future date).");
         return NextResponse.json({ error: "Invalid date of birth" }, { status: 400 });
       }
-      // This condition might need adjustment based on your full Google Auth flow
+      // This check for extractionComplete might be redundant if all data is sent at once,
+      // but keeping it if there's a nuanced multi-stage submission for Google users.
+      // If isFullProviderRegistration implies extractionComplete, this can be removed.
       if (isGoogleAuth && !extractionComplete) {
         console.warn("⚠️ [REGISTER]: Google PROVIDER is not fully verified (extraction not complete).");
         return NextResponse.json({
@@ -180,137 +185,110 @@ export async function POST(request: Request) {
       }
     }
 
+    // Prepare data object for Prisma operations, only including fields that are present
+    const userData: any = {
+      email: email || googleUserEmail,
+      name: displayName,
+      contactPhone: contactPhone || null,
+      role: actualRole, // Use the determined actualRole
+      isFaceVerified: (typeof faceConfidence === 'number' && faceConfidence >= 0.5), // Set based on confidence
+      verified: actualRole === UserRole.PROVIDER ? false : !!verified, // Providers need admin approval
+      requiresApproval: actualRole === UserRole.PROVIDER,
+      status: actualRole === UserRole.PROVIDER ? "PENDING_REVIEW" : "ACTIVE",
+    };
+
+    // Conditionally add identity verification fields if present in the current payload
+    if (selfieImage) userData.selfieImage = selfieImage;
+    if (idImage) userData.idImage = idImage;
+    if (typeof faceConfidence === 'number') userData.faceConfidence = faceConfidence;
+    if (idName) userData.idName = idName;
+    if (idNumber) userData.idNumber = idNumber;
+    if (parsedDOB) userData.idDOB = parsedDOB;
+    if (parsedExpiry) userData.idExpiryDate = parsedExpiry;
+    if (parsedIssue) userData.idIssueDate = parsedIssue;
+    if (idIssuer) userData.idIssuer = idIssuer;
+    if (personalIdNumber) userData.personalIdNumber = personalIdNumber;
+    if (nationality) userData.nationality = nationality;
+    if (gender) userData.gender = gender;
+    if (placeOfIssue) userData.placeOfIssue = placeOfIssue;
+    if (idType) userData.idType = idType;
+    if (rawText) userData.rawText = rawText;
+
+    // Prepare business verification data for upsert/create
+    const businessVerificationData: any = {};
+    let hasBusinessData = false;
+    if (tinNumber) { businessVerificationData.tinNumber = tinNumber; hasBusinessData = true; }
+    if (registrationNumber) { businessVerificationData.registrationNumber = registrationNumber; hasBusinessData = true; }
+    if (businessName) { businessVerificationData.businessName = businessName; hasBusinessData = true; }
+    if (businessType) { businessVerificationData.businessType = businessType; hasBusinessData = true; }
+    if (businessAddress) { businessVerificationData.businessAddress = businessAddress; hasBusinessData = true; }
+    if (tinCertificateUrl) { businessVerificationData.tinCertificateUrl = tinCertificateUrl; hasBusinessData = true; }
+    if (incorporationCertUrl) { businessVerificationData.incorporationCertUrl = incorporationCertUrl; hasBusinessData = true; }
+    if (vatCertificateUrl) { businessVerificationData.vatCertificateUrl = vatCertificateUrl; hasBusinessData = true; }
+    if (ssnitCertUrl) { businessVerificationData.ssnitCertUrl = ssnitCertUrl; hasBusinessData = true; }
+    
+    // Always set submittedAt for business verification if any business data is present
+    if (hasBusinessData) {
+      businessVerificationData.submittedAt = new Date();
+      businessVerificationData.verified = false; // Initial state for business verification
+    }
+
     if (isGoogleAuth && googleUserEmail) {
       console.log("⚙️ [REGISTER]: Handling existing Google user for update.");
       const existingGoogleUser = await prisma.user.findUnique({ where: { email: googleUserEmail } });
       if (existingGoogleUser) {
-        if (role === "PROVIDER") {
-          console.log("⚙️ [REGISTER]: Updating existing Google user to PROVIDER role with verification data.");
-          const updated = await prisma.user.update({
-            where: { email: googleUserEmail },
-            data: {
-              role,
-              isFaceVerified: true, // Set to true if face match passed
-              verified: false, // Initial state, requires admin approval
-              requiresApproval: true,
-              status: "PENDING_REVIEW",
-              selfieImage: selfieImage || selfieUrl || null, // Use selfieImage (from /api/verify) first
-              idImage: idImage || imageUrl || null,         // Use idImage (from /api/verify) first
-              faceConfidence: faceConfidence || null,
-              idName: idName || null,
-              idNumber: idNumber || personalIdNumber || null,
-              idDOB: parsedDOB,
-              idExpiryDate: parsedExpiry,
-              idIssueDate: parsedIssue,
-              idIssuer: idIssuer || null,
-              personalIdNumber: personalIdNumber || null,
-              nationality: nationality || null,
-              gender: gender || null,
-              placeOfIssue: placeOfIssue || null,
-              idType: idType || null,
-              rawText: rawText || null,
-              // Business verification data for update path
-              businessVerification: role === "PROVIDER" ? {
-                upsert: { // Use upsert to create or update the related BusinessVerification record
-                  create: {
-                    tinNumber: body.tinNumber,
-                    registrationNumber: body.registrationNumber,
-                    businessName: body.businessName,
-                    businessType: body.businessType,
-                    businessAddress: body.businessAddress,
-                    tinCertificateUrl: body.tinCertificateUrl,
-                    incorporationCertUrl: body.incorporationCertUrl,
-                    vatCertificateUrl: body.vatCertificateUrl,
-                    ssnitCertUrl: body.ssnitCertUrl,
-                    verified: false,
-                    submittedAt: new Date()
-                  },
-                  update: {
-                    tinNumber: body.tinNumber,
-                    registrationNumber: body.registrationNumber,
-                    businessName: body.businessName,
-                    businessType: body.businessType,
-                    businessAddress: body.businessAddress,
-                    tinCertificateUrl: body.tinCertificateUrl,
-                    incorporationCertUrl: body.incorporationCertUrl,
-                    vatCertificateUrl: body.vatCertificateUrl,
-                    ssnitCertUrl: body.ssnitCertUrl,
-                    submittedAt: new Date() // Update submittedAt on re-submission
-                  }
-                }
-              } : undefined
-            },
-            select: {
-              id: true,
-              email: true,
-              name: true,
-              role: true,
-              contactPhone: true,
-              isFaceVerified: true,
-              verified: true,
-              createdAt: true
-            }
-          });
+        // If the user exists and is a Google user, and we have verification data,
+        // we assume they are attempting to become a PROVIDER or update their PROVIDER status.
+        console.log("⚙️ [REGISTER]: Updating existing Google user with verification data.");
+        
+        const updated = await prisma.user.update({
+          where: { email: googleUserEmail },
+          data: {
+            ...userData, // Merge all present user data (including the determined actualRole)
+            // Only perform businessVerification upsert if there is business data in the payload
+            businessVerification: hasBusinessData ? {
+              upsert: { 
+                create: {
+                  ...businessVerificationData,
+                  userId: existingGoogleUser.id // Ensure userId is linked for create in upsert
+                },
+                update: businessVerificationData
+              }
+            } : undefined // If no business data, don't touch the relation
+          },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            role: true,
+            contactPhone: true,
+            isFaceVerified: true,
+            verified: true,
+            createdAt: true
+          }
+        });
 
-          console.log("✅ [REGISTER]: Google PROVIDER updated successfully:", updated.email);
-          return NextResponse.json({
-            success: true,
-            user: updated,
-            message: "Google PROVIDER verified and updated successfully"
-          }, { status: 200 });
-        }
-
-        console.log("✅ [REGISTER]: Google user already exists, no update needed for non-PROVIDER role.");
-        return NextResponse.json({ message: "Google user already exists" }, { status: 200 });
+        console.log("✅ [REGISTER]: Google user (now PROVIDER or updated) successfully:", updated.email);
+        return NextResponse.json({
+          success: true,
+          user: updated,
+          message: "User profile updated successfully with verification data"
+        }, { status: 200 });
       }
     }
 
+    // Only hash password if it's provided (for non-Google registrations)
     const hashedPassword = password ? await bcrypt.hash(password, 12) : null;
+    if (hashedPassword) userData.hashedPassword = hashedPassword; 
 
     console.log("⚙️ [REGISTER]: Creating new user record.");
+
     const user = await prisma.user.create({
       data: {
-        email: email || googleUserEmail,
-        name: displayName,
-        contactPhone: contactPhone || null,
-        hashedPassword,
-        role,
-        isFaceVerified: role === "PROVIDER", // Set to true if provider, will be updated later
-        verified: role === "PROVIDER" ? false : !!verified, // Providers need approval
-        requiresApproval: role === "PROVIDER",
-        status: role === "PROVIDER" ? "PENDING_REVIEW" : "ACTIVE",
-
-        selfieImage: selfieImage || selfieUrl || null,
-        idImage: idImage || imageUrl || null,
-        faceConfidence: faceConfidence || null,
-        idName: idName || null,
-        idNumber: idNumber || personalIdNumber || null,
-        idDOB: parsedDOB,
-        idExpiryDate: parsedExpiry,
-        idIssueDate: parsedIssue,
-        idIssuer: idIssuer || null,
-        personalIdNumber: personalIdNumber || null,
-        nationality: nationality || null,
-        gender: gender || null,
-        placeOfIssue: placeOfIssue || null,
-        idType: idType || null,
-        rawText: rawText || null,
-
-        // Include this if your Prisma schema supports nested business verification
-        businessVerification: role === "PROVIDER" ? {
-          create: {
-            tinNumber: body.tinNumber,
-            registrationNumber: body.registrationNumber,
-            businessName: body.businessName,
-            businessType: body.businessType,
-            businessAddress: body.businessAddress,
-            tinCertificateUrl: body.tinCertificateUrl,
-            incorporationCertUrl: body.incorporationCertUrl,
-            vatCertificateUrl: body.vatCertificateUrl,
-            ssnitCertUrl: body.ssnitCertUrl,
-            verified: false,
-            submittedAt: new Date()
-          }
+        ...userData, // Spread all collected user data
+        // Only include businessVerification if it's a PROVIDER and business data is present
+        businessVerification: actualRole === UserRole.PROVIDER && hasBusinessData ? {
+          create: businessVerificationData
         } : undefined
       },
       select: {
@@ -329,8 +307,8 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       user,
-      shouldAutoLogin: isGoogleAuth && role === "PROVIDER" && user.verified,
-      message: `${role} account created successfully`
+      shouldAutoLogin: isGoogleAuth && actualRole === UserRole.PROVIDER && user.verified,
+      message: `${actualRole} account created successfully`
     }, { status: 201 });
 
   } catch (error: any) {
@@ -341,14 +319,11 @@ export async function POST(request: Request) {
       tookMs: Date.now() - startTime
     });
 
-    // Check for Prisma-specific errors
     if (error.code && error.code.startsWith('P')) {
         console.error(`Prisma Error Code: ${error.code}`);
         if (error.code === 'P2002') {
-            // Unique constraint violation
             return NextResponse.json({ error: `A user with this ${error.meta?.target} already exists.` }, { status: 409 });
         }
-        // Add more specific Prisma error handling if needed
     }
 
     return NextResponse.json({ error: "Registration failed due to an internal server error." }, { status: 500 });

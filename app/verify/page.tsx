@@ -21,14 +21,13 @@ import { useSession } from 'next-auth/react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import Camera from '../components/inputs/Camera';
-import Categories, { categories } from '../components/navbar/Categories'; // Assuming Categories is used for businessType
+import Categories, { categories } from '../components/navbar/Categories';
 
 interface VerificationStepsProps {
-  role: string; // The role (e.g., "PROVIDER") should be passed to this component
   onComplete: () => void;
 }
 
-const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
+const VerificationSteps = ({ onComplete }: VerificationStepsProps) => { 
   const router = useRouter();
   const { data: session } = useSession();
   const [currentStep, setCurrentStep] = useState<'selfie' | 'id' | 'business'>('selfie');
@@ -45,7 +44,7 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
   const [collectedData, setCollectedData] = useState<any>({
     email: session?.user?.email || '',
     name: session?.user?.name || '',
-    role: role, // Use the role passed from props
+    role: "PROVIDER", // Explicitly set role to PROVIDER here
   });
 
   // Business verification state (local to this component for form inputs)
@@ -192,19 +191,21 @@ const VerificationSteps = ({ role, onComplete }: VerificationStepsProps) => {
 
       // Now, compile ALL data (identity + business) for the final /api/register call
       const finalRegistrationData = {
-        ...collectedData, // Includes email, name, role, identity verification data
+        ...collectedData, // Includes email, name, role (now explicitly PROVIDER), identity verification data
         ...businessFormData, // Includes tinNumber, businessName, etc.
         // Add Cloudinary URLs for business documents
         tinCertificateUrl: uploadResponse.data.tinCertificateUrl,
         incorporationCertUrl: uploadResponse.data.incorporationCertUrl,
         vatCertificateUrl: uploadResponse.data.vatCertificateUrl,
         ssnitCertUrl: uploadResponse.data.ssnitCertUrl,
-        // Ensure role is explicitly set for the final registration
-        role: role,
+        // Ensure role is explicitly set for the final registration (redundant but safe)
+        role: "PROVIDER", 
         // Indicate that this is a PROVIDER registration that includes all data
-        // This flag can be used by /api/register to know it's a complete submission
         isFullProviderRegistration: true, 
       };
+
+      // CRITICAL LOG: Check this output in your browser's console before the POST request
+      console.log("📦 [FRONTEND]: Sending final registration data to /api/register:", JSON.stringify(finalRegistrationData, null, 2));
 
       // Make the final call to /api/register with all data
       const registerRes = await axios.post('/api/register', finalRegistrationData);
@@ -795,8 +796,8 @@ const SuccessMessage = ({ title, description, truncate = false }: SuccessMessage
           {description}
         </p>
       </div>
+     </div>
     </div>
-  </div>
 );
 
 const SecurityNotice = () => (
