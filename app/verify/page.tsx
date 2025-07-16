@@ -21,13 +21,14 @@ import { useSession } from 'next-auth/react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import Camera from '../components/inputs/Camera';
-import Categories, { categories } from '../components/navbar/Categories';
+import Categories, { categories } from '../components/navbar/Categories'; // Assuming Categories is used for businessType
 
 interface VerificationStepsProps {
+  // Removed 'role' prop as this component will now explicitly handle PROVIDER role
   onComplete: () => void;
 }
 
-const VerificationSteps = ({ onComplete }: VerificationStepsProps) => { 
+const VerificationSteps = ({ onComplete }: VerificationStepsProps) => { // Removed 'role' from props
   const router = useRouter();
   const { data: session } = useSession();
   const [currentStep, setCurrentStep] = useState<'selfie' | 'id' | 'business'>('selfie');
@@ -132,16 +133,20 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
       });
       toast.success('Identity verification complete!');
 
-      // Store identity verification results in collectedData
-      setCollectedData((prev: any) => ({
-        ...prev,
-        selfieImage: response.data.selfieUrl,
-        idImage: response.data.idUrl,
-        faceConfidence: response.data.matchConfidence,
-        ...response.data.extractedData, // Spread all extracted ID data
-        verified: true, // Mark identity as verified
-        extractionComplete: true, // Indicates OCR and face match are done
-      }));
+      // Use functional update to ensure latest state is used
+      setCollectedData((prev: any) => {
+        const updatedData = {
+          ...prev,
+          selfieImage: response.data.selfieUrl,
+          idImage: response.data.idUrl,
+          faceConfidence: response.data.matchConfidence,
+          ...response.data.extractedData, // Spread all extracted ID data
+          verified: true, // Mark identity as verified
+          extractionComplete: true, // Indicates OCR and face match are done
+        };
+        console.log("📦 [FRONTEND]: Collected Identity Data (after update):", JSON.stringify(updatedData, null, 2));
+        return updatedData;
+      });
 
       setTimeout(() => {
         setCurrentStep('business');
