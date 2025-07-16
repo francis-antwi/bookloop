@@ -234,32 +234,41 @@ const AdminDashboard = () => {
     fetchNotifications();
   }, []);
 
-  // Fetch providers
-  useEffect(() => {
-    const fetchProviders = async () => {
-      try {
-        setLoading(prev => ({ ...prev, providers: true }));
-        setError(prev => ({ ...prev, providers: null }));
-        
-        const res = await fetch('/api/admin/providers', {
-          credentials: 'include',
-        });
+useEffect(() => {
+  const controller = new AbortController();
 
-        if (!res.ok) {
-          throw new Error(`API error: ${res.status} ${res.statusText}`);
-        }
-        const data = await res.json();
-        setProviders(data);
-      } catch (err) {
-        console.error('Failed to load providers:', err);
-        setError(prev => ({ ...prev, providers: err instanceof Error ? err.message : 'Failed to load providers' }));
-      } finally {
-        setLoading(prev => ({ ...prev, providers: false }));
+  const fetchProviders = async () => {
+    try {
+      setLoading(prev => ({ ...prev, providers: true }));
+      setError(prev => ({ ...prev, providers: null }));
+
+      const res = await fetch("/api/admin/providers", {
+        credentials: "include",
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        throw new Error(`API error: ${res.status} ${res.statusText}`);
       }
-    };
-    
-    fetchProviders();
-  }, []);
+
+      const data = await res.json();
+      setProviders(data);
+    } catch (err) {
+      if (err.name === "AbortError") return; // ignore on cleanup
+      console.error("Failed to load providers:", err);
+      setError(prev => ({
+        ...prev,
+        providers: err instanceof Error ? err.message : "Failed to load providers",
+      }));
+    } finally {
+      setLoading(prev => ({ ...prev, providers: false }));
+    }
+  };
+
+  fetchProviders();
+
+  return () => controller.abort();
+}, []); // empty array → runs once on mount
 
   const handleReservationAction = async (
     reservationId: string,
@@ -310,7 +319,6 @@ const AdminDashboard = () => {
       alert('Failed to update listing status.');
     }
   };
-
 const handleProviderApproval = async (id: string, status: 'APPROVED' | 'REJECTED') => {
   try {
     const res = await fetch(`/api/admin/providers/${id}/status`, {
@@ -318,14 +326,19 @@ const handleProviderApproval = async (id: string, status: 'APPROVED' | 'REJECTED
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
     });
+
     if (!res.ok) {
       const data = await res.json();
       throw new Error(data.error || 'Failed to update provider');
     }
+
     const updated = await res.json();
+
     setProviders(prev =>
       prev.map(provider =>
-        provider.id === id ? { ...provider, status: updated.status } : provider
+        provider.id === id
+          ? { ...provider, status: updated.verification.verified ? 'APPROVED' : 'REJECTED', businessVerified: updated.businessVerified }
+          : provider
       )
     );
   } catch (error) {
