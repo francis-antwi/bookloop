@@ -68,7 +68,7 @@ export default async function getCurrentUser(): Promise<SanitizedUser | null> {
         role: true, // Assuming you need the role in the client
         isOtpVerified: true,
         isFaceVerified: true,
-        businessVerified: boolean;
+        businessVerified: boolean,
       },
     });
 

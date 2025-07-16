@@ -138,7 +138,7 @@ useEffect(() => {
 const isVerifiedProvider =
   currentUser?.role === "PROVIDER" &&
   currentUser?.isFaceVerified &&
-  currentUser?.businessVerified;
+  currentUser?.businessVerified
 
 
   const menuItems = currentUser
