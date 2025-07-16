@@ -83,7 +83,7 @@ export default function PendingApproval() {
             You'll receive an email notification once the review is complete.
           </p>
           <p className="text-xs text-gray-400">
-            Need help? Contact our support team at <a href="https://wa.me//+233506632349">SM_Jay</a>
+            Need help? Contact our support team at  <a href="https://wa.me//+233506632349">SM_Jay</a>
           </p>
         </div>
       </div>
