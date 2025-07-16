@@ -3,15 +3,26 @@
 import { useEffect, useState } from 'react';
 import ListingCard from './listings/ListingCard';
 
-
 export default function RecommendedListings() {
   const [recommendations, setRecommendations] = useState([]);
 
   useEffect(() => {
     const fetchRecommendations = async () => {
-      const res = await fetch('/api/ai/recommendations');
-      const data = await res.json();
-      setRecommendations(data);
+      try {
+        const res = await fetch('/api/ai/recommendations', {
+          credentials: 'include',
+        });
+
+        if (!res.ok) {
+          console.error('Error fetching recommendations:', res.status);
+          return;
+        }
+
+        const data = await res.json();
+        setRecommendations(data);
+      } catch (err) {
+        console.error('Error:', err);
+      }
     };
 
     fetchRecommendations();

@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/auth/authOptions';
+import { getToken } from 'next-auth/jwt';
 import prisma from '@/app/libs/prismadb';
 
 export async function GET(req: Request) {
-  const session = await getServerSession(authOptions);
-  const currentUserEmail = session?.user?.email;
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  const currentUserEmail = token?.email;
 
   if (!currentUserEmail) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -56,7 +55,7 @@ export async function GET(req: Request) {
 
   const listings = await prisma.listing.findMany({
     where: {
-      id: { in: sortedListingIds },
+      id: { in: sortedListingIds.map(id => Number(id)) }, // if ID is a number
     },
   });
 
