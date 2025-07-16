@@ -16,59 +16,99 @@ const RoleSelector = () => {
 
   // ⏳ Redirect early if role already exists
   useEffect(() => {
-    if (session?.user?.role) {
+    // Only redirect if session is loaded and user has a role
+    if (status === "authenticated" && session?.user?.role) {
       router.replace("/");
     }
-  }, [session?.user?.role, router]);
+  }, [session?.user?.role, status, router]); // Add status to dependencies
 
+  // Redirect if unauthenticated
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
     }
   }, [status, router]);
-const handleRoleSelect = async (role: string) => {
-  if (isLoading || !session?.user?.email || !session?.user?.id) {
-    router.replace("/");
-    return;
-  }
 
-  // ✨ Immediately reflect the new role for UI state
-  setSelectedRole(role);
-  setIsLoading(true);
-  setError(null);
-
-  try {
-    await axios.post("/api/role", {
-      role,
-      userId: session.user.id,
-    });
-
-    // Update session with new role
-    await update({ role });
-
-    // ✅ Instantly redirect new providers to /verify
-    router.replace(role === "PROVIDER" ? "/verify" : "/");
-  } catch (err: any) {
-    const redirectPath =
-      err?.response?.data?.redirect ||
-      (err?.response?.status === 401 ? "/" : null);
-
-    if (redirectPath) {
-      router.replace(redirectPath);
-    } else {
-      setError(
-        err?.response?.data?.message ||
-        err?.response?.data?.error ||
-        "Failed to update role. Please try again."
-      );
+  const handleRoleSelect = async (role: string) => {
+    if (isLoading || !session?.user?.email || !session?.user?.id) {
+      // Potentially, if session is still loading or user data is incomplete,
+      // prevent action or redirect if applicable.
+      // For immediate redirect, consider if you want to allow this function
+      // to execute only after session is fully loaded and valid.
+      // For now, keeping the original check.
+      if (!session?.user?.email || !session?.user?.id) { // Only redirect if essential data is missing
+         router.replace("/"); // or a more appropriate fallback
+         return;
+      }
+      if (isLoading) return; // Prevent multiple clicks
     }
-  } finally {
-    setIsLoading(false); // Has no effect if redirected already
-  }
-};
 
+    // ✨ Immediately reflect the new role for UI state
+    setSelectedRole(role);
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Await the API call, which now provides the redirect path
+      const res = await axios.post("/api/role", {
+        role,
+        userId: session.user.id, // Ensure your API route uses this if needed, otherwise token.email is sufficient
+      });
+
+      const { success, message, redirect } = res.data;
+
+      if (success && redirect) {
+        // IMPORTANT: Directly use the redirect path from the server
+        // without waiting for session.update()
+        // The server is the single source of truth for the immediate redirect.
+        // The session update can happen in the background or on the next page load.
+        router.replace(redirect);
+
+        // Optionally, if you still want to optimistically update the session *before* redirect,
+        // you could do so, but it's not strictly necessary for "immediate" redirect.
+        // A common pattern is to let the new page load and fetch fresh session data.
+        // If you keep update(), it will add a slight delay.
+        // If the backend truly sets the role, the next page load will have it.
+        // If update() is critical for some client-side state *before* navigation, keep it.
+        // For *immediate* redirect, remove or defer this.
+        // await update({ role }); // Consider removing or deferring this for immediate redirect
+
+        toast.success(message || "Role set successfully!");
+        return; // Ensure no further code runs after redirect
+      } else {
+        // Handle cases where API indicates success but no redirect is provided (unlikely given your API)
+        toast.success(message || "Role set successfully, but no redirect specified.");
+        // Fallback to a default redirect if needed
+        router.replace(role === "PROVIDER" ? "/verify" : "/");
+      }
+
+    } catch (err: any) {
+      console.error("Role selection error:", err);
+      // Use the redirect path provided by the API error response, if available
+      const redirectPath =
+        err?.response?.data?.redirect ||
+        (err?.response?.status === 401 ? "/" : null); // Fallback for unauthorized
+
+      if (redirectPath) {
+        router.replace(redirectPath);
+      } else {
+        // Display generic error message if no specific redirect or message from API
+        const errorMessage =
+          err?.response?.data?.message ||
+          err?.response?.data?.error ||
+          "Failed to update role. Please try again.";
+        setError(errorMessage);
+        toast.error(errorMessage);
+      }
+    } finally {
+      // setIsLoading(false) might not be hit if redirect occurs, which is fine.
+      // It's mainly for preventing double clicks and showing spinner if redirect is slow/fails.
+      setIsLoading(false);
+    }
+  };
 
   const roles = [
+    // ... (rest of your roles array)
     {
       value: "CUSTOMER",
       label: "Customer",
@@ -130,7 +170,7 @@ const handleRoleSelect = async (role: string) => {
             key={role.value}
             onClick={() => handleRoleSelect(role.value)}
             disabled={isLoading}
-            className={`relative w-full p-5 rounded-xl text-left transition-all duration-300 
+            className={`relative w-full p-5 rounded-xl text-left transition-all duration-300
               border-2 shadow-sm hover:shadow-md
               ${
                 selectedRole === role.value
