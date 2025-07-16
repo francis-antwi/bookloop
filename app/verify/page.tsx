@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react'; // Import useEffect
+import { useState } from 'react';
 import {
   FiUpload,
   FiCheck,
@@ -65,12 +65,6 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => { // Remov
     ssnitCert: null as File | null
   });
 
-  // --- New useEffect for debugging collectedData ---
-  useEffect(() => {
-    console.log("📊 [FRONTEND]: collectedData state changed:", JSON.stringify(collectedData, null, 2));
-  }, [collectedData]);
-  // --- End new useEffect ---
-
   const handleSelfieCapture = (blob: Blob) => {
     setSelfieImageFile(blob);
     setIdentityVerificationStatus(null);
@@ -95,10 +89,6 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => { // Remov
 
   const handleBusinessDataChange = (field: string, value: string) => {
     setBusinessFormData(prev => ({ ...prev, [field]: value }));
-    // Also update collectedData with contactPhone if it's being changed
-    if (field === 'contactPhone') {
-        setCollectedData(prev => ({ ...prev, contactPhone: value }));
-    }
   };
 
   const handleBusinessFileUpload = (field: string, file: File) => {
@@ -148,7 +138,7 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => { // Remov
         const updatedData = {
           ...prev,
           selfieImage: response.data.selfieUrl,
-          idImage: response.data.idUrl, // <--- This is where idImage is set
+          idImage: response.data.idUrl,
           faceConfidence: response.data.matchConfidence,
           ...response.data.extractedData, // Spread all extracted ID data
           verified: true, // Mark identity as verified
@@ -172,7 +162,6 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => { // Remov
   };
 
   const submitBusinessVerification = async () => {
-    console.log("📊 [FRONTEND]: Collected Data before Business Upload:", JSON.stringify(collectedData, null, 2)); // New log
     if (!businessFormData.tinNumber || !businessFormData.businessName || !businessFormData.businessType) {
       toast.error('Please fill in all required business information');
       return;
@@ -204,14 +193,13 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => { // Remov
       }
 
       toast.success('Business documents uploaded!');
-      console.log("📦 [FRONTEND]: Business Document Upload Response:", JSON.stringify(uploadResponse.data, null, 2)); // New log
 
       // Now, compile ALL data (identity + business) for the final /api/register call
       const finalRegistrationData = {
         ...collectedData, // Includes email, name, role (now explicitly PROVIDER), identity verification data
-        ...businessFormData, // Includes tinNumber, businessName, contactPhone, etc.
+        ...businessFormData, // Includes tinNumber, businessName, etc.
         // Add Cloudinary URLs for business documents
-        tinCertificateUrl: uploadResponse.data.tinCertificateUrl, // <--- This is where tinCertificateUrl is set
+        tinCertificateUrl: uploadResponse.data.tinCertificateUrl,
         incorporationCertUrl: uploadResponse.data.incorporationCertUrl,
         vatCertificateUrl: uploadResponse.data.vatCertificateUrl,
         ssnitCertUrl: uploadResponse.data.ssnitCertUrl,
@@ -304,8 +292,9 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => { // Remov
           
           {/* Step indicators */}
           <div className="flex items-center justify-between mb-4">
-            <div className="flex flex-col items-center">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+            <div className="flex items-center">
+              <div className="flex flex-col items-center">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
                   getStepNumber() >= 1 ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-500'
                 }`}>
                   {getStepNumber() > 1 ? <FiCheck className="text-sm" /> : '1'}
@@ -571,7 +560,7 @@ const IDStep = ({ idFile, onIdUpload, onBack, onNext, isLoading, canProceed }: I
           </>
         )}
       </button>
-      </div>
+    </div>
   </div>
 );
 
