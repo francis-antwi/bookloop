@@ -32,7 +32,7 @@ export async function GET(request: Request) {
       );
     }
 
-    // 4. Fetch user from database
+    // 4. Fetch user from database (UPDATED with requiresApproval)
     const user = await prisma.user.findUnique({
       where: { id: decoded.sub },
       select: {
@@ -46,6 +46,7 @@ export async function GET(request: Request) {
         idImage: true,
         verified: true,
         hasSelectedRole: true,
+        requiresApproval: true, // ✅ Include this
       },
     });
 
@@ -56,7 +57,7 @@ export async function GET(request: Request) {
       );
     }
 
-    // 5. Return minimal user data
+    // 5. Return user data with requiresApproval
     return NextResponse.json({
       user: {
         id: user.id,
@@ -67,14 +68,12 @@ export async function GET(request: Request) {
         isOtpVerified: user.isOtpVerified,
         verified: user.verified,
         hasSelectedRole: user.hasSelectedRole,
-        // Only include sensitive fields if needed
+        requiresApproval: user.requiresApproval, // ✅ Return it
         ...(user.role === 'PROVIDER' && {
           selfieImage: user.selfieImage,
           idImage: user.idImage,
         }),
       },
-      // Optionally include a new token if you want to extend session
-      // token: jwt.sign({ sub: user.id }, process.env.JWT_SECRET!, { expiresIn: '15m' })
     });
 
   } catch (error: any) {
