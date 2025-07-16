@@ -53,7 +53,7 @@ export async function PATCH(
     // Get provider user data
     const provider = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, phone: true },
+      select: { id: true, email: true },
     });
 
     if (!provider) {
