@@ -62,7 +62,7 @@ export async function POST(request: Request) {
       name,
       contactPhone,
       password,
-      role = "CUSTOMER", // Default to CUSTOMER if not provided in payload
+      // role from payload is now less critical, actualRole determined below
       selfieImage, 
       idImage,     
       faceConfidence,
@@ -97,7 +97,9 @@ export async function POST(request: Request) {
     const displayName = isGoogleAuth && googleUserName ? googleUserName : name;
     // Determine the actual role for this registration/update.
     // If isFullProviderRegistration is true, force role to PROVIDER.
-    const actualRole: UserRole = isFullProviderRegistration ? UserRole.PROVIDER : (Object.values(UserRole).includes(role) ? role : UserRole.CUSTOMER);
+    const actualRole: UserRole = isFullProviderRegistration ? UserRole.PROVIDER : (body.role && Object.values(UserRole).includes(body.role) ? body.role : UserRole.CUSTOMER);
+    console.log(`⚙️ [REGISTER]: Determined actualRole: ${actualRole}`);
+
 
     if (!displayName || (!email && !isGoogleAuth)) {
       console.warn("⚠️ [REGISTER]: Missing required fields for registration.", { displayName, email, isGoogleAuth });
@@ -115,16 +117,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid user role" }, { status: 400 });
     }
 
-    const [existingEmail, existingPhone] = await Promise.all([
+    const [existingUserByEmail, existingUserByPhone] = await Promise.all([
       email ? prisma.user.findUnique({ where: { email } }) : null,
       contactPhone ? prisma.user.findUnique({ where: { contactPhone } }) : null
     ]);
 
-    if (!isGoogleAuth && existingEmail) {
+    if (!isGoogleAuth && existingUserByEmail) {
       console.warn("⚠️ [REGISTER]: Email already registered:", email);
       return NextResponse.json({ error: "Email already registered" }, { status: 409 });
     }
-    if (existingPhone) {
+    if (existingUserByPhone) {
       console.warn("⚠️ [REGISTER]: Phone already registered:", contactPhone);
       return NextResponse.json({ error: "Phone already registered" }, { status: 409 });
     }
@@ -172,10 +174,8 @@ export async function POST(request: Request) {
         console.warn("⚠️ [REGISTER]: Invalid date of birth (future date).");
         return NextResponse.json({ error: "Invalid date of birth" }, { status: 400 });
       }
-      // This check for extractionComplete might be redundant if all data is sent at once,
-      // but keeping it if there's a nuanced multi-stage submission for Google users.
-      // If isFullProviderRegistration implies extractionComplete, this can be removed.
-      if (isGoogleAuth && !extractionComplete) {
+      // This check for extractionComplete might be redundant if all data is sent at once.
+      if (isGoogleAuth && !extractionComplete && isFullProviderRegistration) {
         console.warn("⚠️ [REGISTER]: Google PROVIDER is not fully verified (extraction not complete).");
         return NextResponse.json({
           error: "Google PROVIDER is not fully verified. User not saved.",
@@ -198,34 +198,34 @@ export async function POST(request: Request) {
     };
 
     // Conditionally add identity verification fields if present in the current payload
-    if (selfieImage) userData.selfieImage = selfieImage;
-    if (idImage) userData.idImage = idImage;
-    if (typeof faceConfidence === 'number') userData.faceConfidence = faceConfidence;
-    if (idName) userData.idName = idName;
-    if (idNumber) userData.idNumber = idNumber;
-    if (parsedDOB) userData.idDOB = parsedDOB;
-    if (parsedExpiry) userData.idExpiryDate = parsedExpiry;
-    if (parsedIssue) userData.idIssueDate = parsedIssue;
-    if (idIssuer) userData.idIssuer = idIssuer;
-    if (personalIdNumber) userData.personalIdNumber = personalIdNumber;
-    if (nationality) userData.nationality = nationality;
-    if (gender) userData.gender = gender;
-    if (placeOfIssue) userData.placeOfIssue = placeOfIssue;
-    if (idType) userData.idType = idType;
-    if (rawText) userData.rawText = rawText;
+    if (selfieImage !== undefined) userData.selfieImage = selfieImage;
+    if (idImage !== undefined) userData.idImage = idImage;
+    if (faceConfidence !== undefined) userData.faceConfidence = faceConfidence;
+    if (idName !== undefined) userData.idName = idName;
+    if (idNumber !== undefined) userData.idNumber = idNumber;
+    if (parsedDOB !== null) userData.idDOB = parsedDOB;
+    if (parsedExpiry !== null) userData.idExpiryDate = parsedExpiry;
+    if (parsedIssue !== null) userData.idIssueDate = parsedIssue;
+    if (idIssuer !== undefined) userData.idIssuer = idIssuer;
+    if (personalIdNumber !== undefined) userData.personalIdNumber = personalIdNumber;
+    if (nationality !== undefined) userData.nationality = nationality;
+    if (gender !== undefined) userData.gender = gender;
+    if (placeOfIssue !== undefined) userData.placeOfIssue = placeOfIssue;
+    if (idType !== undefined) userData.idType = idType;
+    if (rawText !== undefined) userData.rawText = rawText;
 
     // Prepare business verification data for upsert/create
     const businessVerificationData: any = {};
     let hasBusinessData = false;
-    if (tinNumber) { businessVerificationData.tinNumber = tinNumber; hasBusinessData = true; }
-    if (registrationNumber) { businessVerificationData.registrationNumber = registrationNumber; hasBusinessData = true; }
-    if (businessName) { businessVerificationData.businessName = businessName; hasBusinessData = true; }
-    if (businessType) { businessVerificationData.businessType = businessType; hasBusinessData = true; }
-    if (businessAddress) { businessVerificationData.businessAddress = businessAddress; hasBusinessData = true; }
-    if (tinCertificateUrl) { businessVerificationData.tinCertificateUrl = tinCertificateUrl; hasBusinessData = true; }
-    if (incorporationCertUrl) { businessVerificationData.incorporationCertUrl = incorporationCertUrl; hasBusinessData = true; }
-    if (vatCertificateUrl) { businessVerificationData.vatCertificateUrl = vatCertificateUrl; hasBusinessData = true; }
-    if (ssnitCertUrl) { businessVerificationData.ssnitCertUrl = ssnitCertUrl; hasBusinessData = true; }
+    if (tinNumber !== undefined) { businessVerificationData.tinNumber = tinNumber; hasBusinessData = true; }
+    if (registrationNumber !== undefined) { businessVerificationData.registrationNumber = registrationNumber; hasBusinessData = true; }
+    if (businessName !== undefined) { businessVerificationData.businessName = businessName; hasBusinessData = true; }
+    if (businessType !== undefined) { businessVerificationData.businessType = businessType; hasBusinessData = true; }
+    if (businessAddress !== undefined) { businessVerificationData.businessAddress = businessAddress; hasBusinessData = true; }
+    if (tinCertificateUrl !== undefined) { businessVerificationData.tinCertificateUrl = tinCertificateUrl; hasBusinessData = true; }
+    if (incorporationCertUrl !== undefined) { businessVerificationData.incorporationCertUrl = incorporationCertUrl; hasBusinessData = true; }
+    if (vatCertificateUrl !== undefined) { businessVerificationData.vatCertificateUrl = vatCertificateUrl; hasBusinessData = true; }
+    if (ssnitCertUrl !== undefined) { businessVerificationData.ssnitCertUrl = ssnitCertUrl; hasBusinessData = true; }
     
     // Always set submittedAt for business verification if any business data is present
     if (hasBusinessData) {
@@ -237,25 +237,32 @@ export async function POST(request: Request) {
       console.log("⚙️ [REGISTER]: Handling existing Google user for update.");
       const existingGoogleUser = await prisma.user.findUnique({ where: { email: googleUserEmail } });
       if (existingGoogleUser) {
-        // If the user exists and is a Google user, and we have verification data,
-        // we assume they are attempting to become a PROVIDER or update their PROVIDER status.
-        console.log("⚙️ [REGISTER]: Updating existing Google user with verification data.");
+        console.log("⚙️ [REGISTER]: Found existing Google user. Proceeding with update.");
         
+        const updateData: any = { ...userData };
+        // Only include hashedPassword if it's provided (for non-Google registrations or if Google user sets password later)
+        if (password) updateData.hashedPassword = await bcrypt.hash(password, 12);
+
+        // Conditionally include businessVerification upsert
+        if (actualRole === UserRole.PROVIDER && hasBusinessData) {
+          updateData.businessVerification = {
+            upsert: { 
+              create: {
+                ...businessVerificationData,
+                // Removed userId here as Prisma automatically handles linking for nested writes
+              },
+              update: businessVerificationData
+            }
+          };
+        } else if (actualRole !== UserRole.PROVIDER && existingGoogleUser.businessVerification) {
+            // If user is no longer a PROVIDER but has business data, consider disconnecting or deleting if intent is clear
+            // For now, we'll just not update it. If a PROVIDER downgrades, manual cleanup might be needed or a specific flow.
+            console.log("⚙️ [REGISTER]: Existing Google user is not PROVIDER, skipping businessVerification update.");
+        }
+
         const updated = await prisma.user.update({
           where: { email: googleUserEmail },
-          data: {
-            ...userData, // Merge all present user data (including the determined actualRole)
-            // Only perform businessVerification upsert if there is business data in the payload
-            businessVerification: hasBusinessData ? {
-              upsert: { 
-                create: {
-                  ...businessVerificationData,
-                  userId: existingGoogleUser.id // Ensure userId is linked for create in upsert
-                },
-                update: businessVerificationData
-              }
-            } : undefined // If no business data, don't touch the relation
-          },
+          data: updateData,
           select: {
             id: true,
             email: true,
@@ -277,7 +284,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // Only hash password if it's provided (for non-Google registrations)
+    // This block is for creating a brand new user (non-Google or first-time Google user without existing record)
     const hashedPassword = password ? await bcrypt.hash(password, 12) : null;
     if (hashedPassword) userData.hashedPassword = hashedPassword; 
 
