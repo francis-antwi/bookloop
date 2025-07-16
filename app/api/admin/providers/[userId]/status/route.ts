@@ -95,9 +95,10 @@ export async function PATCH(
 
 return NextResponse.json({
   success: true,
-  businessVerified: updatedUser.businessVerified, // ✅ Include this
+  businessVerified: updatedUser.businessVerified,
   verification: updatedVerification,
 });
+
 
 
   } catch (error) {
