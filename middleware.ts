@@ -1,7 +1,9 @@
 import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import prisma from "@/app/libs/prismadb"; // Make sure this is a shared singleton
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
 
 export default withAuth(
   async function middleware(req: NextRequest) {
@@ -12,13 +14,16 @@ export default withAuth(
     const isPublic = publicPaths.some(path => pathname.startsWith(path));
     const isRolePage = pathname === "/role";
     const isVerificationPage = pathname === "/verify";
-    const isPendingApprovalPage = pathname === "/pending-approval";
     const isAdminPage = pathname.startsWith("/admin");
-    const isProviderPage = ["/my-listings", "/approvals", "/bookings"].some(path => pathname.startsWith(path));
+    const isProviderPage = [
+      "/my-listings",
+      "/approvals",
+      "/bookings",
+    ].some(path => pathname.startsWith(path));
 
     // 🧱 1. Not authenticated
     if (!token) {
-      if (isPublic || isRolePage || isVerificationPage || isPendingApprovalPage) return NextResponse.next();
+      if (isPublic || isRolePage || isVerificationPage) return NextResponse.next();
       return NextResponse.redirect(new URL("/auth", req.url));
     }
 
@@ -31,7 +36,6 @@ export default withAuth(
     let currentRole = token.role;
     let isVerified = token.verified;
     let isFaceVerified = token.isFaceVerified;
-    let requiresApproval = false;
 
     if (token.id) {
       try {
@@ -41,13 +45,11 @@ export default withAuth(
             role: true,
             verified: true,
             isFaceVerified: true,
-            requiresApproval: true,
           },
         });
         currentRole = user?.role ?? null;
         isVerified = user?.verified ?? false;
         isFaceVerified = user?.isFaceVerified ?? false;
-        requiresApproval = user?.requiresApproval ?? false;
       } catch (err) {
         console.error("❌ Failed to fetch user from DB:", err);
       }
@@ -79,9 +81,6 @@ export default withAuth(
     // ✅ 8. Verification logic for /verify
     if (isVerificationPage) {
       if (currentRole === "PROVIDER" && (isFaceVerified || isVerified)) {
-        if (requiresApproval) {
-          return NextResponse.redirect(new URL("/pending-approval", req.url));
-        }
         return NextResponse.redirect(new URL("/my-listings", req.url));
       }
       if (currentRole === "CUSTOMER" && isVerified) {
@@ -90,26 +89,13 @@ export default withAuth(
       return NextResponse.next();
     }
 
-    // 🔒 9. Restrict provider-only pages and enforce full approval
+    // 🔐 9. Restrict provider-only pages and enforce verification
     if (isProviderPage) {
       if (currentRole !== "PROVIDER") {
         return NextResponse.redirect(new URL("/403", req.url));
       }
-
       if (!isFaceVerified && !isVerified) {
         return NextResponse.redirect(new URL("/verify", req.url));
-      }
-
-      if ((isFaceVerified || isVerified) && requiresApproval) {
-        return NextResponse.redirect(new URL("/pending-approval", req.url));
-      }
-    }
-
-    // 🔄 10. If provider tries accessing / or /verify or /pending-approval after approval, redirect to /my-listings
-    if (currentRole === "PROVIDER" && (isFaceVerified || isVerified) && !requiresApproval) {
-      const unnecessaryPaths = ["/", "/verify", "/pending-approval"];
-      if (unnecessaryPaths.includes(pathname)) {
-        return NextResponse.redirect(new URL("/my-listings", req.url));
       }
     }
 
@@ -120,7 +106,7 @@ export default withAuth(
     callbacks: {
       authorized: ({ token, req }) => {
         const { pathname } = req.nextUrl;
-        const allowWithoutAuth = ["/", "/auth", "/auth/error", "/api/auth", "/_next", "/403", "/role", "/verify", "/pending-approval"];
+        const allowWithoutAuth = ["/", "/auth", "/auth/error", "/api/auth", "/_next", "/403", "/role", "/verify"];
         return !!token || allowWithoutAuth.some(path => pathname.startsWith(path));
       },
     },
