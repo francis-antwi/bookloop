@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 import prisma from "./app/libs/prismadb";
 
 // Path configuration
-const PUBLIC_PATHS = ["/", "/auth", "/auth/error", "/api/auth", "/_next", "/403", "/pending-approval"]; // Added /pending-approval
+const PUBLIC_PATHS = ["/", "/auth", "/auth/error", "/api/auth", "/_next", "/403", "/pending-approval"];
 const PROVIDER_PATHS = ["/my-listings", "/approvals", "/bookings"];
 const ADMIN_PATHS = ["/admin"];
 
@@ -13,8 +13,13 @@ export default withAuth(
     const { pathname } = req.nextUrl;
     const token = req.auth?.token;
 
+    // --- Start Middleware Debugging Logs ---
+    console.log(`\n--- Middleware Check for Path: ${pathname} ---`);
+    console.log(`Token ID: ${token?.id}`);
+    console.log(`Is Authenticated (via token): ${!!token}`);
+    // --- End Middleware Debugging Logs ---
+
     // 1. Skip middleware for public paths (including auth routes, errors, and static assets via _next)
-    // The `matcher` config handles most static files, but this provides an explicit early exit for defined public paths.
     if (PUBLIC_PATHS.some(path => pathname.startsWith(path))) {
       return NextResponse.next();
     }
@@ -25,8 +30,7 @@ export default withAuth(
     }
 
     // 3. Skip further checks for API routes not explicitly handled as public
-    // (e.g., protected API routes will be handled by next-auth or later in this middleware if they require specific roles/verifications)
-    if (pathname.startsWith("/api")) { // Note: "/api/auth" is already in PUBLIC_PATHS
+    if (pathname.startsWith("/api")) {
       return NextResponse.next();
     }
 
@@ -38,14 +42,21 @@ export default withAuth(
         select: {
           role: true,
           verified: true,
-          requiresApproval: true, // Select requiresApproval
+          requiresApproval: true,
         },
       });
     }
 
     const currentRole = currentUser?.role || token?.role || null;
     const isVerified = currentUser?.verified || token?.verified || false;
-    const requiresApproval = currentUser?.requiresApproval || false; // Get requiresApproval
+    const requiresApproval = currentUser?.requiresApproval || false;
+
+    // --- More Detailed Middleware Debugging Logs ---
+    console.log(`Current Role (DB/Token): ${currentRole}`);
+    console.log(`Is Verified (DB/Token): ${isVerified}`);
+    console.log(`Requires Approval (DB): ${requiresApproval}`);
+    console.log(`--- End Detailed Middleware Check ---\n`);
+    // --- End Detailed Middleware Debugging Logs ---
 
     // 5. Handle role assignment flow: Redirect to role selection if no role assigned
     if (!currentRole && !["/role", "/verify"].includes(pathname)) {
@@ -67,35 +78,47 @@ export default withAuth(
 
     // 8. Verification flow for providers
     if (currentRole === "PROVIDER") {
-      // If on verification page or pending approval page but already fully approved
-      if ((pathname === "/verify" || pathname === "/pending-approval") && !requiresApproval && isVerified) {
-        return NextResponse.redirect(new URL("/my-listings", req.url));
-      }
+        // Scenario A: Provider is fully approved (verified and no longer requires approval)
+        if (isVerified && !requiresApproval) {
+            // If they are on the root, verification, or pending page, redirect them to their main dashboard
+            if (pathname === "/" || pathname === "/verify" || pathname === "/pending-approval") {
+                console.log("-> PROVIDER: Fully approved, redirecting from root/verification/pending to /my-listings");
+                return NextResponse.redirect(new URL("/my-listings", req.url));
+            }
+            // Otherwise, allow them to proceed to any page (including PROVIDER_PATHS)
+            console.log("-> PROVIDER: Fully approved, allowing access.");
+            return NextResponse.next();
+        } 
+        // Scenario B: Provider is NOT fully approved (either not verified OR still requires approval)
+        else {
+            // Define allowed paths for not fully verified providers
+            const allowedProviderPendingPaths = ["/verify", "/pending-approval"];
 
-      // If trying to access provider-specific pages without full approval
-      if (PROVIDER_PATHS.some(path => pathname.startsWith(path))) {
-        if (requiresApproval || !isVerified) { // If still requires approval or not verified
-          return NextResponse.redirect(new URL("/pending-approval", req.url)); // Redirect to pending approval
-        }
-      }
-
-      // If a provider is not fully approved and is trying to access any page other than /verify or /pending-approval
-      if ((requiresApproval || !isVerified) && pathname !== "/verify" && pathname !== "/pending-approval") {
-        if (!isVerified) { // If they haven't completed the initial verification steps
-          return NextResponse.redirect(new URL("/verify", req.url));
-        } else { // If they have completed verification but are pending approval
-          return NextResponse.redirect(new URL("/pending-approval", req.url));
-        }
-      }
+            // If the current path is NOT one of the allowed pending paths
+            if (!allowedProviderPendingPaths.includes(pathname)) {
+                // Determine the correct redirect target
+                if (!isVerified) { // Not even frontend verified yet (e.g., just registered as PROVIDER)
+                    console.log("-> PROVIDER: Not verified, redirecting to /verify.");
+                    return NextResponse.redirect(new URL("/verify", req.url));
+                } else { // Frontend verified, but requires admin approval
+                    console.log("-> PROVIDER: Verified but requires approval, redirecting to /pending-approval.");
+                    return NextResponse.redirect(new URL("/pending-approval", req.url));
+                }
+            }
+            // If they are on an explicitly allowed pending path (/verify or /pending-approval), let them proceed
+            console.log(`-> PROVIDER: Not fully approved, on allowed pending path (${pathname}). Allowing access.`);
+            return NextResponse.next();
+        }
     }
 
     // 9. Customers should not access verification page if already verified
-    // This assumes 'isVerified' for a CUSTOMER means they don't need the '/verify' process.
     if (currentRole === "CUSTOMER" && pathname === "/verify" && isVerified) {
+      console.log("-> CUSTOMER: Already verified, redirecting from /verify to /.");
       return NextResponse.redirect(new URL("/", req.url));
     }
 
     // If none of the above conditions trigger a redirect or early exit, allow the request to proceed.
+    console.log("-> Allowing request to proceed.");
     return NextResponse.next();
   },
   {
@@ -103,7 +126,7 @@ export default withAuth(
       authorized: ({ token, req }) => {
         const { pathname } = req.nextUrl;
         // Paths that do NOT require authentication. This is crucial for next-auth.
-        const allowWithoutAuth = [...PUBLIC_PATHS, "/role", "/verify"]; // /pending-approval is already in PUBLIC_PATHS
+        const allowWithoutAuth = [...PUBLIC_PATHS, "/role", "/verify"];
         return !!token || allowWithoutAuth.some(path => pathname.startsWith(path));
       },
     },
