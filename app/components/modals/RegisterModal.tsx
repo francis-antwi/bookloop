@@ -751,7 +751,7 @@ if (response.data.shouldAutoLogin) {
                     disabled={isLoading}
                     className="hidden"
                     id="id-upload"
-                    capture="environment"
+                   
                   />
                   <label
                     htmlFor="id-upload"
