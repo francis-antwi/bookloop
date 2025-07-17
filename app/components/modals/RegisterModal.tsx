@@ -197,20 +197,26 @@ const RegisterModal = () => {
     setBusinessFiles(prev => ({ ...prev, [field]: file }));
   };
 
-  const submitVerification = async () => {
-    if (!selfieImageBlob || !idFile) {
-      toast.error('Please complete all verification steps');
-      throw new Error('Missing verification files');
-    }
+  const submitVerification = async (isBusinessVerification = false) => {
+  if (!isBusinessVerification && (!selfieImageBlob || !idFile)) {
+    toast.error('Please complete all verification steps');
+    throw new Error('Missing verification files');
+  }
 
-    setIsLoading(true);
-    setVerificationStatus(null);
+  setIsLoading(true);
+  setVerificationStatus(null);
 
     try {
       const verificationFormData = new FormData();
-      verificationFormData.append('selfie', new File([selfieImageBlob], 'selfie.jpg', { type: 'image/jpeg' }));
+        if (selfieImageBlob) {
+      verificationFormData.append('selfie', new File([selfieImageBlob], 'selfie.jpg'));
+    }
+    if (idFile) {
       verificationFormData.append('idImage', idFile);
+    }
       verificationFormData.append('email', watchedValues.email);
+          verificationFormData.append('verificationStep', isBusinessVerification ? 'business' : 'identity');
+
 
       const response = await axios.post<VerificationResponse>('/api/verify', verificationFormData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -271,36 +277,59 @@ const RegisterModal = () => {
       };
 
       // Handle provider verification
-      if (data.role === 'PROVIDER') {
-        const verificationData = await submitVerification();
-        const extractedData = verificationData.extractedData || {};
-        
-        Object.assign(registrationPayload, {
-          selfieImage: verificationData.selfieUrl,
-          idImage: verificationData.imageUrl,
-          faceConfidence: verificationData.matchConfidence,
-          idName: extractedData.idName,
-          idNumber: extractedData.idNumber || extractedData.personalIdNumber,
-          personalIdNumber: extractedData.personalIdNumber,
-          idDOB: extractedData.idDOB,
-          idExpiryDate: extractedData.idExpiryDate,
-          idIssueDate: extractedData.idIssueDate,
-          idIssuer: extractedData.idIssuer,
-          gender: extractedData.gender,
-          placeOfIssue: extractedData.placeOfIssue,
-          rawText: extractedData.rawText,
-          requiresApproval: true, 
-          status: 'PENDING_REVIEW',
+     if (data.role === 'PROVIDER') {
+  try {
+    // 1. Perform identity verification (mandatory)
+    const verificationData = await submitVerification(false);
+    
+    if (!verificationData.success || !verificationData.selfieUrl || !verificationData.imageUrl) {
+      throw new Error('Identity verification failed');
+    }
 
-          // Business data
-          tinNumber: data.tinNumber,
-          businessName: data.businessName,
-          businessType: data.businessType,
-          businessAddress: data.businessAddress,
-          businessPhone: data.businessPhone,
-          registrationNumber: data.registrationNumber,
-          businessVerified: false,
-        });
+    // 2. Prepare extracted ID data with fallbacks
+    const extractedData = verificationData.extractedData || {};
+    const idNumber = extractedData.idNumber || extractedData.personalIdNumber || '';
+    const faceConfidence = verificationData.matchConfidence || 0;
+
+    if (faceConfidence < 80) {
+      throw new Error(`Face match confidence too low (${faceConfidence.toFixed(1)}%)`);
+    }
+
+    // 3. Build the registration payload
+    const providerData = {
+      // Identity verification data
+      isFaceVerified: true,
+      verified: false, // Requires admin approval
+      extractionComplete: true,
+      selfieImage: verificationData.selfieUrl,
+      idImage: verificationData.imageUrl,
+      faceConfidence,
+      
+      // Extracted ID information
+      idName: extractedData.idName || '',
+      idNumber,
+      personalIdNumber: extractedData.personalIdNumber || '',
+      idDOB: extractedData.idDOB || '',
+      idExpiryDate: extractedData.idExpiryDate || '',
+      idIssueDate: extractedData.idIssueDate || '',
+      idIssuer: extractedData.idIssuer || '',
+      gender: extractedData.gender || '',
+      placeOfIssue: extractedData.placeOfIssue || '',
+      rawText: extractedData.rawText || '',
+
+      // Business information from form
+      ...(data.tinNumber && { tinNumber: data.tinNumber }),
+      businessName: data.businessName || '',
+      businessType: data.businessType || '',
+      businessAddress: data.businessAddress || '',
+      businessPhone: data.businessPhone || '',
+      registrationNumber: data.registrationNumber || '',
+      
+      // Status flags
+      requiresApproval: true,
+      status: 'PENDING_REVIEW',
+      businessVerified: false
+    };
 
         // Add business files to form data
         const businessFormData = new FormData();
