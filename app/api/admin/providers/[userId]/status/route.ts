@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import prisma from "@/app/libs/prismadb";
-import { NotificationType } from "@prisma/client";
+import { NotificationType, UserRole } from "@prisma/client";
 
 const secret = process.env.NEXTAUTH_SECRET!;
 
@@ -20,8 +20,21 @@ export async function PATCH(
 
   // 1. Extract and validate token
   const token = await getToken({ req, secret });
+  console.log("🔐 Token:", token);
 
-  if (!token || token.role !== "ADMIN") {
+  let role = token?.role;
+
+  // Optional: Fallback — if token is missing role, fetch from DB
+  if (!role && token?.email) {
+    const user = await prisma.user.findUnique({
+      where: { email: token.email },
+      select: { role: true },
+    });
+    role = user?.role ?? null;
+    console.log("📦 Fallback role from DB:", role);
+  }
+
+  if (!token || role !== UserRole.ADMIN) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
