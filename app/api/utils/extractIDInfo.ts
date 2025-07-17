@@ -227,15 +227,17 @@ function extractDocumentNumber(fullText: string, lines: string[]): string | null
 
 function extractPersonalIdNumber(fullText: string): string | null {
   const patterns = [
-    /Personal ID Number[^\w]*([A-Z]{3}-[0-9]{11})/i,
-    /\b(GHA-[0-9]{11})\b/g,
-    /\b(GHA-[0-9]{12})\b/g
+    /Personal ID Number[^A-Z0-9]*([A-Z]{3}-[0-9]{11,12})/i,
+    /\b(GHA-[0-9]{11,12})\b/g,
+    /GHA-([0-9]{11,12})/g
   ];
   
   for (const pattern of patterns) {
     const match = fullText.match(pattern);
     if (match) {
-      return match[1];
+      const idNumber = match[1];
+      // If it doesn't have GHA- prefix, add it
+      return idNumber.startsWith('GHA-') ? idNumber : `GHA-${idNumber}`;
     }
   }
   
@@ -280,27 +282,28 @@ function extractGender(fullText: string, lines: string[]): string | null {
     if (line.match(/Sex\/Sexe/i)) {
       // Check same line first
       const sameLineMatch = line.match(/Sex\/Sexe\s+([MF])/i);
-      if (sameLineMatch) return sameLineMatch[1];
+      if (sameLineMatch) return sameLineMatch[1].toUpperCase();
       
       // Check next line
       if (i + 1 < lines.length) {
         const nextLine = lines[i + 1];
         const nextLineMatch = nextLine.match(/^([MF])$/i);
-        if (nextLineMatch) return nextLineMatch[1];
+        if (nextLineMatch) return nextLineMatch[1].toUpperCase();
       }
     }
   }
   
-  // Look for pattern in full text
+  // Look for pattern in full text - handle "GHANAIAN M" pattern
   const patterns = [
     /Sex\/Sexe\s+[A-Z\s]*([MF])\b/i,
-    /GHANAIAN\s+([MF])\b/i // Common pattern in Ghana cards
+    /GHANAIAN\s+([MF])\b/i, // Common pattern in Ghana cards
+    /Nationality\/Nationalité\s+Sex\/Sexe\s+GHANAIAN\s+([MF])/i // Handle concatenated pattern
   ];
   
   for (const pattern of patterns) {
     const match = fullText.match(pattern);
     if (match) {
-      return match[1];
+      return match[1].toUpperCase();
     }
   }
   
@@ -312,17 +315,32 @@ function extractNationality(fullText: string, lines: string[]): string | null {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     
-    if (line.match(/Nationality\/Nationalité/i) && i + 1 < lines.length) {
-      const nextLine = lines[i + 1];
-      if (nextLine && nextLine.match(/^[A-Z]+$/)) {
-        return nextLine.trim();
+    if (line.match(/Nationality\/Nationalité/i)) {
+      // Check same line first - handle "Nationality/Nationalité Sex/Sexe"
+      if (line.includes('Sex/Sexe')) {
+        // This means nationality and sex are on same line, look for next line
+        if (i + 1 < lines.length) {
+          const nextLine = lines[i + 1];
+          // Extract nationality from "GHANAIAN M" pattern
+          const nationalityMatch = nextLine.match(/^([A-Z]+)\s+[MF]$/i);
+          if (nationalityMatch) return nationalityMatch[1];
+        }
+      } else {
+        // Normal case - nationality on next line
+        if (i + 1 < lines.length) {
+          const nextLine = lines[i + 1];
+          if (nextLine && nextLine.match(/^[A-Z]+$/)) {
+            return nextLine.trim();
+          }
+        }
       }
     }
   }
   
-  // Extract from patterns
+  // Extract from patterns in full text
   const patterns = [
     /Nationality\/Nationalité\s+([A-Z]+)/i,
+    /Nationality\/Nationalité\s+Sex\/Sexe\s+([A-Z]+)\s+[MF]/i, // Handle concatenated pattern
     /\b(GHANAIAN)\b/i // Common nationality
   ];
   
