@@ -950,3 +950,4 @@ if (response.data.shouldAutoLogin) {
 };
 
 export default RegisterModal;
+
