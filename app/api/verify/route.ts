@@ -1,214 +1,170 @@
 import { NextResponse } from "next/server";
-const cloudinary = require("cloudinary").v2;
+import cloudinary from "cloudinary";
 import axios from "axios";
 import FormData from "form-data";
 import { Readable } from "stream";
 import { validateExtractedData } from "../utils/idValidation";
-// Removed createUserIfNeeded as it's now handled by /api/register
 import { extractIDInfo } from "../utils/extractIDInfo";
 import { matchFace } from "../utils/faceMatch";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/auth/authOptions";
-// UserRole is not directly used here for database operations anymore,
-// but kept for type clarity if needed for validation of incoming 'role' string.
-import { UserRole } from "@prisma/client"; 
 
-// === Cloudinary Config ===
-cloudinary.config({
-  cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!,
-  api_key: process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY!,
-  api_secret: process.env.CLOUDINARY_API_SECRET!,
+// Configure Cloudinary
+cloudinary.v2.config({
+  cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!,
+  api_key: process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY!,
+  api_secret: process.env.CLOUDINARY_API_SECRET!,
 });
+
 export async function POST(req: Request) {
   try {
     const formData = await req.formData();
 
+    // Log received files for debugging
     console.log("⚙️ [VERIFY]: Received FormData entries:");
-    for (const pair of formData.entries()) {
-      console.log(
-        `  - ${pair[0]}: ${
-          typeof pair[1] === "object" && pair[1] !== null && "name" in pair[1]
-            ? (pair[1] as File).name
-            : pair[1]
-        }`
-      );
+    for (const [key, value] of formData.entries()) {
+      console.log(`- ${key}: ${value instanceof File ? value.name : value}`);
     }
 
     const verificationStep = formData.get("verificationStep")?.toString() || "identity";
 
-    // === Business Documents ===
-    const tinCertificateFile = formData.get("tinCertificate") as File | null;
-    const incorporationCertFile = formData.get("incorporationCert") as File | null;
-    const vatCertificateFile = formData.get("vatCertificate") as File | null;
-    const ssnitCertFile = formData.get("ssnitCert") as File | null;
+    // === Upload Business Documents (TIN, Incorporation Cert, etc.) ===
+    const businessDocs = {
+      tinCertificate: formData.get("tinCertificate") as File | null,
+      incorporationCert: formData.get("incorporationCert") as File | null,
+      vatCertificate: formData.get("vatCertificate") as File | null,
+      ssnitCert: formData.get("ssnitCert") as File | null,
+    };
 
-    let tinCertificateUrl: string | null = null;
-    let incorporationCertUrl: string | null = null;
-    let vatCertificateUrl: string | null = null;
-    let ssnitCertUrl: string | null = null;
+    // Upload all provided business docs in parallel
+    const businessUrls = await Promise.all([
+      businessDocs.tinCertificate ? uploadToCloudinary(businessDocs.tinCertificate, "business/tin") : null,
+      businessDocs.incorporationCert ? uploadToCloudinary(businessDocs.incorporationCert, "business/incorporation") : null,
+      businessDocs.vatCertificate ? uploadToCloudinary(businessDocs.vatCertificate, "business/vat") : null,
+      businessDocs.ssnitCert ? uploadToCloudinary(businessDocs.ssnitCert, "business/ssnit") : null,
+    ]);
 
-    if (tinCertificateFile || incorporationCertFile || vatCertificateFile || ssnitCertFile) {
-      console.log("⚙️ [VERIFY]: Uploading business documents to Cloudinary...");
-      [
-        tinCertificateUrl,
-        incorporationCertUrl,
-        vatCertificateUrl,
-        ssnitCertUrl,
-      ] = await Promise.all([
-        tinCertificateFile ? uploadToCloudinary(tinCertificateFile, "business/tin") : Promise.resolve(null),
-        incorporationCertFile ? uploadToCloudinary(incorporationCertFile, "business/incorporation") : Promise.resolve(null),
-        vatCertificateFile ? uploadToCloudinary(vatCertificateFile, "business/vat") : Promise.resolve(null),
-        ssnitCertFile ? uploadToCloudinary(ssnitCertFile, "business/ssnit") : Promise.resolve(null),
-      ]);
-      console.log(`✅ [VERIFY]: Business document uploads done.`);
-    }
-
-    // === Identity Uploads (used in both identity + business if required) ===
-    let selfieUrl: string | null = null;
-    let idUrl: string | null = null;
-    let extractedData: any = {};
-    let matchConfidence: number | null = null;
-
-    // === Identity Verification ===
+    // === Identity Verification (Selfie + ID) ===
     if (verificationStep === "identity") {
       const selfieFile = formData.get("selfie") as File | null;
       const idFile = formData.get("idImage") as File | null;
 
       if (!selfieFile || !idFile) {
-        console.error("❌ [VERIFY ERROR]: Missing selfie or ID file for identity verification.");
-        return NextResponse.json({ error: "Missing identity files" }, { status: 400 });
+        console.error("❌ [VERIFY ERROR]: Missing selfie or ID for identity verification");
+        return NextResponse.json(
+          { error: "Selfie and ID are required for identity verification" },
+          { status: 400 }
+        );
       }
 
-      console.log("⚙️ [VERIFY]: Uploading selfie and ID to Cloudinary...");
-      [selfieUrl, idUrl] = await Promise.all([
+      // Upload selfie and ID
+      const [selfieUrl, idUrl] = await Promise.all([
         uploadToCloudinary(selfieFile, "selfies"),
         uploadToCloudinary(idFile, "ids"),
       ]);
-      console.log(`✅ [VERIFY]: Uploads done. Selfie: ${selfieUrl}, ID: ${idUrl}`);
 
-      console.log("⚙️ [VERIFY]: Sending ID image to Taggun...");
-      const ocrResponse = await sendOriginalToTaggun(idFile);
-      console.log("✅ [VERIFY]: OCR response received.");
+      // Extract ID data using OCR (Taggun)
+      const ocrResponse = await sendToTaggun(idFile);
+      const extractedData = extractIDInfo(ocrResponse);
 
-      extractedData = extractIDInfo(ocrResponse);
-      console.log("⚙️ [VERIFY]: Extracted ID data:", extractedData);
-
+      // Validate extracted ID data
       const validationResult = validateExtractedData(extractedData);
       if (!validationResult.isValid) {
-        console.error("❌ [VERIFY ERROR]: ID validation failed:", validationResult.errors);
-        return NextResponse.json({ error: "Invalid ID document", details: validationResult.errors }, { status: 422 });
+        console.error("❌ [ID VALIDATION ERROR]:", validationResult.errors);
+        return NextResponse.json(
+          { error: "Invalid ID document", details: validationResult.errors },
+          { status: 422 }
+        );
       }
 
-      console.log("⚙️ [VERIFY]: Performing face match...");
-      const matchResult = await matchFace(selfieUrl, idUrl);
-      matchConfidence = matchResult.confidence;
-
-      if (!matchResult.isMatch) {
-        console.error("❌ [VERIFY ERROR]: Face mismatch. Confidence:", matchResult.confidence);
-        return NextResponse.json({ error: "Face does not match ID", confidence: matchResult.confidence }, { status: 401 });
+      // Face matching
+      const { isMatch, confidence } = await matchFace(selfieUrl, idUrl);
+      if (!isMatch) {
+        console.error("❌ [FACE MATCH ERROR]: Confidence:", confidence);
+        return NextResponse.json(
+          { error: "Face does not match ID", confidence },
+          { status: 401 }
+        );
       }
 
       return NextResponse.json({
         success: true,
-        verified: true,
         selfieUrl,
         idUrl,
-        matchConfidence,
         extractedData,
+        matchConfidence: confidence,
       });
     }
 
-    // === Business Verification (now requires selfie + ID too) ===
+    // === Business Verification (Selfie/ID Optional) ===
     if (verificationStep === "business") {
       const selfieFile = formData.get("selfie") as File | null;
       const idFile = formData.get("idImage") as File | null;
 
-      if (!selfieFile || !idFile) {
-        console.error("❌ [VERIFY ERROR]: Missing selfie or ID file for business verification.");
-        return NextResponse.json({ error: "Missing identity files for business verification" }, { status: 400 });
-      }
-
-      console.log("⚙️ [VERIFY-BUSINESS]: Uploading selfie and ID to Cloudinary...");
-      [selfieUrl, idUrl] = await Promise.all([
-        uploadToCloudinary(selfieFile, "selfies"),
-        uploadToCloudinary(idFile, "ids"),
+      // Upload selfie/ID if provided (optional)
+      const [selfieUrl, idUrl] = await Promise.all([
+        selfieFile ? uploadToCloudinary(selfieFile, "selfies") : null,
+        idFile ? uploadToCloudinary(idFile, "ids") : null,
       ]);
-      console.log(`✅ [VERIFY-BUSINESS]: Selfie: ${selfieUrl}, ID: ${idUrl}`);
 
       return NextResponse.json({
         success: true,
-        message: "Business documents processed.",
-        tinCertificateUrl,
-        incorporationCertUrl,
-        vatCertificateUrl,
-        ssnitCertUrl,
-        selfieUrl,
-        idUrl,
+        businessDocuments: {
+          tinCertificateUrl: businessUrls[0],
+          incorporationCertUrl: businessUrls[1],
+          vatCertificateUrl: businessUrls[2],
+          ssnitCertUrl: businessUrls[3],
+        },
+        identityDocuments: {
+          selfieUrl,
+          idUrl,
+        },
       });
     }
 
-    console.warn("⚠️ [VERIFY]: Unknown verificationStep. Defaulting to success.");
-    return NextResponse.json({ success: true, message: "Verification step completed." });
-
-  } catch (err: any) {
-    console.error("❌ [VERIFY ERROR]: An error occurred during verification.");
-    if (axios.isAxiosError(err)) {
-      console.error("  Axios Error:", {
-        message: err.message,
-        status: err.response?.status,
-        data: err.response?.data,
-      });
-    } else if (err instanceof Error) {
-      console.error("  Error:", err.message, err.stack);
-    } else {
-      console.error("  Unknown error:", err);
-    }
-
-    return NextResponse.json({ error: err.message || "Verification failed" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Invalid verification step" },
+      { status: 400 }
+    );
+  } catch (error) {
+    console.error("❌ [SERVER ERROR]:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }
 
-// === Helpers ===
-async function uploadToCloudinary(file: File, folder: string): Promise<string> {
-    console.log(`⚙️ [Cloudinary]: Uploading file "${file.name}" to folder "${folder}"...`);
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const upload = await new Promise<{ secure_url: string }>((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream({ folder }, (error, result) => {
-      if (error || !result) {
-        console.error(`❌ [Cloudinary]: Upload failed for file "${file.name}":`, error);
-        return reject(error);
+// Helper: Upload to Cloudinary
+async function uploadToCloudinary(file: File, folder: string) {
+  const buffer = Buffer.from(await file.arrayBuffer());
+  return new Promise<string>((resolve, reject) => {
+    const stream = cloudinary.v2.uploader.upload_stream(
+      { folder },
+      (error, result) => {
+        if (error) reject(error);
+        else resolve(result!.secure_url);
       }
-      console.log(`✅ [Cloudinary]: Upload successful for "${file.name}". URL: ${result.secure_url}`);
-      resolve(result as any);
-    });
-    Readable.from(buffer).pipe(stream);
-  });
-  return upload.secure_url;
+    );
+    Readable.from(buffer).pipe(stream);
+  });
 }
 
-async function sendOriginalToTaggun(idFile: File) {
-    console.log(`⚙️ [Taggun]: Sending file "${idFile.name}" to Taggun for OCR...`);
-  const buffer = Buffer.from(await idFile.arrayBuffer());
+// Helper: Send to Taggun for OCR
+async function sendToTaggun(file: File) {
+  const form = new FormData();
+  form.append("file", Buffer.from(await file.arrayBuffer()), {
+    filename: file.name,
+    contentType: file.type,
+  });
 
-  const form = new FormData();
-  form.append("file", buffer, {
-    filename: idFile.name || "id.jpg",
-    contentType: idFile.type || "image/jpeg",
-  });
-  form.append("extractLineItems", "true");
-  form.append("extractTime", "false");
-  form.append("refresh", "false");
-  form.append("incognito", "false");
-
-  const response = await axios.post("https://api.taggun.io/api/receipt/v1/verbose/file", form, {
-    headers: {
-      ...form.getHeaders(),
-      apikey: process.env.TAGGUN_API_KEY!,
-      accept: "application/json",
-    },
-    maxBodyLength: Infinity,
-    timeout: 60000,
-  });
-
-  return response.data;
+  const { data } = await axios.post(
+    "https://api.taggun.io/api/receipt/v1/verbose/file",
+    form,
+    {
+      headers: {
+        ...form.getHeaders(),
+        apikey: process.env.TAGGUN_API_KEY!,
+      },
+    }
+  );
+  return data;
 }
