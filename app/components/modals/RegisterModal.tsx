@@ -18,6 +18,8 @@ import Camera from '../inputs/Camera';
 import { useRouter } from 'next/navigation';
 import { categories } from '../navbar/Categories';
 
+type VerificationStep = 'account' | 'identity' | 'business';
+
 interface VerificationResponse {
   success: boolean;
   extractedData?: {
@@ -46,15 +48,6 @@ interface BusinessFiles {
   incorporationCert: File | null;
   vatCertificate: File | null;
   ssnitCert: File | null;
-}
-
-interface Step {
-  field: string;
-  label: string;
-  icon: React.ComponentType;
-  placeholder?: string;
-  description: string;
-  providerOnly?: boolean;
 }
 
 const FileUpload = ({ 
@@ -114,9 +107,9 @@ const RegisterModal = () => {
   const loginModal = useLoginModal();
   const router = useRouter();
   
+  const [currentStep, setCurrentStep] = useState<VerificationStep>('account');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [currentStep, setCurrentStep] = useState(0);
   const [selfieImageBlob, setSelfieImageBlob] = useState<Blob | null>(null);
   const [idFile, setIdFile] = useState<File | null>(null);
   const [verificationStatus, setVerificationStatus] = useState<{
@@ -156,71 +149,6 @@ const RegisterModal = () => {
 
   const watchedValues = watch();
 
-  const steps = useMemo<Step[]>(() => [
-    { 
-      field: 'name', 
-      label: 'Full Name', 
-      icon: FiUser, 
-      placeholder: 'Enter your full name',
-      description: 'Let us know what to call you'
-    },
-    { 
-      field: 'email', 
-      label: 'Email Address', 
-      icon: FiMail, 
-      placeholder: 'Enter your email address',
-      description: 'We\'ll use this to send you updates'
-    },
-    { 
-      field: 'contactPhone', 
-      label: 'Phone Number', 
-      icon: FiPhone, 
-      placeholder: 'Enter your phone number',
-      description: 'For account security and notifications'
-    },
-    { 
-      field: 'password', 
-      label: 'Password', 
-      icon: FiLock, 
-      placeholder: 'Create a secure password',
-      description: 'Minimum 6 characters recommended'
-    },
-    { 
-      field: 'role', 
-      label: 'Account Type',
-      icon: FiUserCheck,
-      description: 'Choose how you\'ll use our platform'
-    },
-    { 
-      field: 'selfieImage', 
-      label: 'Verify Identity',
-      icon: FiCamera,
-      description: 'Take a clear photo of yourself',
-      providerOnly: true
-    },
-    { 
-      field: 'idImage', 
-      label: 'Upload ID',
-      icon: FiFileText,
-      description: 'Upload a photo of your Ghana Card',
-      providerOnly: true
-    },
-    { 
-      field: 'businessInfo', 
-      label: 'Business Information',
-      icon: FiBriefcase,
-      description: 'Provide your business details',
-      providerOnly: true
-    },
-  ], []);
-
-  const filteredSteps = useMemo(() => {
-    if (watchedValues.role === 'CUSTOMER') {
-      return steps.filter(step => !step.providerOnly);
-    }
-    return steps;
-  }, [watchedValues.role, steps]);
-
   const handleIdUpload = useCallback((file: File) => {
     if (!file.type.match(/image\/(jpeg|png|jpg)/)) {
       toast.error('Only JPEG/PNG images are allowed');
@@ -235,6 +163,7 @@ const RegisterModal = () => {
       return;
     }
     setIdFile(file);
+    setVerificationStatus(null);
   }, []);
 
   const onFileUpload = useCallback((field: keyof BusinessFiles, file: File) => {
@@ -249,68 +178,60 @@ const RegisterModal = () => {
     setBusinessFiles(prev => ({ ...prev, [field]: file }));
   }, []);
 
- const submitVerification = useCallback(async () => {
-  // If neither selfie nor ID is provided, skip identity verification
-  if (!selfieImageBlob && !idFile) {
-    console.log('[INFO] Skipping identity verification for business-only registration.');
-    return null; // return null or an empty object
-  }
-
-  if (!selfieImageBlob || !idFile) {
-    toast.error('Please complete all identity verification steps');
-    throw new Error('Missing selfie or ID for identity verification');
-  }
-
-  setIsLoading(true);
-  setVerificationStatus(null);
-
-  try {
-    const verificationFormData = new FormData();
-    verificationFormData.append('selfie', new File([selfieImageBlob], 'selfie.jpg', { type: 'image/jpeg' }));
-    verificationFormData.append('idImage', idFile);
-    verificationFormData.append('email', watchedValues.email);
-    verificationFormData.append('verificationStep', 'identity');
-
-
-    const response = await axios.post<VerificationResponse>('/api/verify', verificationFormData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 60000
-    });
-
-    if (!response.data.success) {
-      throw new Error(response.data.error || 'Verification failed');
+  const submitVerification = useCallback(async () => {
+    if (!selfieImageBlob || !idFile) {
+      toast.error('Please complete all identity verification steps');
+      throw new Error('Missing selfie or ID for identity verification');
     }
 
-    const extractedData = response.data.extractedData || {};
-    const confidence = response.data.matchConfidence || extractedData.faceConfidence || 0;
+    setIsLoading(true);
+    setVerificationStatus(null);
 
-    if (confidence < 80) {
-      throw new Error(`Face match confidence too low (${confidence.toFixed(1)}%)`);
-    }
+    try {
+      const verificationFormData = new FormData();
+      verificationFormData.append('selfie', new File([selfieImageBlob], 'selfie.jpg', { type: 'image/jpeg' }));
+      verificationFormData.append('idImage', idFile);
+      verificationFormData.append('email', watchedValues.email);
+      verificationFormData.append('verificationStep', 'identity');
 
-    setVerificationStatus({ success: true, confidence });
-    return {
-      ...response.data,
-      extractedData: {
-        ...extractedData,
-        idType: extractedData.idType || 'GHANA_CARD',
-        nationality: extractedData.nationality || 'Ghanaian'
+      const response = await axios.post<VerificationResponse>('/api/verify', verificationFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 60000
+      });
+
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Verification failed');
       }
-    };
-  } catch (error: any) {
-    const errorMsg = error.response?.data?.error || error.message || 'Verification failed';
-    setVerificationStatus({ 
-      success: false, 
-      error: errorMsg,
-      confidence: error.response?.data?.matchConfidence
-    });
-    toast.error(errorMsg);
-    throw error;
-  } finally {
-    setIsLoading(false);
-  }
-}, [selfieImageBlob, idFile, watchedValues.email]);
 
+      const extractedData = response.data.extractedData || {};
+      const confidence = response.data.matchConfidence || extractedData.faceConfidence || 0;
+
+      if (confidence < 80) {
+        throw new Error(`Face match confidence too low (${confidence.toFixed(1)}%)`);
+      }
+
+      setVerificationStatus({ success: true, confidence });
+      return {
+        ...response.data,
+        extractedData: {
+          ...extractedData,
+          idType: extractedData.idType || 'GHANA_CARD',
+          nationality: extractedData.nationality || 'Ghanaian'
+        }
+      };
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.error || error.message || 'Verification failed';
+      setVerificationStatus({ 
+        success: false, 
+        error: errorMsg,
+        confidence: error.response?.data?.matchConfidence
+      });
+      toast.error(errorMsg);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selfieImageBlob, idFile, watchedValues.email]);
 
   const onSubmit: SubmitHandler<FieldValues> = useCallback(async (data) => {
     setIsLoading(true);
@@ -322,7 +243,7 @@ const RegisterModal = () => {
         contactPhone: data.contactPhone,
         password: data.password,
         role: data.role,
-        isPhoneVerified: true, // Set to true since we're skipping verification
+        isPhoneVerified: true,
         isFaceVerified: data.role === 'PROVIDER',
         verified: data.role === 'PROVIDER',
         extractionComplete: data.role === 'PROVIDER',
@@ -333,7 +254,6 @@ const RegisterModal = () => {
       if (data.role === 'PROVIDER') {
         const verificationData = await submitVerification();
         const extractedData = verificationData?.extractedData || {};
-
         
         Object.assign(registrationPayload, {
           selfieImage: verificationData.selfieUrl,
@@ -431,183 +351,465 @@ const RegisterModal = () => {
   }, [isLoading, loginModal, registerModal]);
 
   const handleNext = useCallback(async () => {
-    const current = filteredSteps[currentStep];
-    const valid = await trigger(current.field);
-    if (!valid) return;
+    if (currentStep === 'account') {
+      const valid = await trigger(['name', 'email', 'contactPhone', 'password', 'role']);
+      if (!valid) return;
 
-    if (current.field === 'role' && watchedValues.role === 'CUSTOMER') {
-      setCurrentStep(filteredSteps.length - 1);
-      return;
+      if (watchedValues.role === 'CUSTOMER') {
+        return handleSubmit(onSubmit)();
+      }
+      setCurrentStep('identity');
+    } else if (currentStep === 'identity') {
+      if (!selfieImageBlob || !idFile) {
+        toast.error('Please complete identity verification');
+        return;
+      }
+      setCurrentStep('business');
     }
-
-    setCurrentStep(prev => prev + 1);
-  }, [currentStep, filteredSteps, trigger, watchedValues.role]);
+  }, [currentStep, trigger, watchedValues.role, handleSubmit, onSubmit, selfieImageBlob, idFile]);
 
   const handlePrev = useCallback(() => {
-    if (currentStep > 0) {
-      setCurrentStep(prev => prev - 1);
+    if (currentStep === 'business') {
+      setCurrentStep('identity');
+    } else if (currentStep === 'identity') {
+      setCurrentStep('account');
     }
   }, [currentStep]);
 
-  const jumpToStep = useCallback((stepIndex: number) => {
-    if (stepIndex < currentStep || isStepValid(stepIndex)) {
-      setCurrentStep(stepIndex);
+  const renderStep = () => {
+    switch (currentStep) {
+      case 'account':
+        return (
+          <div className="space-y-4 sm:space-y-6">
+            {/* Name Field */}
+            <div className="space-y-1 sm:space-y-2">
+              <div className="relative">
+                <div className={`flex items-center border-2 rounded-xl px-3 py-2 sm:px-4 sm:py-3 transition-all duration-200 ${
+                  errors.name 
+                    ? 'border-red-300 bg-red-50' 
+                    : watchedValues.name?.trim().length > 0 
+                      ? 'border-green-300 bg-green-50'
+                      : 'border-gray-200 hover:border-gray-300 focus-within:border-blue-500'
+                }`}>
+                  <FiUser className={`w-4 h-4 sm:w-5 sm:h-5 mr-2 sm:mr-3 ${
+                    errors.name 
+                      ? 'text-red-400' 
+                      : watchedValues.name?.trim().length > 0 
+                        ? 'text-green-500'
+                        : 'text-gray-400'
+                  }`} />
+                  <input
+                    {...register('name', { required: 'Full name is required' })}
+                    placeholder="Enter your full name"
+                    className="flex-1 bg-transparent outline-none text-gray-800 placeholder-gray-400 text-sm sm:text-base"
+                    disabled={isLoading}
+                  />
+                </div>
+                {errors.name && (
+                  <p className="text-red-500 text-xs sm:text-sm flex items-center gap-2 mt-1 sm:mt-2">
+                    <span className="w-1 h-1 bg-red-500 rounded-full"></span>
+                    {errors.name.message}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Email Field */}
+            <div className="space-y-1 sm:space-y-2">
+              <div className="relative">
+                <div className={`flex items-center border-2 rounded-xl px-3 py-2 sm:px-4 sm:py-3 transition-all duration-200 ${
+                  errors.email 
+                    ? 'border-red-300 bg-red-50' 
+                    : watchedValues.email?.trim().length > 0 
+                      ? 'border-green-300 bg-green-50'
+                      : 'border-gray-200 hover:border-gray-300 focus-within:border-blue-500'
+                }`}>
+                  <FiMail className={`w-4 h-4 sm:w-5 sm:h-5 mr-2 sm:mr-3 ${
+                    errors.email 
+                      ? 'text-red-400' 
+                      : watchedValues.email?.trim().length > 0 
+                        ? 'text-green-500'
+                        : 'text-gray-400'
+                  }`} />
+                  <input
+                    {...register('email', {
+                      required: 'Email is required',
+                      pattern: {
+                        value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                        message: 'Please enter a valid email address',
+                      },
+                    })}
+                    placeholder="Enter your email address"
+                    type="email"
+                    className="flex-1 bg-transparent outline-none text-gray-800 placeholder-gray-400 text-sm sm:text-base"
+                    disabled={isLoading}
+                  />
+                </div>
+                {errors.email && (
+                  <p className="text-red-500 text-xs sm:text-sm flex items-center gap-2 mt-1 sm:mt-2">
+                    <span className="w-1 h-1 bg-red-500 rounded-full"></span>
+                    {errors.email.message}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Phone Field */}
+            <div className="space-y-1 sm:space-y-2">
+              <div className="relative">
+                <div className={`flex items-center border-2 rounded-xl px-3 py-2 sm:px-4 sm:py-3 transition-all duration-200 ${
+                  errors.contactPhone 
+                    ? 'border-red-300 bg-red-50' 
+                    : watchedValues.contactPhone?.trim().length > 0 
+                      ? 'border-green-300 bg-green-50'
+                      : 'border-gray-200 hover:border-gray-300 focus-within:border-blue-500'
+                }`}>
+                  <FiPhone className={`w-4 h-4 sm:w-5 sm:h-5 mr-2 sm:mr-3 ${
+                    errors.contactPhone 
+                      ? 'text-red-400' 
+                      : watchedValues.contactPhone?.trim().length > 0 
+                        ? 'text-green-500'
+                        : 'text-gray-400'
+                  }`} />
+                  <input
+                    {...register('contactPhone', {
+                      required: 'Phone number is required',
+                      pattern: {
+                        value: /^[0-9+\-\s()]+$/,
+                        message: 'Please enter a valid phone number',
+                      },
+                      minLength: { value: 10, message: 'Phone number must be at least 10 digits' },
+                    })}
+                    placeholder="Enter your phone number"
+                    type="tel"
+                    className="flex-1 bg-transparent outline-none text-gray-800 placeholder-gray-400 text-sm sm:text-base"
+                    disabled={isLoading}
+                  />
+                </div>
+                {errors.contactPhone && (
+                  <p className="text-red-500 text-xs sm:text-sm flex items-center gap-2 mt-1 sm:mt-2">
+                    <span className="w-1 h-1 bg-red-500 rounded-full"></span>
+                    {errors.contactPhone.message}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Password Field */}
+            <div className="space-y-1 sm:space-y-2">
+              <div className="relative">
+                <div className={`flex items-center border-2 rounded-xl px-3 py-2 sm:px-4 sm:py-3 transition-all duration-200 ${
+                  errors.password 
+                    ? 'border-red-300 bg-red-50' 
+                    : watchedValues.password?.trim().length > 0 
+                      ? 'border-green-300 bg-green-50'
+                      : 'border-gray-200 hover:border-gray-300 focus-within:border-blue-500'
+                }`}>
+                  <FiLock className={`w-4 h-4 sm:w-5 sm:h-5 mr-2 sm:mr-3 ${
+                    errors.password 
+                      ? 'text-red-400' 
+                      : watchedValues.password?.trim().length > 0 
+                        ? 'text-green-500'
+                        : 'text-gray-400'
+                  }`} />
+                  <input
+                    {...register('password', {
+                      required: 'Password is required',
+                      minLength: { value: 6, message: 'Password must be at least 6 characters' },
+                    })}
+                    placeholder="Create a secure password"
+                    type={showPassword ? 'text' : 'password'}
+                    className="flex-1 bg-transparent outline-none text-gray-800 placeholder-gray-400 text-sm sm:text-base"
+                    disabled={isLoading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="p-1 text-gray-400 hover:text-gray-600 transition-colors duration-200"
+                  >
+                    {showPassword ? <FiEyeOff className="w-4 h-4 sm:w-5 sm:h-5" /> : <FiEye className="w-4 h-4 sm:w-5 sm:h-5" />}
+                  </button>
+                </div>
+                {errors.password && (
+                  <p className="text-red-500 text-xs sm:text-sm flex items-center gap-2 mt-1 sm:mt-2">
+                    <span className="w-1 h-1 bg-red-500 rounded-full"></span>
+                    {errors.password.message}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Role Selection */}
+            <div className="space-y-3 sm:space-y-4">
+              <div className="grid grid-cols-1 gap-2 sm:gap-3">
+                {[
+                  { value: 'CUSTOMER', label: 'Customer', desc: 'Looking for services' },
+                  { value: 'PROVIDER', label: 'Provider', desc: 'Offering services' }
+                ].map((option) => (
+                  <label
+                    key={option.value}
+                    className={`relative flex items-center p-3 sm:p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                      watchedValues.role === option.value
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <input
+                      {...register('role', { required: 'Role is required' })}
+                      type="radio"
+                      value={option.value}
+                      disabled={isLoading}
+                      className="sr-only"
+                    />
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-800 text-sm sm:text-base">{option.label}</div>
+                      <div className="text-xs sm:text-sm text-gray-500">{option.desc}</div>
+                    </div>
+                    {watchedValues.role === option.value && (
+                      <FiCheck className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
+                    )}
+                  </label>
+                ))}
+              </div>
+              {errors.role && (
+                <p className="text-red-500 text-xs sm:text-sm flex items-center gap-2">
+                  <span className="w-1 h-1 bg-red-500 rounded-full"></span>
+                  {errors.role.message}
+                </p>
+              )}
+            </div>
+          </div>
+        );
+      case 'identity':
+        return (
+          <div className="space-y-6">
+            {/* Selfie Step */}
+            <div className="space-y-3 sm:space-y-4">
+              <div className="text-center">
+                <div className="w-12 h-12 bg-blue-100 rounded-full mx-auto mb-3 flex items-center justify-center">
+                  <FiCamera className="text-blue-600 text-xl" />
+                </div>
+                <h3 className="text-lg sm:text-xl font-semibold text-gray-800 mb-1 sm:mb-2">
+                  Verify Your Identity
+                </h3>
+                <p className="text-gray-500 text-xs sm:text-sm">
+                  Take a clear photo of yourself
+                </p>
+              </div>
+              <Camera onCapture={(blob) => setSelfieImageBlob(blob)} />
+              {selfieImageBlob && (
+                <div className="flex items-center gap-2 text-green-600 bg-green-50 p-2 sm:p-3 rounded-xl text-sm">
+                  <FiCheck className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span className="font-medium">Selfie captured successfully</span>
+                </div>
+              )}
+            </div>
+
+            {/* ID Upload Step */}
+            <div className="space-y-3 sm:space-y-4">
+              <div className="text-center">
+                <div className="w-12 h-12 bg-indigo-100 rounded-full mx-auto mb-3 flex items-center justify-center">
+                  <FiFileText className="text-indigo-600 text-xl" />
+                </div>
+                <h3 className="text-lg sm:text-xl font-semibold text-gray-800 mb-1 sm:mb-2">
+                  Upload ID Document
+                </h3>
+                <p className="text-gray-500 text-xs sm:text-sm">
+                  Ghana Card, Passport, or Driver's License
+                </p>
+              </div>
+              <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 sm:p-8 text-center hover:border-blue-400 transition-colors duration-200">
+                <FiUpload className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-3 sm:mb-4" />
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => e.target.files?.[0] && handleIdUpload(e.target.files[0])}
+                  disabled={isLoading}
+                  className="hidden"
+                  id="id-upload"
+                />
+                <label
+                  htmlFor="id-upload"
+                  className="cursor-pointer text-blue-600 hover:text-blue-700 font-medium text-sm sm:text-base"
+                >
+                  Click to upload or take a photo of your ID
+                </label>
+                <p className="text-gray-500 text-xs sm:text-sm mt-1 sm:mt-2">
+                  PNG, JPG or JPEG (max. 5MB)
+                </p>
+              </div>
+              {idFile && (
+                <div className="flex items-center gap-2 text-green-600 bg-green-50 p-2 sm:p-3 rounded-xl text-sm">
+                  <FiCheck className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span className="font-medium">ID selected: {idFile.name}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Verification Status */}
+            {verificationStatus && (
+              <div className={`p-4 rounded-xl ${
+                verificationStatus.success 
+                  ? 'bg-green-50 border border-green-200' 
+                  : 'bg-red-50 border border-red-200'
+              }`}>
+                <div className="flex items-start gap-3">
+                  {verificationStatus.success ? (
+                    <FiCheck className="text-green-500 text-xl mt-0.5 flex-shrink-0" />
+                  ) : (
+                    <FiAlertCircle className="text-red-500 text-xl mt-0.5 flex-shrink-0" />
+                  )}
+                  <div>
+                    <p className={`font-medium ${
+                      verificationStatus.success ? 'text-green-800' : 'text-red-800'
+                    }`}>
+                      {verificationStatus.success ? 'Verification Complete!' : 'Verification Failed'}
+                    </p>
+                    <p className={`text-sm mt-1 ${
+                      verificationStatus.success ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {verificationStatus.success 
+                        ? `Match confidence: ${verificationStatus.confidence}%`
+                        : verificationStatus.error}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      case 'business':
+        return (
+          <div className="space-y-4 sm:space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  TIN Number *
+                </label>
+                <input
+                  type="text"
+                  {...register('tinNumber', { required: 'TIN number is required' })}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter TIN number"
+                  disabled={isLoading}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Registration Number
+                </label>
+                <input
+                  type="text"
+                  {...register('registrationNumber')}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter registration number"
+                  disabled={isLoading}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Business Name *
+              </label>
+              <input
+                type="text"
+                {...register('businessName', { required: 'Business name is required' })}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Enter business name"
+                disabled={isLoading}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Business Type *
+                </label>
+                <select
+                  {...register('businessType', { required: 'Business type is required' })}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  disabled={isLoading}
+                >
+                  <option value="">Select business type</option>
+                  {categories.map((cat) => (
+                    <option key={cat.label} value={cat.label}>
+                      {cat.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Business Phone
+                </label>
+                <input
+                  type="tel"
+                  {...register('businessPhone')}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter business phone"
+                  disabled={isLoading}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Business Address
+              </label>
+              <textarea
+                {...register('businessAddress')}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                rows={3}
+                placeholder="Enter business address"
+                disabled={isLoading}
+              />
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900">Required Documents</h3>
+              
+              <FileUpload
+                label="TIN Certificate *"
+                file={businessFiles.tinCertificate}
+                onFileUpload={(file) => onFileUpload('tinCertificate', file)}
+                required
+                isLoading={isLoading}
+              />
+              
+              <FileUpload
+                label="Certificate of Incorporation"
+                file={businessFiles.incorporationCert}
+                onFileUpload={(file) => onFileUpload('incorporationCert', file)}
+                isLoading={isLoading}
+              />
+              
+              <FileUpload
+                label="VAT Certificate"
+                file={businessFiles.vatCertificate}
+                onFileUpload={(file) => onFileUpload('vatCertificate', file)}
+                isLoading={isLoading}
+              />
+              
+              <FileUpload
+                label="SSNIT Certificate"
+                file={businessFiles.ssnitCert}
+                onFileUpload={(file) => onFileUpload('ssnitCert', file)}
+                isLoading={isLoading}
+              />
+            </div>
+          </div>
+        );
     }
-  }, [currentStep]);
-
-  const isStepValid = useCallback((stepIndex: number): boolean => {
-    const field = filteredSteps[stepIndex].field;
-    if (field === 'selfieImage') return !!selfieImageBlob;
-    if (field === 'idImage') return !!idFile;
-    if (field === 'businessInfo') {
-      return (
-        !!watchedValues.tinNumber &&
-        !!watchedValues.businessName &&
-        !!watchedValues.businessType &&
-        !!businessFiles.tinCertificate
-      );
-    }
-    if (field === 'role') return !!watchedValues.role && !errors.role;
-    return !!watchedValues[field]?.trim().length && !errors[field];
-  }, [filteredSteps, selfieImageBlob, idFile, watchedValues, businessFiles.tinCertificate, errors]);
-
-  const canProceed = useMemo(() => isStepValid(currentStep), [currentStep, isStepValid]);
-  const allFieldsComplete = useMemo(() => filteredSteps.every((_, i) => isStepValid(i)), [filteredSteps, isStepValid]);
-
-  const BusinessStep = useCallback(() => (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            TIN Number *
-          </label>
-          <input
-            type="text"
-            {...register('tinNumber', { required: 'TIN number is required' })}
-            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            placeholder="Enter TIN number"
-            disabled={isLoading}
-          />
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Registration Number
-          </label>
-          <input
-            type="text"
-            {...register('registrationNumber')}
-            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            placeholder="Enter registration number"
-            disabled={isLoading}
-          />
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Business Name *
-        </label>
-        <input
-          type="text"
-          {...register('businessName', { required: 'Business name is required' })}
-          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          placeholder="Enter business name"
-          disabled={isLoading}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Business Type *
-          </label>
-          <select
-            {...register('businessType', { required: 'Business type is required' })}
-            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            disabled={isLoading}
-          >
-            <option value="">Select business type</option>
-            {categories.map((cat) => (
-              <option key={cat.label} value={cat.label}>
-                {cat.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Business Phone
-          </label>
-          <input
-            type="tel"
-            {...register('businessPhone')}
-            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            placeholder="Enter business phone"
-            disabled={isLoading}
-          />
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Business Address
-        </label>
-        <textarea
-          {...register('businessAddress')}
-          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          rows={3}
-          placeholder="Enter business address"
-          disabled={isLoading}
-        />
-      </div>
-
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-gray-900">Required Documents</h3>
-        
-        <FileUpload
-          label="TIN Certificate *"
-          file={businessFiles.tinCertificate}
-          onFileUpload={(file) => onFileUpload('tinCertificate', file)}
-          required
-          isLoading={isLoading}
-        />
-        
-        <FileUpload
-          label="Certificate of Incorporation"
-          file={businessFiles.incorporationCert}
-          onFileUpload={(file) => onFileUpload('incorporationCert', file)}
-          isLoading={isLoading}
-        />
-        
-        <FileUpload
-          label="VAT Certificate"
-          file={businessFiles.vatCertificate}
-          onFileUpload={(file) => onFileUpload('vatCertificate', file)}
-          isLoading={isLoading}
-        />
-        
-        <FileUpload
-          label="SSNIT Certificate"
-          file={businessFiles.ssnitCert}
-          onFileUpload={(file) => onFileUpload('ssnitCert', file)}
-          isLoading={isLoading}
-        />
-      </div>
-    </div>
-  ), [businessFiles, isLoading, onFileUpload, register]);
+  };
 
   if (!registerModal.isOpen) return null;
-
-  const currentField = filteredSteps[currentStep];
-  const IconComponent = currentField.icon;
-  const progress = ((currentStep + 1) / filteredSteps.length) * 100;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 overflow-y-auto">
       <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden transform transition-all duration-300 my-8">
-        
         {/* Header */}
         <div className="relative bg-gradient-to-r from-blue-600 to-purple-600 px-6 py-5 sm:px-8 sm:py-6 text-white">
           <button 
@@ -623,240 +825,55 @@ const RegisterModal = () => {
             <p className="text-blue-100 text-xs sm:text-sm">Create your account in a few simple steps</p>
           </div>
 
-          {/* Progress Bar */}
-          <div className="relative">
-            <div className="flex justify-between text-xs mb-2">
-              <span>Step {currentStep + 1} of {filteredSteps.length}</span>
-              <span>{Math.round(progress)}% Complete</span>
-            </div>
-            <div className="w-full bg-white/20 rounded-full h-2 mb-1">
-              <div 
-                className="bg-white h-2 rounded-full transition-all duration-500 ease-out"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <div className="flex justify-between px-1">
-              {filteredSteps.map((_, index) => (
-                <button
-                  key={index}
-                  onClick={() => jumpToStep(index)}
-                  disabled={index > currentStep && !isStepValid(index)}
-                  className={`w-4 h-4 rounded-full transition-colors duration-200 ${
-                    index <= currentStep || isStepValid(index)
-                      ? 'bg-white cursor-pointer hover:bg-blue-200'
-                      : 'bg-white/30 cursor-not-allowed'
-                  } ${index === currentStep ? 'ring-2 ring-blue-300' : ''}`}
-                />
-              ))}
-            </div>
+          {/* Progress Steps */}
+          <div className="flex items-center justify-center gap-4 mb-2">
+            {['account', 'identity', 'business'].map((step, index) => (
+              <div key={step} className="flex items-center">
+                <div
+                  onClick={() => {
+                    if (step === 'account' || 
+                        (step === 'identity' && watchedValues.role === 'PROVIDER') ||
+                        (step === 'business' && watchedValues.role === 'PROVIDER' && selfieImageBlob && idFile)) {
+                      setCurrentStep(step as VerificationStep);
+                    }
+                  }}
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium cursor-pointer transition-colors ${
+                    currentStep === step
+                      ? 'bg-white text-blue-600'
+                      : index < (currentStep === 'account' ? 0 : currentStep === 'identity' ? 1 : 2)
+                      ? 'bg-green-500 text-white'
+                      : 'bg-gray-200 text-gray-500'
+                  } ${
+                    step === 'account' || 
+                    (step === 'identity' && watchedValues.role === 'PROVIDER') ||
+                    (step === 'business' && watchedValues.role === 'PROVIDER' && selfieImageBlob && idFile)
+                      ? 'cursor-pointer'
+                      : 'cursor-not-allowed'
+                  }`}
+                >
+                  {index + 1}
+                </div>
+                {index < 2 && (
+                  <div className={`w-8 h-0.5 mx-1 ${
+                    index < (currentStep === 'account' ? 0 : currentStep === 'identity' ? 1 : 2)
+                      ? 'bg-green-500'
+                      : 'bg-gray-200'
+                  }`} />
+                )}
+              </div>
+            ))}
           </div>
         </div>
 
         {/* Content */}
         <div className="px-6 py-5 sm:px-8 sm:py-6">
-          {/* Step Header */}
-          <div className="text-center mb-6 sm:mb-8">
-            <div className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-r from-blue-100 to-purple-100 rounded-2xl mb-3 sm:mb-4">
-              <IconComponent className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600" />
-            </div>
-            <h3 className="text-lg sm:text-xl font-semibold text-gray-800 mb-1 sm:mb-2">
-              {currentField.label}
-            </h3>
-            <p className="text-gray-500 text-xs sm:text-sm">
-              {currentField.description}
-            </p>
-          </div>
-
-          {/* Form Fields */}
-          <div className="space-y-4 sm:space-y-6">
-            {currentField.field === 'role' ? (
-              <div className="space-y-3 sm:space-y-4">
-                <div className="grid grid-cols-1 gap-2 sm:gap-3">
-                  {[
-                    { value: 'CUSTOMER', label: 'Customer', desc: 'Looking for services' },
-                    { value: 'PROVIDER', label: 'Provider', desc: 'Offering services' }
-                  ].map((option) => (
-                    <label
-                      key={option.value}
-                      className={`relative flex items-center p-3 sm:p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
-                        watchedValues.role === option.value
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <input
-                        {...register('role', { required: 'Role is required' })}
-                        type="radio"
-                        value={option.value}
-                        disabled={isLoading}
-                        className="sr-only"
-                      />
-                      <div className="flex-1">
-                        <div className="font-medium text-gray-800 text-sm sm:text-base">{option.label}</div>
-                        <div className="text-xs sm:text-sm text-gray-500">{option.desc}</div>
-                      </div>
-                      {watchedValues.role === option.value && (
-                        <FiCheck className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
-                      )}
-                    </label>
-                  ))}
-                </div>
-                {errors.role && (
-                  <p className="text-red-500 text-xs sm:text-sm flex items-center gap-2">
-                    <span className="w-1 h-1 bg-red-500 rounded-full"></span>
-                    {errors.role.message}
-                  </p>
-                )}
-              </div>
-            ) : currentField.field === 'selfieImage' ? (
-              <div className="space-y-3 sm:space-y-4">
-                <Camera onCapture={(blob) => setSelfieImageBlob(blob)} />
-                {selfieImageBlob && (
-                  <div className="flex items-center gap-2 text-green-600 bg-green-50 p-2 sm:p-3 rounded-xl text-sm">
-                    <FiCheck className="w-4 h-4 sm:w-5 sm:h-5" />
-                    <span className="font-medium">Selfie captured successfully</span>
-                  </div>
-                )}
-              </div>
-            ) : currentField.field === 'idImage' ? (
-              <div className="space-y-3 sm:space-y-4">
-                <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 sm:p-8 text-center hover:border-blue-400 transition-colors duration-200">
-                  <FiUpload className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-3 sm:mb-4" />
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => e.target.files?.[0] && handleIdUpload(e.target.files[0])}
-                    disabled={isLoading}
-                    className="hidden"
-                    id="id-upload"
-                  />
-                  <label
-                    htmlFor="id-upload"
-                    className="cursor-pointer text-blue-600 hover:text-blue-700 font-medium text-sm sm:text-base"
-                  >
-                    Click to upload or take a photo of your Ghana Card
-                  </label>
-                  <p className="text-gray-500 text-xs sm:text-sm mt-1 sm:mt-2">
-                    PNG, JPG or JPEG (max. 5MB). You can take a photo with your camera.
-                  </p>
-                </div>
-
-                {idFile && (
-                  <div className="flex items-center gap-2 text-green-600 bg-green-50 p-2 sm:p-3 rounded-xl text-sm">
-                    <FiCheck className="w-4 h-4 sm:w-5 sm:h-5" />
-                    <span className="font-medium">ID selected: {idFile.name}</span>
-                  </div>
-                )}
-              </div>
-            ) : currentField.field === 'businessInfo' ? (
-              <BusinessStep />
-            ) : (
-              <div className="space-y-1 sm:space-y-2">
-                <div className="relative">
-                  <div className={`flex items-center border-2 rounded-xl px-3 py-2 sm:px-4 sm:py-3 transition-all duration-200 ${
-                    errors[currentField.field] 
-                      ? 'border-red-300 bg-red-50' 
-                      : watchedValues[currentField.field]?.trim().length > 0 
-                        ? 'border-green-300 bg-green-50'
-                        : 'border-gray-200 hover:border-gray-300 focus-within:border-blue-500'
-                  }`}>
-                    <IconComponent className={`w-4 h-4 sm:w-5 sm:h-5 mr-2 sm:mr-3 ${
-                      errors[currentField.field] 
-                        ? 'text-red-400' 
-                        : watchedValues[currentField.field]?.trim().length > 0 
-                          ? 'text-green-500'
-                          : 'text-gray-400'
-                    }`} />
-                    <input
-                      {...register(currentField.field, {
-                        required: `${currentField.label} is required`,
-                        ...(currentField.field === 'email' && {
-                          pattern: {
-                            value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                            message: 'Please enter a valid email address',
-                          },
-                        }),
-                        ...(currentField.field === 'contactPhone' && {
-                          pattern: {
-                            value: /^[0-9+\-\s()]+$/,
-                            message: 'Please enter a valid phone number',
-                          },
-                          minLength: { value: 10, message: 'Phone number must be at least 10 digits' },
-                        }),
-                        ...(currentField.field === 'password' && {
-                          minLength: { value: 6, message: 'Password must be at least 6 characters' },
-                        }),
-                      })}
-                      placeholder={currentField.placeholder}
-                      type={
-                        currentField.field === 'password' && !showPassword
-                          ? 'password'
-                          : currentField.field === 'email'
-                          ? 'email'
-                          : currentField.field === 'contactPhone'
-                          ? 'tel'
-                          : 'text'
-                      }
-                      className="flex-1 bg-transparent outline-none text-gray-800 placeholder-gray-400 text-sm sm:text-base"
-                      disabled={isLoading}
-                    />
-                    {currentField.field === 'password' && (
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="p-1 text-gray-400 hover:text-gray-600 transition-colors duration-200"
-                      >
-                        {showPassword ? <FiEyeOff className="w-4 h-4 sm:w-5 sm:h-5" /> : <FiEye className="w-4 h-4 sm:w-5 sm:h-5" />}
-                      </button>
-                    )}
-                    {watchedValues[currentField.field]?.trim().length > 0 && !errors[currentField.field] && (
-                      <FiCheck className="w-4 h-4 sm:w-5 sm:h-5 text-green-500" />
-                    )}
-                  </div>
-                </div>
-                {errors[currentField.field] && (
-                  <p className="text-red-500 text-xs sm:text-sm flex items-center gap-2 mt-1 sm:mt-2">
-                    <span className="w-1 h-1 bg-red-500 rounded-full"></span>
-                    {errors[currentField.field]?.message}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Verification Status */}
-          {verificationStatus && !verificationStatus.success && (
-            <div className="mt-4 sm:mt-6 p-3 sm:p-4 bg-red-50 border border-red-200 rounded-xl">
-              <div className="flex items-start gap-2 sm:gap-3">
-                <FiAlertCircle className="text-red-500 text-xl mt-0.5 flex-shrink-0" />
-                <div>
-                  <p className="font-medium text-red-800">Verification Failed</p>
-                  <p className="text-sm text-red-600 mt-1">
-                    {verificationStatus.error}
-                    {verificationStatus.confidence && (
-                      <span> (Confidence: {verificationStatus.confidence.toFixed(1)}%)</span>
-                    )}
-                  </p>
-                  <button
-                    onClick={() => {
-                      setSelfieImageBlob(null);
-                      setIdFile(null);
-                      setVerificationStatus(null);
-                    }}
-                    className="mt-1 sm:mt-2 text-xs sm:text-sm font-medium text-red-600 hover:text-red-800 transition-colors"
-                  >
-                    Retry Verification
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          {renderStep()}
         </div>
 
         {/* Footer */}
         <div className="px-6 py-5 sm:px-8 sm:py-6 bg-gray-50 border-t border-gray-100">
           <div className="flex justify-between items-center">
-            {currentStep > 0 ? (
+            {currentStep !== 'account' && (
               <button
                 onClick={handlePrev}
                 disabled={isLoading}
@@ -865,46 +882,36 @@ const RegisterModal = () => {
                 <FiArrowLeft className="w-3 h-3 sm:w-4 sm:h-4" />
                 Previous
               </button>
-            ) : (
-              <div></div>
             )}
 
-            {currentStep < filteredSteps.length - 1 ? (
-              <button
-                onClick={handleNext}
-                disabled={!canProceed || isLoading}
-                className={`flex items-center gap-1 sm:gap-2 px-6 sm:px-8 py-2 sm:py-3 rounded-xl font-medium transition-all duration-200 text-sm sm:text-base ${
-                  canProceed && !isLoading
-                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl'
-                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                }`}
-              >
-                Continue
-                <FiArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
-              </button>
-            ) : (
-              <button
-                onClick={handleSubmit(onSubmit)}
-                disabled={!allFieldsComplete || isLoading}
-                className={`flex items-center gap-1 sm:gap-2 px-6 sm:px-8 py-2 sm:py-3 rounded-xl font-medium transition-all duration-200 text-sm sm:text-base ${
-                  allFieldsComplete && !isLoading
-                    ? 'bg-gradient-to-r from-green-600 to-blue-600 text-white hover:from-green-700 hover:to-blue-700 shadow-lg hover:shadow-xl'
-                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                }`}
-              >
-                {isLoading ? (
-                  <>
-                    <FiLoader className="animate-spin text-lg" />
-                    <span>Creating Account...</span>
-                  </>
-                ) : (
-                  <>
-                    Create Account
-                    <FiCheck className="w-3 h-3 sm:w-4 sm:h-4" />
-                  </>
-                )}
-              </button>
-            )}
+            <button
+              onClick={currentStep === 'business' ? handleSubmit(onSubmit) : handleNext}
+              disabled={isLoading || 
+                (currentStep === 'account' && (!watchedValues.name || !watchedValues.email || !watchedValues.contactPhone || !watchedValues.password || !watchedValues.role)) ||
+                (currentStep === 'identity' && (!selfieImageBlob || !idFile)) ||
+                (currentStep === 'business' && (!watchedValues.tinNumber || !watchedValues.businessName || !watchedValues.businessType || !businessFiles.tinCertificate))
+              }
+              className={`flex items-center gap-1 sm:gap-2 px-6 sm:px-8 py-2 sm:py-3 rounded-xl font-medium transition-all duration-200 text-sm sm:text-base ${
+                !isLoading && 
+                ((currentStep === 'account' && watchedValues.name && watchedValues.email && watchedValues.contactPhone && watchedValues.password && watchedValues.role) ||
+                (currentStep === 'identity' && selfieImageBlob && idFile) ||
+                (currentStep === 'business' && watchedValues.tinNumber && watchedValues.businessName && watchedValues.businessType && businessFiles.tinCertificate))
+                  ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              }`}
+            >
+              {isLoading ? (
+                <>
+                  <FiLoader className="animate-spin text-lg" />
+                  <span>Processing...</span>
+                </>
+              ) : (
+                <>
+                  {currentStep === 'business' ? 'Complete Registration' : 'Continue'}
+                  <FiArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
+                </>
+              )}
+            </button>
           </div>
 
           {/* Login Link */}
