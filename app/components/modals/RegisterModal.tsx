@@ -778,35 +778,33 @@ if (response.data.shouldAutoLogin) {
               </div>
             ) : currentField.field === 'idImage' ? (
               <div className="space-y-3 sm:space-y-4">
-                <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 sm:p-8 text-center hover:border-blue-400 transition-colors duration-200">
-                  <FiUpload className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-3 sm:mb-4" />
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => e.target.files?.[0] && handleIdUpload(e.target.files[0])}
-                    disabled={isLoading}
-                    className="hidden"
-                    id="id-upload"
-                    capture="environment"
-                  />
-                  <label
-                    htmlFor="id-upload"
-                    className="cursor-pointer text-blue-600 hover:text-blue-700 font-medium text-sm sm:text-base"
-                  >
-                    Click to upload or take a photo of your Ghana Card
-                  </label>
-                  <p className="text-gray-500 text-xs sm:text-sm mt-1 sm:mt-2">
-                    PNG, JPG or JPEG (max. 5MB). You can take a photo with your camera.
-                  </p>
-                </div>
-
-                {idFile && (
-                  <div className="flex items-center gap-2 text-green-600 bg-green-50 p-2 sm:p-3 rounded-xl text-sm">
-                    <FiCheck className="w-4 h-4 sm:w-5 sm:h-5" />
-                    <span className="font-medium">ID selected: {idFile.name}</span>
-                  </div>
-                )}
-              </div>
+  <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 sm:p-8 text-center hover:border-blue-400 transition-colors duration-200">
+    <FiUpload className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-3 sm:mb-4" />
+    <input
+      type="file"
+      accept="image/*"
+      onChange={(e) => e.target.files?.[0] && handleIdUpload(e.target.files[0])}
+      disabled={isLoading}
+      className="hidden"
+      id="id-upload"
+    />
+    <label
+      htmlFor="id-upload"
+      className="cursor-pointer text-blue-600 hover:text-blue-700 font-medium text-sm sm:text-base"
+    >
+      Click to upload or take a photo of your National ID
+    </label>
+    <p className="text-gray-500 text-xs sm:text-sm mt-1 sm:mt-2">
+      PNG, JPG or JPEG (max. 5MB). You can take a photo with your camera or choose from gallery.
+    </p>
+  </div>
+  {idFile && (
+    <div className="flex items-center gap-2 text-green-600 bg-green-50 p-2 sm:p-3 rounded-xl text-sm">
+      <FiCheck className="w-4 h-4 sm:w-5 sm:h-5" />
+      <span className="font-medium">ID selected: {idFile.name}</span>
+    </div>
+  )}
+</div>
             ) : currentField.field === 'businessInfo' ? (
               <BusinessStep />
             ) : (
