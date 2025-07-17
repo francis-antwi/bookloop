@@ -869,7 +869,7 @@ const AdminDashboard = () => {
                       <div className="flex items-center gap-2 justify-end">
                         <ActionButton
                           variant="secondary"
-                          onClick={() => router.push(`/admin/providers/${provider.id}`)}
+                          onClick={() => router.push(`/admin/verifications/${provider.id}`)}
                         >
                           <Eye size={14} className="mr-1" />
                           View
