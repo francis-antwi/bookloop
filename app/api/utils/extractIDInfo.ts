@@ -227,7 +227,6 @@ function extractPersonalIdNumber(fullText: string): string | null {
   
   return null;
 }
-}
 
 function extractDocumentNumber(fullText: string, lines: string[]): string | null {
   // Method 1: Look for lines after Document Number
