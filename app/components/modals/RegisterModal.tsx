@@ -333,25 +333,30 @@ const RegisterModal = () => {
       if (!response.data.success) {
         throw new Error(response.data.message || 'Registration failed');
       }
+// Handle successful registration
+if (response.data.shouldAutoLogin) {
+  const loginResult = await signIn('credentials', {
+    email: data.email,
+    password: data.password,
+    redirect: false
+  });
 
-      // Handle successful registration
-      if (response.data.shouldAutoLogin) {
-        const loginResult = await signIn('credentials', {
-          email: data.email,
-          password: data.password,
-          redirect: false
-        });
+  if (loginResult?.error) {
+    throw new Error('Auto-login failed');
+  }
 
-        if (loginResult?.error) {
-          throw new Error('Auto-login failed');
-        }
-
-        toast.success('Account created and logged in!');
-        router.push('/');
-      } else {
-        toast.success('Account created successfully!');
-        loginModal.onOpen();
-      }
+  toast.success('Account created and logged in!');
+  
+  // Redirect providers to pending approval, others to home
+  if (data.role === 'PROVIDER') {
+    router.push('/pending-approval');
+  } else {
+    router.push('/');
+  }
+} else {
+  toast.success('Account created successfully!');
+  loginModal.onOpen();
+}
 
       registerModal.onClose();
       reset();
