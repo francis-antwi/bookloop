@@ -18,13 +18,11 @@ export async function PATCH(
 ) {
   console.log("🔍 PATCH endpoint hit with userId:", params.userId);
 
-  // 1. Extract and validate token
   const token = await getToken({ req, secret });
   console.log("🔐 Token:", token);
 
   let role = token?.role;
 
-  // Optional: Fallback — if token is missing role, fetch from DB
   if (!role && token?.email) {
     const user = await prisma.user.findUnique({
       where: { email: token.email },
@@ -39,32 +37,29 @@ export async function PATCH(
   }
 
   const { userId } = params;
-
-  let status: string;
+  let businessVerified: boolean;
   let notes: string | null;
 
   try {
     const body = await req.json();
     console.log("📝 Request body:", body);
-    status = body.status;
+
+    if (typeof body.businessVerified !== "boolean") {
+      return NextResponse.json(
+        { error: "Invalid 'businessVerified' value. Must be boolean." },
+        { status: 400 }
+      );
+    }
+
+    businessVerified = body.businessVerified;
     notes = body.notes || null;
+
   } catch (error) {
     console.error("❌ Error parsing request body:", error);
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  // 2. Validate status input
-  if (!["APPROVED", "REJECTED"].includes(status)) {
-    return NextResponse.json(
-      { error: "Invalid status. Must be 'APPROVED' or 'REJECTED'." },
-      { status: 400 }
-    );
-  }
-
-  const isApproved = status === "APPROVED";
-
   try {
-    // 3. Ensure verification record exists
     const existingVerification = await prisma.businessVerification.findUnique({
       where: { userId },
     });
@@ -76,7 +71,6 @@ export async function PATCH(
       );
     }
 
-    // 4. Get provider user data
     const provider = await prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, email: true },
@@ -86,26 +80,25 @@ export async function PATCH(
       return NextResponse.json({ error: "Provider not found" }, { status: 404 });
     }
 
-    // 5. Perform atomic update of user + businessVerification
     const [updatedUser, updatedVerification] = await prisma.$transaction([
       prisma.user.update({
         where: { id: userId },
-        data: { businessVerified: isApproved },
+        data: { businessVerified },
       }),
       prisma.businessVerification.update({
         where: { userId },
         data: {
-          verified: isApproved,
-          verificationNotes: notes || (isApproved
-            ? "Business approved by admin."
-            : "Business rejected by admin."),
+          verified: businessVerified,
+          verificationNotes:
+            notes || (businessVerified
+              ? "Business approved by admin."
+              : "Business rejected by admin."),
           updatedAt: new Date(),
         },
       }),
     ]);
 
-    // 6. Auto-create notification for the provider
-    const message = isApproved
+    const message = businessVerified
       ? "🎉 Your business application has been approved. You can now list your services!"
       : `❌ Your business application was rejected.${notes ? ` Reason: ${notes}` : ""}`;
 
@@ -126,9 +119,9 @@ export async function PATCH(
     });
 
   } catch (error) {
-    console.error("❌ Error during provider approval update:", error);
+    console.error("❌ Error during business verification update:", error);
     return NextResponse.json(
-      { error: "Internal server error during provider status update." },
+      { error: "Internal server error during business verification update." },
       { status: 500 }
     );
   }

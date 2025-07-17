@@ -23,31 +23,23 @@ export default function UserBusinessVerificationPage() {
         setLoading(false);
       });
   }, [userId]);
-
- const handleVerify = async (verified: boolean) => {
+  
+const handleVerify = async (verified: boolean) => {
   setSubmitting(true);
   try {
-    await axios.patch(
-      `/api/admin/providers/${userId}/status`,
-      {
-        verified,
-        notes,
-      },
-      {
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    await axios.patch(`/api/admin/providers/${userId}/status`, {
+      businessVerified: verified,
+      notes,
+    });
     toast.success(verified ? "Approved" : "Rejected");
     router.refresh();
   } catch (err) {
     toast.error("Action failed");
-    console.error("PATCH error:", err); // helpful for debugging
   } finally {
     setSubmitting(false);
   }
 };
+
 
 
   if (loading) {
