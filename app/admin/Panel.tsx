@@ -876,67 +876,20 @@ const AdminDashboard = () => {
                         </ActionButton>
                         {provider.status === 'PENDING' && (
                           <>
-<div className="flex gap-3">
-  <ActionButton 
-    variant="success" 
-    onClick={() => handleProviderApproval(provider.id, 'APPROVED')}
-    className="flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors duration-200 font-medium"
-  >
-    <CheckCircle2 size={14} className="mr-2" />
-    Approve
-  </ActionButton>
-  
-  <ActionButton 
-    variant="danger" 
-    onClick={() => handleProviderApproval(provider.id, 'REJECTED')}
-    className="flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors duration-200 font-medium"
-  >
-    <XCircle size={14} className="mr-2" />
-    Reject
-  </ActionButton>
-</div>
-
-// Alternative: More modern with shadows and better spacing
-<div className="flex gap-4">
-  <ActionButton 
-    variant="success" 
-    onClick={() => handleProviderApproval(provider.id, 'APPROVED')}
-    className="flex items-center px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-md hover:shadow-lg transition-all duration-200 font-medium text-sm border-0"
-  >
-    <CheckCircle2 size={16} className="mr-2" />
-    Approve
-  </ActionButton>
-  
-  <ActionButton 
-    variant="danger" 
-    onClick={() => handleProviderApproval(provider.id, 'REJECTED')}
-    className="flex items-center px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-md hover:shadow-lg transition-all duration-200 font-medium text-sm border-0"
-  >
-    <XCircle size={16} className="mr-2" />
-    Reject
-  </ActionButton>
-</div>
-
-// Option with subtle hover effects
-<div className="flex gap-3">
-  <ActionButton 
-    variant="success" 
-    onClick={() => handleProviderApproval(provider.id, 'APPROVED')}
-    className="flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 active:bg-green-800 text-white rounded-md transition-all duration-150 font-medium hover:scale-105"
-  >
-    <CheckCircle2 size={14} className="mr-2" />
-    Approve
-  </ActionButton>
-  
-  <ActionButton 
-    variant="danger" 
-    onClick={() => handleProviderApproval(provider.id, 'REJECTED')}
-    className="flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white rounded-md transition-all duration-150 font-medium hover:scale-105"
-  >
-    <XCircle size={14} className="mr-2" />
-    Reject
-  </ActionButton>
-</div>
+                            <ActionButton 
+                              variant="success" 
+                              onClick={() => handleProviderApproval(provider.id, 'APPROVED')}
+                            >
+                              <CheckCircle2 size={14} className="mr-1" />
+                              Approve
+                            </ActionButton>
+                            <ActionButton 
+                              variant="danger" 
+                              onClick={() => handleProviderApproval(provider.id, 'REJECTED')}
+                            >
+                              <XCircle size={14} className="mr-1" />
+                              Reject
+                            </ActionButton>
                           </>
                         )}
                       </div>
