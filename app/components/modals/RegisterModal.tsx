@@ -278,6 +278,8 @@ const RegisterModal = () => {
           businessPhone: data.businessPhone,
           registrationNumber: data.registrationNumber,
           businessVerified: false,
+          idImage: idImageUrl,
+          tinCertificateUrl: tinCertificateUrl,
         });
 
         const businessFormData = new FormData();
