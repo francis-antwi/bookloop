@@ -366,36 +366,44 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleProviderApproval = async (id: string, status: 'APPROVED' | 'REJECTED') => {
-    try {
-      const res = await fetch(`/api/admin/providers/${id}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      });
+  const handleProviderApproval = async (
+  id: string,
+  decision: 'APPROVED' | 'REJECTED'
+) => {
+  try {
+    const res = await fetch(`/api/admin/providers/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        businessVerified: decision === 'APPROVED', // ✅ backend expects a boolean
+        notes: decision === 'REJECTED' ? 'Your business was not eligible.' : undefined,
+      }),
+    });
 
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to update provider');
-      }
-
-      const updated = await res.json();
-
-      setProviders(prev =>
-        prev.map(provider =>
-          provider.id === id
-            ? {
-                ...provider,
-                status: updated.verification?.verified ? 'APPROVED' : 'REJECTED',
-              }
-            : provider
-        )
-      );
-    } catch (error) {
-      console.error('Error updating provider:', error);
-      alert('Failed to update provider status.');
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Failed to update provider');
     }
-  };
+
+    const updated = await res.json();
+
+    setProviders(prev =>
+      prev.map(provider =>
+        provider.id === id
+          ? {
+              ...provider,
+              // ✅ Use updated boolean to reflect status
+              status: updated.businessVerified ? 'APPROVED' : 'REJECTED',
+            }
+          : provider
+      )
+    );
+  } catch (error) {
+    console.error('Error updating provider:', error);
+    alert('Failed to update provider status.');
+  }
+};
+
 
   const markNotificationRead = (id: string) => {
     setNotifications(prev =>
