@@ -37,7 +37,7 @@ export function extractIDInfo(data: OCRData): IDInfo {
   console.log("📜 [ID Extraction]: Full text for processing:", fullText);
 
   try {
-    const result = extractIDData(fullText, lowerText, rawText);
+    const result = extractIDData(fullText, lowerText, rawText, lines);
     console.log("✅ [ID Extraction]: Finished with parsed result:", result);
     return result;
   } catch (error) {
@@ -62,27 +62,42 @@ function createEmptyResult(rawText: string): IDInfo {
   };
 }
 
-function extractIDData(fullText: string, lowerText: string, rawText: string): IDInfo {
-  // Extract basic information
-  const surname = extractMatch(fullText, /Surname\/Nom\s+([A-Z\s]+)/i);
-  const firstnames = extractMatch(fullText, /Firstnames\/Prénoms\s+([A-Z\s]+)/i);
+function extractIDData(fullText: string, lowerText: string, rawText: string, lines: string[]): IDInfo {
+  // Extract names using line-by-line approach for better accuracy
+  const { surname, firstnames } = extractNames(lines, fullText);
   const idName = buildFullName(firstnames, surname);
   
   console.log(`🧾 [ID Extraction]: Name => "${idName}"`);
 
-  // Extract dates
-  const idDOB = parseDate(extractMatch(fullText, /Date of Birth.*?(\d{2}[\/\-]\d{2}[\/\-]\d{4})/i));
-  const idIssueDate = parseDate(extractMatch(fullText, /Date of Issuance.*?(\d{2}[\/\-]\d{2}[\/\-]\d{4})/i));
-  const idExpiryDate = parseDate(extractMatch(fullText, /Date of Expiry.*?(\d{2}[\/\-]\d{2}[\/\-]\d{4})/i));
+  // Extract dates with multiple patterns
+  const idDOB = extractDate(fullText, [
+    /Date of Birth.*?(\d{2}[\/\-]\d{2}[\/\-]\d{4})/i,
+    /Date de Naissance.*?(\d{2}[\/\-]\d{2}[\/\-]\d{4})/i,
+    /(\d{2}\/\d{2}\/\d{4})/g // Fallback for any date pattern
+  ]);
+  
+  const idIssueDate = extractDate(fullText, [
+    /Date of Issuance.*?(\d{2}[\/\-]\d{2}[\/\-]\d{4})/i,
+    /Date d'émission.*?(\d{2}[\/\-]\d{2}[\/\-]\d{4})/i,
+    /(\d{2}\/01\/\d{4})/g // Common issuance pattern
+  ]);
+  
+  const idExpiryDate = extractDate(fullText, [
+    /Date of Expiry.*?(\d{2}[\/\-]\d{2}[\/\-]\d{4})/i,
+    /Date d'expiration.*?(\d{2}[\/\-]\d{2}[\/\-]\d{4})/i,
+    /(\d{2}\/01\/\d{4})/g // Common expiry pattern
+  ]);
 
-  // Extract document numbers and identifiers
-  const idNumber = extractDocumentNumber(fullText);
-  const idIssuer = extractIssuer(fullText);
-  const personalIdNumber = extractMatch(fullText, /\b(GHA-\d{12})\b/);
+  // Extract document numbers with better patterns
+  const idNumber = extractDocumentNumber(fullText, lines);
+  const personalIdNumber = extractPersonalIdNumber(fullText);
+  
+  // Extract issuer
+  const idIssuer = extractIssuer(fullText, lines);
   
   // Extract personal details
-  const gender = extractMatch(fullText, /Sex\/Sexe\s+([MF])\b/i);
-  const nationality = extractMatch(fullText, /Nationality\/Nationalité\s+([A-Z]+)/i);
+  const gender = extractGender(fullText, lines);
+  const nationality = extractNationality(fullText, lines);
 
   // Infer document type
   const idType = inferDocumentType(lowerText);
@@ -100,6 +115,56 @@ function extractIDData(fullText: string, lowerText: string, rawText: string): ID
     idType,
     rawText,
   };
+}
+
+function extractNames(lines: string[], fullText: string): { surname: string | null; firstnames: string | null } {
+  let surname: string | null = null;
+  let firstnames: string | null = null;
+  
+  // Method 1: Look for lines after Surname/Nom and Firstnames/Prénoms
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    if (line.match(/Surname\/Nom/i) && i + 1 < lines.length) {
+      const nextLine = lines[i + 1];
+      if (nextLine && !nextLine.match(/Firstnames|Prénoms/i)) {
+        surname = nextLine.trim();
+      }
+    }
+    
+    if (line.match(/Firstnames\/Prénoms/i) && i + 1 < lines.length) {
+      const nextLine = lines[i + 1];
+      if (nextLine && !nextLine.match(/Previous|Précédents/i)) {
+        firstnames = nextLine.trim();
+      }
+    }
+  }
+  
+  // Method 2: Extract from same line patterns
+  if (!surname) {
+    const surnameMatch = fullText.match(/Surname\/Nom\s+([A-Z]+)/i);
+    if (surnameMatch) surname = surnameMatch[1];
+  }
+  
+  if (!firstnames) {
+    const firstnamesMatch = fullText.match(/Firstnames\/Prénoms\s+([A-Z]+)/i);
+    if (firstnamesMatch) firstnames = firstnamesMatch[1];
+  }
+  
+  return { surname, firstnames };
+}
+
+function extractDate(fullText: string, patterns: RegExp[]): string | null {
+  for (const pattern of patterns) {
+    const matches = fullText.match(pattern);
+    if (matches) {
+      // For global patterns, get the first match
+      const dateString = Array.isArray(matches) ? matches[1] || matches[0] : matches[1];
+      const parsed = parseDate(dateString);
+      if (parsed) return parsed;
+    }
+  }
+  return null;
 }
 
 function parseDate(dateString: string | null): string | null {
@@ -126,9 +191,149 @@ function parseDate(dateString: string | null): string | null {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function extractMatch(text: string, regex: RegExp): string | null {
-  const match = text.match(regex);
-  return match ? match[1]?.trim() || null : null;
+function extractDocumentNumber(fullText: string, lines: string[]): string | null {
+  // Method 1: Look for lines after Document Number
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    if (line.match(/Document Number/i) && i + 1 < lines.length) {
+      const nextLine = lines[i + 1];
+      if (nextLine && nextLine.match(/^[A-Z0-9]+$/)) {
+        return nextLine.trim();
+      }
+    }
+  }
+  
+  // Method 2: Extract from patterns in full text
+  const patterns = [
+    /Document Number[^\w]*([A-Z0-9]{6,})/i,
+    /numéro du document[^\w]*([A-Z0-9]{6,})/i,
+    /^([A-Z]{2}[0-9]{6,})$/m, // Ghana card pattern like AJ6235360
+    /\b([A-Z]{1,3}[0-9]{6,})\b/g // General alphanumeric pattern
+  ];
+  
+  for (const pattern of patterns) {
+    const matches = fullText.match(pattern);
+    if (matches) {
+      const docNumber = matches[1];
+      if (docNumber && docNumber.length >= 6 && docNumber.length <= 20) {
+        return docNumber;
+      }
+    }
+  }
+  
+  return null;
+}
+
+function extractPersonalIdNumber(fullText: string): string | null {
+  const patterns = [
+    /Personal ID Number[^\w]*([A-Z]{3}-[0-9]{11})/i,
+    /\b(GHA-[0-9]{11})\b/g,
+    /\b(GHA-[0-9]{12})\b/g
+  ];
+  
+  for (const pattern of patterns) {
+    const match = fullText.match(pattern);
+    if (match) {
+      return match[1];
+    }
+  }
+  
+  return null;
+}
+
+function extractIssuer(fullText: string, lines: string[]): string | null {
+  // Method 1: Look for lines after Place of Issuance
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    if (line.match(/Place of Issuance/i) && i + 1 < lines.length) {
+      const nextLine = lines[i + 1];
+      if (nextLine && nextLine.match(/^[A-Z\s]+$/)) {
+        return nextLine.trim();
+      }
+    }
+  }
+  
+  // Method 2: Extract from patterns
+  const patterns = [
+    /Place of Issuance[^\w]*([A-Z\s]+)/i,
+    /Lieu de délivrance[^\w]*([A-Z\s]+)/i,
+    /\b(ACCRA|KUMASI|TAKORADI|TAMALE|CAPE COAST|SUNYANI|BOLGATANGA|HO|KOFORIDUA|WA)\b/i
+  ];
+  
+  for (const pattern of patterns) {
+    const match = fullText.match(pattern);
+    if (match) {
+      return match[1].trim();
+    }
+  }
+  
+  return null;
+}
+
+function extractGender(fullText: string, lines: string[]): string | null {
+  // Look for M or F after Sex/Sexe
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    if (line.match(/Sex\/Sexe/i)) {
+      // Check same line first
+      const sameLineMatch = line.match(/Sex\/Sexe\s+([MF])/i);
+      if (sameLineMatch) return sameLineMatch[1];
+      
+      // Check next line
+      if (i + 1 < lines.length) {
+        const nextLine = lines[i + 1];
+        const nextLineMatch = nextLine.match(/^([MF])$/i);
+        if (nextLineMatch) return nextLineMatch[1];
+      }
+    }
+  }
+  
+  // Look for pattern in full text
+  const patterns = [
+    /Sex\/Sexe\s+[A-Z\s]*([MF])\b/i,
+    /GHANAIAN\s+([MF])\b/i // Common pattern in Ghana cards
+  ];
+  
+  for (const pattern of patterns) {
+    const match = fullText.match(pattern);
+    if (match) {
+      return match[1];
+    }
+  }
+  
+  return null;
+}
+
+function extractNationality(fullText: string, lines: string[]): string | null {
+  // Look for lines after Nationality/Nationalité
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    if (line.match(/Nationality\/Nationalité/i) && i + 1 < lines.length) {
+      const nextLine = lines[i + 1];
+      if (nextLine && nextLine.match(/^[A-Z]+$/)) {
+        return nextLine.trim();
+      }
+    }
+  }
+  
+  // Extract from patterns
+  const patterns = [
+    /Nationality\/Nationalité\s+([A-Z]+)/i,
+    /\b(GHANAIAN)\b/i // Common nationality
+  ];
+  
+  for (const pattern of patterns) {
+    const match = fullText.match(pattern);
+    if (match) {
+      return match[1];
+    }
+  }
+  
+  return null;
 }
 
 function buildFullName(firstnames: string | null, surname: string | null): string | null {
@@ -136,49 +341,9 @@ function buildFullName(firstnames: string | null, surname: string | null): strin
   return parts.length > 0 ? parts.join(" ") : null;
 }
 
-function extractDocumentNumber(fullText: string): string | null {
-  // Try specific document number patterns first
-  const patterns = [
-    /Document Number.*?([A-Z0-9]+)/i,
-    /Passport No.*?([A-Z0-9]+)/i,
-    /License No.*?([A-Z0-9]+)/i,
-    /Card No.*?([A-Z0-9]+)/i,
-    /([A-Z]{2}[0-9]{7,})/,  // Ghana card pattern
-    /([A-Z][0-9]{7,})/      // General pattern
-  ];
-  
-  for (const pattern of patterns) {
-    const match = extractMatch(fullText, pattern);
-    if (match && match.length >= 6) { // Minimum reasonable length
-      return match;
-    }
-  }
-  
-  return null;
-}
-
-function extractIssuer(fullText: string): string | null {
-  // Try specific issuer patterns
-  const patterns = [
-    /Place of Issuance.*?([A-Z\s]+)/i,
-    /Issued by.*?([A-Z\s]+)/i,
-    /Issuing Authority.*?([A-Z\s]+)/i,
-    /\b(ACCRA|KUMASI|TAKORADI|TAMALE|CAPE COAST|SUNYANI|BOLGATANGA|HO|KOFORIDUA|WA)\b/i
-  ];
-  
-  for (const pattern of patterns) {
-    const match = extractMatch(fullText, pattern);
-    if (match) {
-      return match;
-    }
-  }
-  
-  return null;
-}
-
 function inferDocumentType(lowerText: string): string | null {
   const typeMap = [
-    { keywords: ["ghana card", "identity card", "national id"], type: "ghana_card" },
+    { keywords: ["ghana card", "identity card", "national id", "ecowas"], type: "ghana_card" },
     { keywords: ["passport"], type: "passport" },
     { keywords: ["driver", "license", "driving"], type: "driver_license" },
     { keywords: ["voter", "voting"], type: "voter_id" },
