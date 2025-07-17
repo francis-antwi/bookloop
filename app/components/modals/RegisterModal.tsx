@@ -15,7 +15,6 @@ import {
   FiBriefcase, FiMapPin
 } from 'react-icons/fi';
 import Camera from '../inputs/Camera';
-import PhoneAuth from "@/app/components/PhoneAuth";
 import { useRouter } from 'next/navigation';
 import { categories } from '../navbar/Categories';
 
@@ -125,7 +124,6 @@ const RegisterModal = () => {
     confidence?: number;
     error?: string;
   } | null>(null);
-  const [isPhoneVerified, setIsPhoneVerified] = useState(false);
   const [businessFiles, setBusinessFiles] = useState<BusinessFiles>({
     tinCertificate: null,
     incorporationCert: null,
@@ -181,12 +179,6 @@ const RegisterModal = () => {
       description: 'For account security and notifications'
     },
     { 
-      field: 'phoneVerification', 
-      label: 'Verify Phone Number',
-      icon: FiShield,
-      description: 'We\'ll send a verification code to your phone'
-    },
-    { 
       field: 'password', 
       label: 'Password', 
       icon: FiLock, 
@@ -228,11 +220,6 @@ const RegisterModal = () => {
     }
     return steps;
   }, [watchedValues.role, steps]);
-
-  const handlePhoneVerified = useCallback((phoneNumber: string, otp: string) => {
-    setIsPhoneVerified(true);
-    toast.success('Phone number verified successfully!');
-  }, []);
 
   const handleIdUpload = useCallback((file: File) => {
     if (!file.type.match(/image\/(jpeg|png|jpg)/)) {
@@ -326,7 +313,7 @@ const RegisterModal = () => {
         contactPhone: data.contactPhone,
         password: data.password,
         role: data.role,
-        isPhoneVerified: true,
+        isPhoneVerified: true, // Set to true since we're skipping verification
         isFaceVerified: data.role === 'PROVIDER',
         verified: data.role === 'PROVIDER',
         extractionComplete: data.role === 'PROVIDER',
@@ -435,16 +422,6 @@ const RegisterModal = () => {
 
   const handleNext = useCallback(async () => {
     const current = filteredSteps[currentStep];
-    
-    if (current.field === 'phoneVerification') {
-      if (!isPhoneVerified) {
-        toast.error('Please verify your phone number first');
-        return;
-      }
-      setCurrentStep(prev => prev + 1);
-      return;
-    }
-
     const valid = await trigger(current.field);
     if (!valid) return;
 
@@ -454,7 +431,7 @@ const RegisterModal = () => {
     }
 
     setCurrentStep(prev => prev + 1);
-  }, [currentStep, filteredSteps, isPhoneVerified, trigger, watchedValues.role]);
+  }, [currentStep, filteredSteps, trigger, watchedValues.role]);
 
   const handlePrev = useCallback(() => {
     if (currentStep > 0) {
@@ -470,7 +447,6 @@ const RegisterModal = () => {
 
   const isStepValid = useCallback((stepIndex: number): boolean => {
     const field = filteredSteps[stepIndex].field;
-    if (field === 'phoneVerification') return true;
     if (field === 'selfieImage') return !!selfieImageBlob;
     if (field === 'idImage') return !!idFile;
     if (field === 'businessInfo') {
@@ -683,26 +659,7 @@ const RegisterModal = () => {
 
           {/* Form Fields */}
           <div className="space-y-4 sm:space-y-6">
-            {currentField.field === 'phoneVerification' ? (
-              <div className="space-y-4 sm:space-y-6">
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 sm:p-4 text-center">
-                  <p className="text-xs sm:text-sm text-blue-600 mb-1">We'll send a verification code to:</p>
-                  <p className="font-medium text-blue-800">{watchedValues.contactPhone}</p>
-                </div>
-
-                <PhoneAuth 
-                  phoneNumber={watchedValues.contactPhone}
-                  onVerified={handlePhoneVerified}
-                />
-
-                {isPhoneVerified && (
-                  <div className="flex items-center gap-2 text-green-600 bg-green-50 p-2 sm:p-3 rounded-xl text-sm">
-                    <FiCheck className="w-4 h-4 sm:w-5 sm:h-5" />
-                    <span className="font-medium">Phone number verified successfully!</span>
-                  </div>
-                )}
-              </div>
-            ) : currentField.field === 'role' ? (
+            {currentField.field === 'role' ? (
               <div className="space-y-3 sm:space-y-4">
                 <div className="grid grid-cols-1 gap-2 sm:gap-3">
                   {[
