@@ -249,59 +249,66 @@ const RegisterModal = () => {
     setBusinessFiles(prev => ({ ...prev, [field]: file }));
   }, []);
 
-  const submitVerification = useCallback(async () => {
-    if (!selfieImageBlob || !idFile) {
-      toast.error('Please complete all verification steps');
-      throw new Error('Missing verification files');
+ const submitVerification = useCallback(async () => {
+  // If neither selfie nor ID is provided, skip identity verification
+  if (!selfieImageBlob && !idFile) {
+    console.log('[INFO] Skipping identity verification for business-only registration.');
+    return null; // return null or an empty object
+  }
+
+  if (!selfieImageBlob || !idFile) {
+    toast.error('Please complete all identity verification steps');
+    throw new Error('Missing selfie or ID for identity verification');
+  }
+
+  setIsLoading(true);
+  setVerificationStatus(null);
+
+  try {
+    const verificationFormData = new FormData();
+    verificationFormData.append('selfie', new File([selfieImageBlob], 'selfie.jpg', { type: 'image/jpeg' }));
+    verificationFormData.append('idImage', idFile);
+    verificationFormData.append('email', watchedValues.email);
+
+    const response = await axios.post<VerificationResponse>('/api/verify', verificationFormData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000
+    });
+
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Verification failed');
     }
 
-    setIsLoading(true);
-    setVerificationStatus(null);
+    const extractedData = response.data.extractedData || {};
+    const confidence = response.data.matchConfidence || extractedData.faceConfidence || 0;
 
-    try {
-      const verificationFormData = new FormData();
-      verificationFormData.append('selfie', new File([selfieImageBlob], 'selfie.jpg', { type: 'image/jpeg' }));
-      verificationFormData.append('idImage', idFile);
-      verificationFormData.append('email', watchedValues.email);
-
-      const response = await axios.post<VerificationResponse>('/api/verify', verificationFormData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 60000
-      });
-
-      if (!response.data.success) {
-        throw new Error(response.data.error || 'Verification failed');
-      }
-
-      const extractedData = response.data.extractedData || {};
-      const confidence = response.data.matchConfidence || extractedData.faceConfidence || 0;
-
-      if (confidence < 80) {
-        throw new Error(`Face match confidence too low (${confidence.toFixed(1)}%)`);
-      }
-
-      setVerificationStatus({ success: true, confidence });
-      return {
-        ...response.data,
-        extractedData: {
-          ...extractedData,
-          idType: extractedData.idType || 'GHANA_CARD',
-          nationality: extractedData.nationality || 'Ghanaian'
-        }
-      };
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.error || error.message || 'Verification failed';
-      setVerificationStatus({ 
-        success: false, 
-        error: errorMsg,
-        confidence: error.response?.data?.matchConfidence
-      });
-      toast.error(errorMsg);
-      throw error;
-    } finally {
-      setIsLoading(false);
+    if (confidence < 80) {
+      throw new Error(`Face match confidence too low (${confidence.toFixed(1)}%)`);
     }
-  }, [selfieImageBlob, idFile, watchedValues.email]);
+
+    setVerificationStatus({ success: true, confidence });
+    return {
+      ...response.data,
+      extractedData: {
+        ...extractedData,
+        idType: extractedData.idType || 'GHANA_CARD',
+        nationality: extractedData.nationality || 'Ghanaian'
+      }
+    };
+  } catch (error: any) {
+    const errorMsg = error.response?.data?.error || error.message || 'Verification failed';
+    setVerificationStatus({ 
+      success: false, 
+      error: errorMsg,
+      confidence: error.response?.data?.matchConfidence
+    });
+    toast.error(errorMsg);
+    throw error;
+  } finally {
+    setIsLoading(false);
+  }
+}, [selfieImageBlob, idFile, watchedValues.email]);
+
 
   const onSubmit: SubmitHandler<FieldValues> = useCallback(async (data) => {
     setIsLoading(true);
@@ -323,7 +330,8 @@ const RegisterModal = () => {
 
       if (data.role === 'PROVIDER') {
         const verificationData = await submitVerification();
-        const extractedData = verificationData.extractedData || {};
+        const extractedData = verificationData?.extractedData || {};
+
         
         Object.assign(registrationPayload, {
           selfieImage: verificationData.selfieUrl,
