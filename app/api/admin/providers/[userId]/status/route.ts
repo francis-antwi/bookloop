@@ -4,10 +4,20 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { NotificationType } from "@prisma/client";
 
+// Add this for debugging - remove after fixing
+export async function GET(
+  req: Request,
+  { params }: { params: { userId: string } }
+) {
+  return NextResponse.json({ message: "Route is working", userId: params.userId });
+}
+
 export async function PATCH(
   req: Request,
   { params }: { params: { userId: string } }
 ) {
+  console.log("🔍 PATCH endpoint hit with userId:", params.userId);
+  
   const session = await getServerSession(authOptions);
 
   // 1. Authorization: Only ADMINs can proceed
@@ -21,6 +31,7 @@ export async function PATCH(
 
   try {
     const body = await req.json();
+    console.log("📝 Request body:", body);
     status = body.status;
     notes = body.notes || null;
   } catch (error) {
@@ -84,23 +95,21 @@ export async function PATCH(
       ? "🎉 Your business application has been approved. You can now list your services!"
       : `❌ Your business application was rejected.${notes ? ` Reason: ${notes}` : ""}`;
 
-await prisma.notification.create({
-  data: {
-    userId: provider.id,
-    type: NotificationType.SYSTEM, // ✅ Correct enum usage
-    message,
-    email: provider.email,
-    adminOnly: false,
-  },
-});
+    await prisma.notification.create({
+      data: {
+        userId: provider.id,
+        type: NotificationType.SYSTEM,
+        message,
+        email: provider.email,
+        adminOnly: false,
+      },
+    });
 
-return NextResponse.json({
-  success: true,
-  businessVerified: updatedUser.businessVerified,
-  verification: updatedVerification,
-});
-
-
+    return NextResponse.json({
+      success: true,
+      businessVerified: updatedUser.businessVerified,
+      verification: updatedVerification,
+    });
 
   } catch (error) {
     console.error("❌ Error during provider approval update:", error);
