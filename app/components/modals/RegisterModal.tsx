@@ -269,6 +269,8 @@ const RegisterModal = () => {
     verificationFormData.append('selfie', new File([selfieImageBlob], 'selfie.jpg', { type: 'image/jpeg' }));
     verificationFormData.append('idImage', idFile);
     verificationFormData.append('email', watchedValues.email);
+    verificationFormData.append('verificationStep', 'identity');
+
 
     const response = await axios.post<VerificationResponse>('/api/verify', verificationFormData, {
       headers: { 'Content-Type': 'multipart/form-data' },
