@@ -125,7 +125,8 @@ function extractNames(lines: string[], fullText: string): { surname: string | nu
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     
-    if (line.match(/Surname\/Nom/i) && i + 1 < lines.length) {
+    // Handle both "Surname/Nom" and "Surname Nom" patterns
+    if (line.match(/Surname[\s\/]+Nom/i) && i + 1 < lines.length) {
       const nextLine = lines[i + 1];
       if (nextLine && !nextLine.match(/Firstnames|Prénoms/i)) {
         surname = nextLine.trim();
@@ -142,8 +143,18 @@ function extractNames(lines: string[], fullText: string): { surname: string | nu
   
   // Method 2: Extract from same line patterns
   if (!surname) {
-    const surnameMatch = fullText.match(/Surname\/Nom\s+([A-Z]+)/i);
-    if (surnameMatch) surname = surnameMatch[1];
+    const surnamePatterns = [
+      /Surname\/Nom\s+([A-Z]+)/i,
+      /Surname\s+Nom\s+([A-Z]+)/i
+    ];
+    
+    for (const pattern of surnamePatterns) {
+      const match = fullText.match(pattern);
+      if (match) {
+        surname = match[1];
+        break;
+      }
+    }
   }
   
   if (!firstnames) {
@@ -227,9 +238,9 @@ function extractDocumentNumber(fullText: string, lines: string[]): string | null
 
 function extractPersonalIdNumber(fullText: string): string | null {
   const patterns = [
-    /Personal ID Number[^A-Z0-9]*([A-Z]{3}-[0-9]{11,12})/i,
-    /\b(GHA-[0-9]{11,12})\b/g,
-    /GHA-([0-9]{11,12})/g
+    /Personal ID Number[^A-Z0-9]*([A-Z]{3}-[0-9]{10,12})/i,
+    /\b(GHA-[0-9]{10,12})\b/g,
+    /GHA-([0-9]{10,12})/g
   ];
   
   for (const pattern of patterns) {
@@ -287,7 +298,8 @@ function extractGender(fullText: string, lines: string[]): string | null {
       // Check next line
       if (i + 1 < lines.length) {
         const nextLine = lines[i + 1];
-        const nextLineMatch = nextLine.match(/^([MF])$/i);
+        // Handle "GHANAIAN M" pattern
+        const nextLineMatch = nextLine.match(/^(?:GHANAIAN\s+)?([MF])$/i) || nextLine.match(/([MF])$/i);
         if (nextLineMatch) return nextLineMatch[1].toUpperCase();
       }
     }
