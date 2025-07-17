@@ -276,8 +276,7 @@ const RegisterModal = () => {
         idType: 'GHANA_CARD'
       };
 
-      // Handle provider verification
-     if (data.role === 'PROVIDER') {
+  if (data.role === 'PROVIDER') {
   try {
     // 1. Perform identity verification (mandatory)
     const verificationData = await submitVerification(false);
@@ -331,23 +330,25 @@ const RegisterModal = () => {
       businessVerified: false
     };
 
-        // Add business files to form data
-        const businessFormData = new FormData();
-        Object.entries(businessFiles).forEach(([key, file]) => {
-          if (file) businessFormData.append(key, file);
-        });
+    Object.assign(registrationPayload, providerData);
 
-        // Upload business documents
-        const uploadResponse = await axios.post('/api/verify', businessFormData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          timeout: 120000
-        });
+    // 4. Handle business documents if any
+    const hasBusinessFiles = Object.values(businessFiles).some(file => file !== null);
+    if (hasBusinessFiles) {
+      const businessFormData = new FormData();
+      Object.entries(businessFiles).forEach(([key, file]) => {
+        if (file) businessFormData.append(key, file);
+      });
 
-        if (!uploadResponse.data.success) {
-          throw new Error(uploadResponse.data.error || 'Business document upload failed');
-        }
+      const uploadResponse = await axios.post('/api/verify', businessFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        params: { verificationStep: 'business' }
+      });
 
-        // Add document URLs to payload
+      if (!uploadResponse.data.success) {
+        console.warn('Business document upload had issues:', uploadResponse.data.error);
+      } else {
+        // Add document URLs if upload was successful
         Object.assign(registrationPayload, {
           tinCertificateUrl: uploadResponse.data.tinCertificateUrl,
           incorporationCertUrl: uploadResponse.data.incorporationCertUrl,
@@ -355,7 +356,13 @@ const RegisterModal = () => {
           ssnitCertUrl: uploadResponse.data.ssnitCertUrl,
         });
       }
+    }
 
+  } catch (error: any) {
+    console.error('Provider verification failed:', error);
+    throw new Error(`Provider registration failed: ${error.message}`);
+  }
+}
       // Submit registration
       const response = await axios.post('/api/register', registrationPayload);
 
