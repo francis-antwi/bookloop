@@ -2,7 +2,7 @@
 
 import axios from 'axios';
 import { IoMdClose } from 'react-icons/io';
-import { useCallback, useState, useEffect, useMemo } from 'react';
+import { useCallback, useState } from 'react';
 import { signIn } from "next-auth/react";
 import { FieldValues, SubmitHandler, useForm } from 'react-hook-form';
 import useRegisterModal from '@/app/hooks/useRegisterModal';
@@ -12,7 +12,7 @@ import {
   FiUser, FiMail, FiPhone, FiLock, FiEye, FiEyeOff, 
   FiCheck, FiArrowRight, FiArrowLeft, FiCamera,
   FiUpload, FiUserCheck, FiShield, FiFileText, FiAlertCircle, FiLoader,
-  FiBriefcase, FiMapPin, FiImage, FiTrash2, FiInfo
+  FiBriefcase, FiMapPin
 } from 'react-icons/fi';
 import Camera from '../inputs/Camera';
 import PhoneAuth from "@/app/components/PhoneAuth";
@@ -42,13 +42,6 @@ interface VerificationResponse {
   error?: string;
 }
 
-interface BusinessFiles {
-  tinCertificate: File | null;
-  incorporationCert: File | null;
-  vatCertificate: File | null;
-  ssnitCert: File | null;
-}
-
 const RegisterModal = () => {
   const registerModal = useRegisterModal();
   const loginModal = useLoginModal();
@@ -64,11 +57,11 @@ const RegisterModal = () => {
     error?: string;
   } | null>(null);
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);
-  const [businessFiles, setBusinessFiles] = useState<BusinessFiles>({
-    tinCertificate: null,
-    incorporationCert: null,
-    vatCertificate: null,
-    ssnitCert: null
+  const [businessFiles, setBusinessFiles] = useState({
+    tinCertificate: null as File | null,
+    incorporationCert: null as File | null,
+    vatCertificate: null as File | null,
+    ssnitCert: null as File | null
   });
 
   const {
@@ -80,7 +73,6 @@ const RegisterModal = () => {
     setValue,
     getValues,
     reset,
-    unregister,
   } = useForm<FieldValues>({
     defaultValues: {
       name: '',
@@ -98,14 +90,6 @@ const RegisterModal = () => {
   });
 
   const watchedValues = watch();
-
-  useEffect(() => {
-    if (watchedValues.businessType === 'COMPANY') {
-      register('registrationNumber', { required: 'Registration number is required for companies' });
-    } else {
-      unregister('registrationNumber');
-    }
-  }, [watchedValues.businessType, register, unregister]);
 
   const handlePhoneVerified = (phoneNumber: string, otp: string) => {
     setIsPhoneVerified(true);
@@ -186,60 +170,35 @@ const RegisterModal = () => {
   const filteredSteps = getFilteredSteps();
 
   const handleIdUpload = (file: File) => {
-    if (!file) return;
-
-    // Validate file type
-    const validTypes = ['image/jpeg', 'image/png', 'image/jpg'];
-    if (!validTypes.includes(file.type)) {
+    if (!file.type.match(/image\/(jpeg|png|jpg)/)) {
       toast.error('Only JPEG/PNG images are allowed');
       return;
     }
-
-    // Validate file size
-    if (file.size > 5 * 1024 * 1024) { // 5MB
-      toast.error('Image too large. Max 5MB allowed.');
+    if (file.size < 20000) {
+      toast.error('Image too small. Try a higher-quality photo.');
       return;
     }
-
-    const img = new Image();
-    img.src = URL.createObjectURL(file);
-    img.onload = () => {
-      if (img.width < 800 || img.height < 600) {
-        toast.error('Image resolution too low. Please use a higher quality image.');
-        return;
-      }
-      setIdFile(file);
-      toast.success('ID image accepted');
-    };
-    img.onerror = () => {
-      toast.error('Invalid image file');
-    };
+    if (file.size > 5000000) {
+      toast.error('Image too large. Max 5MB.');
+      return;
+    }
+    setIdFile(file);
   };
 
-  const onFileUpload = (field: keyof BusinessFiles, file: File) => {
-    if (!file) return;
-
-    const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
-    if (!validTypes.includes(file.type)) {
-      toast.error('Only JPEG, PNG, JPG, or PDF files are allowed');
+  const onFileUpload = (field: string, file: File) => {
+    if (!file.type.match(/image\/(jpeg|png|jpg)|application\/pdf/)) {
+      toast.error('Only JPEG/PNG/PDF files are allowed');
       return;
     }
-
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('File size must be less than 10MB');
+    if (file.size > 10000000) {
+      toast.error('File too large. Max 10MB.');
       return;
     }
-
-    setBusinessFiles(prev => ({
-      ...prev,
-      [field]: file
-    }));
-
-    toast.success(`${field.replace(/([A-Z])/g, ' $1')} uploaded successfully`);
+    setBusinessFiles(prev => ({ ...prev, [field]: file }));
   };
 
-  const submitVerification = async (isBusinessVerification = false): Promise<VerificationResponse> => {
-    if (!isBusinessVerification && (!selfieImageBlob || !idFile)) {
+  const submitVerification = async () => {
+    if (!selfieImageBlob || !idFile) {
       toast.error('Please complete all verification steps');
       throw new Error('Missing verification files');
     }
@@ -249,14 +208,9 @@ const RegisterModal = () => {
 
     try {
       const verificationFormData = new FormData();
-      if (selfieImageBlob) {
-        verificationFormData.append('selfie', new File([selfieImageBlob], 'selfie.jpg'));
-      }
-      if (idFile) {
-        verificationFormData.append('idImage', idFile);
-      }
+      verificationFormData.append('selfie', new File([selfieImageBlob], 'selfie.jpg', { type: 'image/jpeg' }));
+      verificationFormData.append('idImage', idFile);
       verificationFormData.append('email', watchedValues.email);
-      verificationFormData.append('verificationStep', isBusinessVerification ? 'business' : 'identity');
 
       const response = await axios.post<VerificationResponse>('/api/verify', verificationFormData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -275,7 +229,14 @@ const RegisterModal = () => {
       }
 
       setVerificationStatus({ success: true, confidence });
-      return response.data;
+      return {
+        ...response.data,
+        extractedData: {
+          ...extractedData,
+          idType: extractedData.idType || 'GHANA_CARD',
+          nationality: extractedData.nationality || 'Ghanaian'
+        }
+      };
     } catch (error: any) {
       const errorMsg = error.response?.data?.error || error.message || 'Verification failed';
       setVerificationStatus({ 
@@ -294,6 +255,7 @@ const RegisterModal = () => {
     setIsLoading(true);
     
     try {
+      // Common registration data
       const registrationPayload: any = {
         name: data.name,
         email: data.email,
@@ -308,105 +270,93 @@ const RegisterModal = () => {
         idType: 'GHANA_CARD'
       };
 
+      // Handle provider verification
       if (data.role === 'PROVIDER') {
-        try {
-          const verificationData = await submitVerification(false);
-          
-          if (!verificationData.success || !verificationData.selfieUrl || !verificationData.imageUrl) {
-            throw new Error('Identity verification failed');
-          }
+        const verificationData = await submitVerification();
+        const extractedData = verificationData.extractedData || {};
+        
+        Object.assign(registrationPayload, {
+          selfieImage: verificationData.selfieUrl,
+          idImage: verificationData.imageUrl,
+          faceConfidence: verificationData.matchConfidence,
+          idName: extractedData.idName,
+          idNumber: extractedData.idNumber || extractedData.personalIdNumber,
+          personalIdNumber: extractedData.personalIdNumber,
+          idDOB: extractedData.idDOB,
+          idExpiryDate: extractedData.idExpiryDate,
+          idIssueDate: extractedData.idIssueDate,
+          idIssuer: extractedData.idIssuer,
+          gender: extractedData.gender,
+          placeOfIssue: extractedData.placeOfIssue,
+          rawText: extractedData.rawText,
+          requiresApproval: true, 
+          status: 'PENDING_REVIEW',
 
-          const extractedData = verificationData.extractedData || {};
-          const idNumber = extractedData.idNumber || extractedData.personalIdNumber || '';
-          const faceConfidence = verificationData.matchConfidence || 0;
+          // Business data
+          tinNumber: data.tinNumber,
+          businessName: data.businessName,
+          businessType: data.businessType,
+          businessAddress: data.businessAddress,
+          businessPhone: data.businessPhone,
+          registrationNumber: data.registrationNumber,
+          businessVerified: false,
+        });
 
-          if (faceConfidence < 80) {
-            throw new Error(`Face match confidence too low (${faceConfidence.toFixed(1)}%)`);
-          }
+        // Add business files to form data
+        const businessFormData = new FormData();
+        Object.entries(businessFiles).forEach(([key, file]) => {
+          if (file) businessFormData.append(key, file);
+        });
 
-          Object.assign(registrationPayload, {
-            isFaceVerified: true,
-            verified: false,
-            extractionComplete: true,
-            selfieImage: verificationData.selfieUrl,
-            idImage: verificationData.imageUrl,
-            faceConfidence,
-            idName: extractedData.idName || '',
-            idNumber,
-            personalIdNumber: extractedData.personalIdNumber || '',
-            idDOB: extractedData.idDOB || '',
-            idExpiryDate: extractedData.idExpiryDate || '',
-            idIssueDate: extractedData.idIssueDate || '',
-            idIssuer: extractedData.idIssuer || '',
-            gender: extractedData.gender || '',
-            placeOfIssue: extractedData.placeOfIssue || '',
-            rawText: extractedData.rawText || '',
-            ...(data.tinNumber && { tinNumber: data.tinNumber }),
-            businessName: data.businessName || '',
-            businessType: data.businessType || '',
-            businessAddress: data.businessAddress || '',
-            businessPhone: data.businessPhone || '',
-            registrationNumber: data.registrationNumber || '',
-            requiresApproval: true,
-            status: 'PENDING_REVIEW',
-            businessVerified: false
-          });
+        // Upload business documents
+        const uploadResponse = await axios.post('/api/verify', businessFormData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 120000
+        });
 
-          const hasBusinessFiles = Object.values(businessFiles).some(file => file !== null);
-          if (hasBusinessFiles) {
-            const businessFormData = new FormData();
-            Object.entries(businessFiles).forEach(([key, file]) => {
-              if (file) businessFormData.append(key, file);
-            });
-
-            const uploadResponse = await axios.post('/api/verify', businessFormData, {
-              headers: { 'Content-Type': 'multipart/form-data' },
-              params: { verificationStep: 'business' }
-            });
-
-            if (uploadResponse.data.success) {
-              Object.assign(registrationPayload, {
-                tinCertificateUrl: uploadResponse.data.tinCertificateUrl,
-                incorporationCertUrl: uploadResponse.data.incorporationCertUrl,
-                vatCertificateUrl: uploadResponse.data.vatCertificateUrl,
-                ssnitCertUrl: uploadResponse.data.ssnitCertUrl,
-              });
-            }
-          }
-
-        } catch (error: any) {
-          throw new Error(`Provider registration failed: ${error.message}`);
+        if (!uploadResponse.data.success) {
+          throw new Error(uploadResponse.data.error || 'Business document upload failed');
         }
+
+        // Add document URLs to payload
+        Object.assign(registrationPayload, {
+          tinCertificateUrl: uploadResponse.data.tinCertificateUrl,
+          incorporationCertUrl: uploadResponse.data.incorporationCertUrl,
+          vatCertificateUrl: uploadResponse.data.vatCertificateUrl,
+          ssnitCertUrl: uploadResponse.data.ssnitCertUrl,
+        });
       }
 
+      // Submit registration
       const response = await axios.post('/api/register', registrationPayload);
 
       if (!response.data.success) {
         throw new Error(response.data.message || 'Registration failed');
       }
+// Handle successful registration
+if (response.data.shouldAutoLogin) {
+  const loginResult = await signIn('credentials', {
+    email: data.email,
+    password: data.password,
+    redirect: false
+  });
 
-      if (response.data.shouldAutoLogin) {
-        const loginResult = await signIn('credentials', {
-          email: data.email,
-          password: data.password,
-          redirect: false
-        });
+  if (loginResult?.error) {
+    throw new Error('Auto-login failed');
+  }
 
-        if (loginResult?.error) {
-          throw new Error('Auto-login failed');
-        }
-
-        toast.success('Account created and logged in!');
-        
-        if (data.role === 'PROVIDER') {
-          router.push('/pending-approval');
-        } else {
-          router.push('/');
-        }
-      } else {
-        toast.success('Account created successfully!');
-        loginModal.onOpen();
-      }
+  toast.success('Account created and logged in!');
+  
+  // Redirect providers to pending approval, others to home
+  if (data.role === 'PROVIDER') {
+    router.push('/pending-approval');
+  } else {
+    router.push('/');
+  }
+} else {
+  toast.success('Account created successfully!');
+  loginModal.onOpen();
+}
 
       registerModal.onClose();
       reset();
@@ -430,6 +380,7 @@ const RegisterModal = () => {
   const handleNext = async () => {
     const current = filteredSteps[currentStep];
     
+    // Special handling for phone verification step
     if (current.field === 'phoneVerification') {
       if (!isPhoneVerified) {
         toast.error('Please verify your phone number first');
@@ -439,14 +390,17 @@ const RegisterModal = () => {
       return;
     }
 
+    // Validate current step
     const valid = await trigger(current.field);
     if (!valid) return;
 
+    // Skip verification steps for customers
     if (current.field === 'role' && watchedValues.role === 'CUSTOMER') {
       setCurrentStep(filteredSteps.length - 1);
       return;
     }
 
+    // Proceed to next step
     setCurrentStep(prev => prev + 1);
   };
 
@@ -482,60 +436,6 @@ const RegisterModal = () => {
   const canProceed = isStepValid(currentStep);
   const allFieldsComplete = filteredSteps.every((_, i) => isStepValid(i));
 
-  const FileUpload = ({ label, file, onFileUpload, required = false }: {
-    label: string;
-    file: File | null;
-    onFileUpload: (file: File) => void;
-    required?: boolean;
-  }) => {
-    const inputId = `file-${label.toLowerCase().replace(/\s+/g, '-')}`;
-    
-    return (
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          {label} {required && <span className="text-red-500">*</span>}
-        </label>
-        <div className="relative">
-          <input
-            type="file"
-            id={inputId}
-            accept="image/*,.pdf"
-            onChange={(e) => e.target.files?.[0] && onFileUpload(e.target.files[0])}
-            className="hidden"
-            disabled={isLoading}
-          />
-          <label
-            htmlFor={inputId}
-            className={`cursor-pointer block border-2 border-dashed border-gray-300 rounded-lg p-4 text-center transition-all duration-200 ${
-              isLoading ? 'opacity-70 cursor-not-allowed' : 'hover:border-blue-400 hover:bg-blue-50'
-            }`}
-          >
-            <div className="flex items-center justify-center gap-3">
-              <FiUpload className="text-gray-400" />
-              <span className="text-sm text-gray-600">
-                {file ? file.name : 'Choose file or drag here'}
-              </span>
-            </div>
-          </label>
-          {file && (
-            <div className="absolute -top-1 -right-1 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-              <FiCheck className="text-white text-xs" />
-            </div>
-          )}
-        </div>
-        {file && file.type.startsWith('image/') && (
-          <div className="mt-2">
-            <img 
-              src={URL.createObjectURL(file)} 
-              alt="Preview" 
-              className="h-20 object-contain border rounded"
-            />
-          </div>
-        )}
-      </div>
-    );
-  };
-
   const BusinessStep = () => (
     <div className="space-y-4 sm:space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -545,53 +445,24 @@ const RegisterModal = () => {
           </label>
           <input
             type="text"
-            {...register('tinNumber', { 
-              required: 'TIN number is required',
-              pattern: {
-                value: /^[A-Z0-9]{8,15}$/,
-                message: 'Please enter a valid TIN number'
-              }
-            })}
-            className={`w-full p-3 border rounded-lg focus:ring-2 focus:border-blue-500 ${
-              errors.tinNumber 
-                ? 'border-red-300 bg-red-50' 
-                : watchedValues.tinNumber 
-                  ? 'border-green-300 bg-green-50'
-                  : 'border-gray-300'
-            }`}
+            {...register('tinNumber', { required: 'TIN number is required' })}
+            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             placeholder="Enter TIN number"
             disabled={isLoading}
           />
-          {errors.tinNumber && (
-            <p className="text-red-500 text-xs mt-1">
-              {errors.tinNumber.message}
-            </p>
-          )}
         </div>
         
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Registration Number
-            {watchedValues.businessType === 'COMPANY' && <span className="text-red-500"> *</span>}
           </label>
           <input
             type="text"
             {...register('registrationNumber')}
-            className={`w-full p-3 border rounded-lg focus:ring-2 focus:border-blue-500 ${
-              errors.registrationNumber 
-                ? 'border-red-300 bg-red-50' 
-                : watchedValues.registrationNumber 
-                  ? 'border-green-300 bg-green-50'
-                  : 'border-gray-300'
-            }`}
+            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             placeholder="Enter registration number"
             disabled={isLoading}
           />
-          {errors.registrationNumber && (
-            <p className="text-red-500 text-xs mt-1">
-              {errors.registrationNumber.message}
-            </p>
-          )}
         </div>
       </div>
 
@@ -601,28 +472,11 @@ const RegisterModal = () => {
         </label>
         <input
           type="text"
-          {...register('businessName', { 
-            required: 'Business name is required',
-            minLength: {
-              value: 3,
-              message: 'Business name must be at least 3 characters'
-            }
-          })}
-          className={`w-full p-3 border rounded-lg focus:ring-2 focus:border-blue-500 ${
-            errors.businessName 
-              ? 'border-red-300 bg-red-50' 
-              : watchedValues.businessName 
-                ? 'border-green-300 bg-green-50'
-                : 'border-gray-300'
-          }`}
+          {...register('businessName', { required: 'Business name is required' })}
+          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           placeholder="Enter business name"
           disabled={isLoading}
         />
-        {errors.businessName && (
-          <p className="text-red-500 text-xs mt-1">
-            {errors.businessName.message}
-          </p>
-        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -632,13 +486,7 @@ const RegisterModal = () => {
           </label>
           <select
             {...register('businessType', { required: 'Business type is required' })}
-            className={`w-full p-3 border rounded-lg focus:ring-2 focus:border-blue-500 ${
-              errors.businessType 
-                ? 'border-red-300 bg-red-50' 
-                : watchedValues.businessType 
-                  ? 'border-green-300 bg-green-50'
-                  : 'border-gray-300'
-            }`}
+            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             disabled={isLoading}
           >
             <option value="">Select business type</option>
@@ -648,11 +496,6 @@ const RegisterModal = () => {
               </option>
             ))}
           </select>
-          {errors.businessType && (
-            <p className="text-red-500 text-xs mt-1">
-              {errors.businessType.message}
-            </p>
-          )}
         </div>
         
         <div>
@@ -662,11 +505,7 @@ const RegisterModal = () => {
           <input
             type="tel"
             {...register('businessPhone')}
-            className={`w-full p-3 border rounded-lg focus:ring-2 focus:border-blue-500 ${
-              watchedValues.businessPhone 
-                ? 'border-green-300 bg-green-50'
-                : 'border-gray-300'
-            }`}
+            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             placeholder="Enter business phone"
             disabled={isLoading}
           />
@@ -679,11 +518,7 @@ const RegisterModal = () => {
         </label>
         <textarea
           {...register('businessAddress')}
-          className={`w-full p-3 border rounded-lg focus:ring-2 focus:border-blue-500 ${
-            watchedValues.businessAddress 
-              ? 'border-green-300 bg-green-50'
-              : 'border-gray-300'
-          }`}
+          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           rows={3}
           placeholder="Enter business address"
           disabled={isLoading}
@@ -720,6 +555,51 @@ const RegisterModal = () => {
       </div>
     </div>
   );
+
+  const FileUpload = ({ label, file, onFileUpload, required = false }: {
+    label: string;
+    file: File | null;
+    onFileUpload: (file: File) => void;
+    required?: boolean;
+  }) => {
+    const inputId = `file-${label.toLowerCase().replace(/\s+/g, '-')}`;
+    
+    return (
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          {label}
+        </label>
+        <div className="relative">
+          <input
+            type="file"
+            id={inputId}
+            accept="image/*,.pdf"
+            onChange={(e) => e.target.files?.[0] && onFileUpload(e.target.files[0])}
+            className="hidden"
+            disabled={isLoading}
+          />
+          <label
+            htmlFor={inputId}
+            className={`cursor-pointer block border-2 border-dashed border-gray-300 rounded-lg p-4 text-center transition-all duration-200 ${
+              isLoading ? 'opacity-70 cursor-not-allowed' : 'hover:border-blue-400 hover:bg-blue-50'
+            }`}
+          >
+            <div className="flex items-center justify-center gap-3">
+              <FiUpload className="text-gray-400" />
+              <span className="text-sm text-gray-600">
+                {file ? file.name : 'Choose file or drag here'}
+              </span>
+            </div>
+          </label>
+          {file && (
+            <div className="absolute -top-1 -right-1 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+              <FiCheck className="text-white text-xs" />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   if (!registerModal.isOpen) return null;
 
@@ -861,61 +741,35 @@ const RegisterModal = () => {
                 )}
               </div>
             ) : currentField.field === 'idImage' ? (
-              <div className="space-y-4">
-                <div className="flex gap-3">
-                  {/* Camera Option */}
-                  <label className="flex-1 text-center border-2 border-dashed border-gray-300 rounded-xl p-4 hover:border-blue-400 transition-colors cursor-pointer">
-                    <FiCamera className="w-8 h-8 mx-auto text-gray-400 mb-2" />
-                    <span className="block font-medium">Take Photo</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      onChange={(e) => e.target.files?.[0] && handleIdUpload(e.target.files[0])}
-                      className="hidden"
-                    />
+              <div className="space-y-3 sm:space-y-4">
+                <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 sm:p-8 text-center hover:border-blue-400 transition-colors duration-200">
+                  <FiUpload className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-3 sm:mb-4" />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => e.target.files?.[0] && handleIdUpload(e.target.files[0])}
+                    disabled={isLoading}
+                    className="hidden"
+                    id="id-upload"
+                    capture="environment"
+                  />
+                  <label
+                    htmlFor="id-upload"
+                    className="cursor-pointer text-blue-600 hover:text-blue-700 font-medium text-sm sm:text-base"
+                  >
+                    Click to upload or take a photo of your Ghana Card
                   </label>
-
-                  {/* Gallery Option */}
-                  <label className="flex-1 text-center border-2 border-dashed border-gray-300 rounded-xl p-4 hover:border-blue-400 transition-colors cursor-pointer">
-                    <FiImage className="w-8 h-8 mx-auto text-gray-400 mb-2" />
-                    <span className="block font-medium">Choose from Gallery</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => e.target.files?.[0] && handleIdUpload(e.target.files[0])}
-                      className="hidden"
-                    />
-                  </label>
+                  <p className="text-gray-500 text-xs sm:text-sm mt-1 sm:mt-2">
+                    PNG, JPG or JPEG (max. 5MB). You can take a photo with your camera.
+                  </p>
                 </div>
 
                 {idFile && (
-                  <div className="mt-4">
-                    <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center">
-                      <FiCheck className="text-green-500 mr-2" />
-                      <span className="font-medium">ID uploaded successfully</span>
-                      <button 
-                        onClick={() => setIdFile(null)}
-                        className="ml-auto text-red-500 hover:text-red-700"
-                      >
-                        <FiTrash2 />
-                      </button>
-                    </div>
-                    <img 
-                      src={URL.createObjectURL(idFile)} 
-                      alt="ID Preview" 
-                      className="mt-2 max-h-40 mx-auto border rounded"
-                    />
-                    <div className="text-xs text-gray-500 mt-1 text-center">
-                      {idFile.name} - {(idFile.size / 1024 / 1024).toFixed(2)}MB
-                    </div>
+                  <div className="flex items-center gap-2 text-green-600 bg-green-50 p-2 sm:p-3 rounded-xl text-sm">
+                    <FiCheck className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <span className="font-medium">ID selected: {idFile.name}</span>
                   </div>
                 )}
-
-                <div className="bg-blue-50 p-3 rounded-lg text-sm text-blue-800 mt-4">
-                  <FiInfo className="inline mr-2" />
-                  Make sure your ID is clearly visible and all details are readable
-                </div>
               </div>
             ) : currentField.field === 'businessInfo' ? (
               <BusinessStep />
