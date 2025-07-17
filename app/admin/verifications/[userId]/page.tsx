@@ -27,7 +27,7 @@ export default function UserBusinessVerificationPage() {
   const handleVerify = async (verified: boolean) => {
     setSubmitting(true);
     try {
-      await axios.post(`/api/admin/providers/${userId}/status`, {
+      await axios.patch(`/api/admin/providers/${userId}/status`, {
         verified,
         notes,
       });
