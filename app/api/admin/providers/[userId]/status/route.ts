@@ -1,31 +1,32 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { getToken } from "next-auth/jwt";
 import prisma from "@/app/libs/prismadb";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { NotificationType } from "@prisma/client";
 
-// Add this for debugging - remove after fixing
+const secret = process.env.NEXTAUTH_SECRET!;
+
 export async function GET(
-  req: Request,
+  req: NextRequest,
   { params }: { params: { userId: string } }
 ) {
   return NextResponse.json({ message: "Route is working", userId: params.userId });
 }
 
 export async function PATCH(
-  req: Request,
+  req: NextRequest,
   { params }: { params: { userId: string } }
 ) {
   console.log("🔍 PATCH endpoint hit with userId:", params.userId);
-  
-  const session = await getServerSession(authOptions);
 
-  // 1. Authorization: Only ADMINs can proceed
-  if (!session || session.user.role !== "ADMIN") {
+  // 1. Extract and validate token
+  const token = await getToken({ req, secret });
+
+  if (!token || token.role !== "ADMIN") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
   const { userId } = params;
+
   let status: string;
   let notes: string | null;
 
@@ -50,7 +51,7 @@ export async function PATCH(
   const isApproved = status === "APPROVED";
 
   try {
-    // Ensure verification record exists
+    // 3. Ensure verification record exists
     const existingVerification = await prisma.businessVerification.findUnique({
       where: { userId },
     });
@@ -62,7 +63,7 @@ export async function PATCH(
       );
     }
 
-    // Get provider user data
+    // 4. Get provider user data
     const provider = await prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, email: true },
@@ -72,7 +73,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Provider not found" }, { status: 404 });
     }
 
-    // 3. Perform atomic update of user + businessVerification
+    // 5. Perform atomic update of user + businessVerification
     const [updatedUser, updatedVerification] = await prisma.$transaction([
       prisma.user.update({
         where: { id: userId },
@@ -90,7 +91,7 @@ export async function PATCH(
       }),
     ]);
 
-    // 4. Auto-create notification for the provider
+    // 6. Auto-create notification for the provider
     const message = isApproved
       ? "🎉 Your business application has been approved. You can now list your services!"
       : `❌ Your business application was rejected.${notes ? ` Reason: ${notes}` : ""}`;
