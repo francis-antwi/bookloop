@@ -300,13 +300,30 @@ const RegisterModal = () => {
           businessPhone: data.businessPhone,
           registrationNumber: data.registrationNumber,
           businessVerified: false,
-
         });
 
         // Add business files to form data
         const businessFormData = new FormData();
         Object.entries(businessFiles).forEach(([key, file]) => {
           if (file) businessFormData.append(key, file);
+        });
+
+        // Upload business documents
+        const uploadResponse = await axios.post('/api/verify', businessFormData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 120000
+        });
+
+        if (!uploadResponse.data.success) {
+          throw new Error(uploadResponse.data.error || 'Business document upload failed');
+        }
+
+        // Add document URLs to payload
+        Object.assign(registrationPayload, {
+          tinCertificateUrl: uploadResponse.data.tinCertificateUrl,
+          incorporationCertUrl: uploadResponse.data.incorporationCertUrl,
+          vatCertificateUrl: uploadResponse.data.vatCertificateUrl,
+          ssnitCertUrl: uploadResponse.data.ssnitCertUrl,
         });
       }
 
@@ -462,18 +479,18 @@ const RegisterModal = () => {
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Business Type *
           </label>
-         <select
-         value={businessData.businessType}
-         onChange={(e) => onDataChange('businessType', e.target.value)}
-         className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-       >
-         <option value="">Select business type</option>
-         {categories.map((cat) => (
-           <option key={cat.label} value={cat.label}>
-             {cat.label}
-           </option>
-         ))}
-       </select>
+          <select
+            {...register('businessType', { required: 'Business type is required' })}
+            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            disabled={isLoading}
+          >
+            <option value="">Select business type</option>
+            {categories.map((cat) => (
+              <option key={cat.label} value={cat.label}>
+                {cat.label}
+              </option>
+            ))}
+          </select>
         </div>
         
         <div>
@@ -554,10 +571,13 @@ const RegisterModal = () => {
             accept="image/*,.pdf"
             onChange={(e) => e.target.files?.[0] && onFileUpload(e.target.files[0])}
             className="hidden"
+            disabled={isLoading}
           />
           <label
             htmlFor={inputId}
-            className="cursor-pointer block border-2 border-dashed border-gray-300 hover:border-blue-400 rounded-lg p-4 text-center transition-all duration-200 hover:bg-blue-50"
+            className={`cursor-pointer block border-2 border-dashed border-gray-300 rounded-lg p-4 text-center transition-all duration-200 ${
+              isLoading ? 'opacity-70 cursor-not-allowed' : 'hover:border-blue-400 hover:bg-blue-50'
+            }`}
           >
             <div className="flex items-center justify-center gap-3">
               <FiUpload className="text-gray-400" />
