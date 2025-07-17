@@ -2,7 +2,7 @@
 
 import axios from 'axios';
 import { IoMdClose } from 'react-icons/io';
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useMemo } from 'react';
 import { signIn } from "next-auth/react";
 import { FieldValues, SubmitHandler, useForm } from 'react-hook-form';
 import useRegisterModal from '@/app/hooks/useRegisterModal';
@@ -42,10 +42,79 @@ interface VerificationResponse {
   error?: string;
 }
 
+interface BusinessFiles {
+  tinCertificate: File | null;
+  incorporationCert: File | null;
+  vatCertificate: File | null;
+  ssnitCert: File | null;
+}
+
+interface Step {
+  field: string;
+  label: string;
+  icon: React.ComponentType;
+  placeholder?: string;
+  description: string;
+  providerOnly?: boolean;
+}
+
+const FileUpload = ({ 
+  label, 
+  file, 
+  onFileUpload, 
+  required = false, 
+  isLoading 
+}: {
+  label: string;
+  file: File | null;
+  onFileUpload: (file: File) => void;
+  required?: boolean;
+  isLoading: boolean;
+}) => {
+  const inputId = `file-${label.toLowerCase().replace(/\s+/g, '-')}`;
+  
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
+      <div className="relative">
+        <input
+          type="file"
+          id={inputId}
+          accept="image/*,.pdf"
+          onChange={(e) => e.target.files?.[0] && onFileUpload(e.target.files[0])}
+          className="hidden"
+          disabled={isLoading}
+        />
+        <label
+          htmlFor={inputId}
+          className={`cursor-pointer block border-2 border-dashed border-gray-300 rounded-lg p-4 text-center transition-all duration-200 ${
+            isLoading ? 'opacity-70 cursor-not-allowed' : 'hover:border-blue-400 hover:bg-blue-50'
+          }`}
+        >
+          <div className="flex items-center justify-center gap-3">
+            <FiUpload className="text-gray-400" />
+            <span className="text-sm text-gray-600">
+              {file ? file.name : 'Choose file or drag here'}
+            </span>
+          </div>
+        </label>
+        {file && (
+          <div className="absolute -top-1 -right-1 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+            <FiCheck className="text-white text-xs" />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const RegisterModal = () => {
   const registerModal = useRegisterModal();
   const loginModal = useLoginModal();
   const router = useRouter();
+  
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
@@ -57,11 +126,11 @@ const RegisterModal = () => {
     error?: string;
   } | null>(null);
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);
-  const [businessFiles, setBusinessFiles] = useState({
-    tinCertificate: null as File | null,
-    incorporationCert: null as File | null,
-    vatCertificate: null as File | null,
-    ssnitCert: null as File | null
+  const [businessFiles, setBusinessFiles] = useState<BusinessFiles>({
+    tinCertificate: null,
+    incorporationCert: null,
+    vatCertificate: null,
+    ssnitCert: null
   });
 
   const {
@@ -70,8 +139,6 @@ const RegisterModal = () => {
     formState: { errors },
     watch,
     trigger,
-    setValue,
-    getValues,
     reset,
   } = useForm<FieldValues>({
     defaultValues: {
@@ -91,12 +158,7 @@ const RegisterModal = () => {
 
   const watchedValues = watch();
 
-  const handlePhoneVerified = (phoneNumber: string, otp: string) => {
-    setIsPhoneVerified(true);
-    toast.success('Phone number verified successfully!');
-  };
-
-  const steps = [
+  const steps = useMemo<Step[]>(() => [
     { 
       field: 'name', 
       label: 'Full Name', 
@@ -158,18 +220,21 @@ const RegisterModal = () => {
       description: 'Provide your business details',
       providerOnly: true
     },
-  ];
+  ], []);
 
-  const getFilteredSteps = () => {
+  const filteredSteps = useMemo(() => {
     if (watchedValues.role === 'CUSTOMER') {
       return steps.filter(step => !step.providerOnly);
     }
     return steps;
-  };
+  }, [watchedValues.role, steps]);
 
-  const filteredSteps = getFilteredSteps();
+  const handlePhoneVerified = useCallback((phoneNumber: string, otp: string) => {
+    setIsPhoneVerified(true);
+    toast.success('Phone number verified successfully!');
+  }, []);
 
-  const handleIdUpload = (file: File) => {
+  const handleIdUpload = useCallback((file: File) => {
     if (!file.type.match(/image\/(jpeg|png|jpg)/)) {
       toast.error('Only JPEG/PNG images are allowed');
       return;
@@ -183,9 +248,9 @@ const RegisterModal = () => {
       return;
     }
     setIdFile(file);
-  };
+  }, []);
 
-  const onFileUpload = (field: string, file: File) => {
+  const onFileUpload = useCallback((field: keyof BusinessFiles, file: File) => {
     if (!file.type.match(/image\/(jpeg|png|jpg)|application\/pdf/)) {
       toast.error('Only JPEG/PNG/PDF files are allowed');
       return;
@@ -195,9 +260,9 @@ const RegisterModal = () => {
       return;
     }
     setBusinessFiles(prev => ({ ...prev, [field]: file }));
-  };
+  }, []);
 
-  const submitVerification = async () => {
+  const submitVerification = useCallback(async () => {
     if (!selfieImageBlob || !idFile) {
       toast.error('Please complete all verification steps');
       throw new Error('Missing verification files');
@@ -249,13 +314,12 @@ const RegisterModal = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [selfieImageBlob, idFile, watchedValues.email]);
 
-  const onSubmit: SubmitHandler<FieldValues> = async (data) => {
+  const onSubmit: SubmitHandler<FieldValues> = useCallback(async (data) => {
     setIsLoading(true);
     
     try {
-      // Common registration data
       const registrationPayload: any = {
         name: data.name,
         email: data.email,
@@ -270,7 +334,6 @@ const RegisterModal = () => {
         idType: 'GHANA_CARD'
       };
 
-      // Handle provider verification
       if (data.role === 'PROVIDER') {
         const verificationData = await submitVerification();
         const extractedData = verificationData.extractedData || {};
@@ -291,8 +354,6 @@ const RegisterModal = () => {
           rawText: extractedData.rawText,
           requiresApproval: true, 
           status: 'PENDING_REVIEW',
-
-          // Business data
           tinNumber: data.tinNumber,
           businessName: data.businessName,
           businessType: data.businessType,
@@ -302,13 +363,11 @@ const RegisterModal = () => {
           businessVerified: false,
         });
 
-        // Add business files to form data
         const businessFormData = new FormData();
         Object.entries(businessFiles).forEach(([key, file]) => {
           if (file) businessFormData.append(key, file);
         });
 
-        // Upload business documents
         const uploadResponse = await axios.post('/api/verify', businessFormData, {
           headers: { 'Content-Type': 'multipart/form-data' },
           timeout: 120000
@@ -318,7 +377,6 @@ const RegisterModal = () => {
           throw new Error(uploadResponse.data.error || 'Business document upload failed');
         }
 
-        // Add document URLs to payload
         Object.assign(registrationPayload, {
           tinCertificateUrl: uploadResponse.data.tinCertificateUrl,
           incorporationCertUrl: uploadResponse.data.incorporationCertUrl,
@@ -327,36 +385,34 @@ const RegisterModal = () => {
         });
       }
 
-      // Submit registration
       const response = await axios.post('/api/register', registrationPayload);
 
       if (!response.data.success) {
         throw new Error(response.data.message || 'Registration failed');
       }
-// Handle successful registration
-if (response.data.shouldAutoLogin) {
-  const loginResult = await signIn('credentials', {
-    email: data.email,
-    password: data.password,
-    redirect: false
-  });
 
-  if (loginResult?.error) {
-    throw new Error('Auto-login failed');
-  }
+      if (response.data.shouldAutoLogin) {
+        const loginResult = await signIn('credentials', {
+          email: data.email,
+          password: data.password,
+          redirect: false
+        });
 
-  toast.success('Account created and logged in!');
-  
-  // Redirect providers to pending approval, others to home
-  if (data.role === 'PROVIDER') {
-    router.push('/pending-approval');
-  } else {
-    router.push('/');
-  }
-} else {
-  toast.success('Account created successfully!');
-  loginModal.onOpen();
-}
+        if (loginResult?.error) {
+          throw new Error('Auto-login failed');
+        }
+
+        toast.success('Account created and logged in!');
+        
+        if (data.role === 'PROVIDER') {
+          router.push('/pending-approval');
+        } else {
+          router.push('/');
+        }
+      } else {
+        toast.success('Account created successfully!');
+        loginModal.onOpen();
+      }
 
       registerModal.onClose();
       reset();
@@ -369,7 +425,7 @@ if (response.data.shouldAutoLogin) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [submitVerification, businessFiles, router, loginModal, registerModal, reset]);
 
   const toggle = useCallback(() => {
     if (isLoading) return;
@@ -377,10 +433,9 @@ if (response.data.shouldAutoLogin) {
     registerModal.onClose();
   }, [isLoading, loginModal, registerModal]);
 
-  const handleNext = async () => {
+  const handleNext = useCallback(async () => {
     const current = filteredSteps[currentStep];
     
-    // Special handling for phone verification step
     if (current.field === 'phoneVerification') {
       if (!isPhoneVerified) {
         toast.error('Please verify your phone number first');
@@ -390,33 +445,30 @@ if (response.data.shouldAutoLogin) {
       return;
     }
 
-    // Validate current step
     const valid = await trigger(current.field);
     if (!valid) return;
 
-    // Skip verification steps for customers
     if (current.field === 'role' && watchedValues.role === 'CUSTOMER') {
       setCurrentStep(filteredSteps.length - 1);
       return;
     }
 
-    // Proceed to next step
     setCurrentStep(prev => prev + 1);
-  };
+  }, [currentStep, filteredSteps, isPhoneVerified, trigger, watchedValues.role]);
 
-  const handlePrev = () => {
+  const handlePrev = useCallback(() => {
     if (currentStep > 0) {
       setCurrentStep(prev => prev - 1);
     }
-  };
+  }, [currentStep]);
 
-  const jumpToStep = (stepIndex: number) => {
+  const jumpToStep = useCallback((stepIndex: number) => {
     if (stepIndex < currentStep || isStepValid(stepIndex)) {
       setCurrentStep(stepIndex);
     }
-  };
+  }, [currentStep]);
 
-  const isStepValid = (stepIndex: number) => {
+  const isStepValid = useCallback((stepIndex: number): boolean => {
     const field = filteredSteps[stepIndex].field;
     if (field === 'phoneVerification') return true;
     if (field === 'selfieImage') return !!selfieImageBlob;
@@ -430,13 +482,13 @@ if (response.data.shouldAutoLogin) {
       );
     }
     if (field === 'role') return !!watchedValues.role && !errors.role;
-    return watchedValues[field]?.trim().length > 0 && !errors[field];
-  };
+    return !!watchedValues[field]?.trim().length && !errors[field];
+  }, [filteredSteps, selfieImageBlob, idFile, watchedValues, businessFiles.tinCertificate, errors]);
 
-  const canProceed = isStepValid(currentStep);
-  const allFieldsComplete = filteredSteps.every((_, i) => isStepValid(i));
+  const canProceed = useMemo(() => isStepValid(currentStep), [currentStep, isStepValid]);
+  const allFieldsComplete = useMemo(() => filteredSteps.every((_, i) => isStepValid(i)), [filteredSteps, isStepValid]);
 
-  const BusinessStep = () => (
+  const BusinessStep = useCallback(() => (
     <div className="space-y-4 sm:space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -533,73 +585,32 @@ if (response.data.shouldAutoLogin) {
           file={businessFiles.tinCertificate}
           onFileUpload={(file) => onFileUpload('tinCertificate', file)}
           required
+          isLoading={isLoading}
         />
         
         <FileUpload
           label="Certificate of Incorporation"
           file={businessFiles.incorporationCert}
           onFileUpload={(file) => onFileUpload('incorporationCert', file)}
+          isLoading={isLoading}
         />
         
         <FileUpload
           label="VAT Certificate"
           file={businessFiles.vatCertificate}
           onFileUpload={(file) => onFileUpload('vatCertificate', file)}
+          isLoading={isLoading}
         />
         
         <FileUpload
           label="SSNIT Certificate"
           file={businessFiles.ssnitCert}
           onFileUpload={(file) => onFileUpload('ssnitCert', file)}
+          isLoading={isLoading}
         />
       </div>
     </div>
-  );
-
-  const FileUpload = ({ label, file, onFileUpload, required = false }: {
-    label: string;
-    file: File | null;
-    onFileUpload: (file: File) => void;
-    required?: boolean;
-  }) => {
-    const inputId = `file-${label.toLowerCase().replace(/\s+/g, '-')}`;
-    
-    return (
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          {label}
-        </label>
-        <div className="relative">
-          <input
-            type="file"
-            id={inputId}
-            accept="image/*,.pdf"
-            onChange={(e) => e.target.files?.[0] && onFileUpload(e.target.files[0])}
-            className="hidden"
-            disabled={isLoading}
-          />
-          <label
-            htmlFor={inputId}
-            className={`cursor-pointer block border-2 border-dashed border-gray-300 rounded-lg p-4 text-center transition-all duration-200 ${
-              isLoading ? 'opacity-70 cursor-not-allowed' : 'hover:border-blue-400 hover:bg-blue-50'
-            }`}
-          >
-            <div className="flex items-center justify-center gap-3">
-              <FiUpload className="text-gray-400" />
-              <span className="text-sm text-gray-600">
-                {file ? file.name : 'Choose file or drag here'}
-              </span>
-            </div>
-          </label>
-          {file && (
-            <div className="absolute -top-1 -right-1 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-              <FiCheck className="text-white text-xs" />
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
+  ), [businessFiles, isLoading, onFileUpload, register]);
 
   if (!registerModal.isOpen) return null;
 
@@ -751,7 +762,6 @@ if (response.data.shouldAutoLogin) {
                     disabled={isLoading}
                     className="hidden"
                     id="id-upload"
-                   
                   />
                   <label
                     htmlFor="id-upload"
