@@ -204,33 +204,29 @@ function parseDate(dateString: string | null): string | null {
 
 function extractPersonalIdNumber(fullText: string): string | null {
   const patterns = [
-    // Pattern for "Personal ID Number ... GHA-1234567890"
-    /Personal ID Number[^G]*GHA-([0-9]{10,12})/i,
-    // Direct pattern for GHA-numbers
+    // Pattern for "Personal ID Number ... GHA-1234567890" - captures full GHA-number
+    /Personal ID Number[^G]*(GHA-[0-9]{10,12})/i,
+    // Direct pattern for GHA-numbers - captures full GHA-number
     /\b(GHA-[0-9]{10,12})\b/g,
-    // Pattern for just the number part after GHA-
-    /GHA-([0-9]{10,12})/g,
-    // Fallback pattern for any GHA- followed by numbers
+    // Fallback pattern for any GHA- followed by numbers - captures full GHA-number
     /(GHA-[0-9]+)/gi
   ];
   
   for (const pattern of patterns) {
     const match = fullText.match(pattern);
     if (match) {
-      let idNumber = match[1];
+      const idNumber = match[1];
       
-      // Add null check before calling startsWith
+      // Add null check and ensure it's a string
       if (idNumber && typeof idNumber === 'string') {
-        // If it doesn't have GHA- prefix, add it
-        if (!idNumber.startsWith('GHA-')) {
-          idNumber = `GHA-${idNumber}`;
-        }
+        // The idNumber should already have GHA- prefix, so just return it
         return idNumber;
       }
     }
   }
   
   return null;
+}
 }
 
 function extractDocumentNumber(fullText: string, lines: string[]): string | null {
