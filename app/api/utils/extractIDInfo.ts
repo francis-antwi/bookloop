@@ -202,6 +202,37 @@ function parseDate(dateString: string | null): string | null {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function extractPersonalIdNumber(fullText: string): string | null {
+  const patterns = [
+    // Pattern for "Personal ID Number ... GHA-1234567890"
+    /Personal ID Number[^G]*GHA-([0-9]{10,12})/i,
+    // Direct pattern for GHA-numbers
+    /\b(GHA-[0-9]{10,12})\b/g,
+    // Pattern for just the number part after GHA-
+    /GHA-([0-9]{10,12})/g,
+    // Fallback pattern for any GHA- followed by numbers
+    /(GHA-[0-9]+)/gi
+  ];
+  
+  for (const pattern of patterns) {
+    const match = fullText.match(pattern);
+    if (match) {
+      let idNumber = match[1];
+      
+      // Add null check before calling startsWith
+      if (idNumber && typeof idNumber === 'string') {
+        // If it doesn't have GHA- prefix, add it
+        if (!idNumber.startsWith('GHA-')) {
+          idNumber = `GHA-${idNumber}`;
+        }
+        return idNumber;
+      }
+    }
+  }
+  
+  return null;
+}
+
 function extractDocumentNumber(fullText: string, lines: string[]): string | null {
   // Method 1: Look for lines after Document Number
   for (let i = 0; i < lines.length; i++) {
@@ -227,7 +258,7 @@ function extractDocumentNumber(fullText: string, lines: string[]): string | null
     const matches = fullText.match(pattern);
     if (matches) {
       const docNumber = matches[1];
-      if (docNumber && docNumber.length >= 6 && docNumber.length <= 20) {
+      if (docNumber && typeof docNumber === 'string' && docNumber.length >= 6 && docNumber.length <= 20) {
         return docNumber;
       }
     }
@@ -235,26 +266,6 @@ function extractDocumentNumber(fullText: string, lines: string[]): string | null
   
   return null;
 }
-
-function extractPersonalIdNumber(fullText: string): string | null {
-  const patterns = [
-    /Personal ID Number[^A-Z0-9]*([A-Z]{3}-[0-9]{10,12})/i,
-    /\b(GHA-[0-9]{10,12})\b/g,
-    /GHA-([0-9]{10,12})/g
-  ];
-  
-  for (const pattern of patterns) {
-    const match = fullText.match(pattern);
-    if (match) {
-      const idNumber = match[1];
-      // If it doesn't have GHA- prefix, add it
-      return idNumber.startsWith('GHA-') ? idNumber : `GHA-${idNumber}`;
-    }
-  }
-  
-  return null;
-}
-
 function extractIssuer(fullText: string, lines: string[]): string | null {
   // Method 1: Look for lines after Place of Issuance
   for (let i = 0; i < lines.length; i++) {
