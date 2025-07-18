@@ -10,11 +10,11 @@ import useLoginModal from '@/app/hooks/useLoginModal';
 import toast from 'react-hot-toast';
 import { 
   FiUser, FiMail, FiPhone, FiLock, FiEye, FiEyeOff, 
-  FiCheck, FiArrowRight, FiArrowLeft, FiUserCheck
+  FiCheck, FiArrowRight, FiArrowLeft, FiLoader,
+  FiUserCheck, FiShield
 } from 'react-icons/fi';
 import PhoneAuth from "@/app/components/PhoneAuth";
 import { useRouter } from 'next/navigation';
-import { categories } from '../navbar/Categories';
 
 const RegisterModal = () => {
   const registerModal = useRegisterModal();
@@ -31,6 +31,8 @@ const RegisterModal = () => {
     formState: { errors },
     watch,
     trigger,
+    setValue,
+    getValues,
     reset,
   } = useForm<FieldValues>({
     defaultValues: {
@@ -38,7 +40,7 @@ const RegisterModal = () => {
       email: '',
       contactPhone: '',
       password: '',
-      role: '',
+      role: ''
     },
   });
 
@@ -89,27 +91,27 @@ const RegisterModal = () => {
       label: 'Account Type',
       icon: FiUserCheck,
       description: 'Choose how you\'ll use our platform'
-    },
+    }
   ];
-
-  const getFilteredSteps = () => {
-    return steps;
-  };
-
-  const filteredSteps = getFilteredSteps();
 
   const onSubmit: SubmitHandler<FieldValues> = async (data) => {
     setIsLoading(true);
     
     try {
       // Common registration data
-      const registrationPayload: any = {
+      const registrationPayload = {
         name: data.name,
         email: data.email,
         contactPhone: data.contactPhone,
         password: data.password,
         role: data.role,
         isPhoneVerified: true,
+        // Set default values for providers without verification
+        isFaceVerified: false,
+        verified: false,
+        extractionComplete: false,
+        nationality: 'Ghanaian',
+        idType: 'GHANA_CARD'
       };
 
       // Submit registration
@@ -131,9 +133,9 @@ const RegisterModal = () => {
           throw new Error('Auto-login failed');
         }
 
-        toast.success('Account created successfully!');
+        toast.success('Account created and logged in!');
         
-        // Redirect providers to verification page, others to home
+        // Redirect providers to /verify, customers to home
         if (data.role === 'PROVIDER') {
           router.push('/verify');
         } else {
@@ -164,7 +166,7 @@ const RegisterModal = () => {
   }, [isLoading, loginModal, registerModal]);
 
   const handleNext = async () => {
-    const current = filteredSteps[currentStep];
+    const current = steps[currentStep];
     
     // Special handling for phone verification step
     if (current.field === 'phoneVerification') {
@@ -197,19 +199,20 @@ const RegisterModal = () => {
   };
 
   const isStepValid = (stepIndex: number) => {
-    const field = filteredSteps[stepIndex].field;
-    if (field === 'phoneVerification') return true;
+    const field = steps[stepIndex].field;
+    if (field === 'phoneVerification') return isPhoneVerified;
+    if (field === 'role') return !!watchedValues.role && !errors.role;
     return watchedValues[field]?.trim().length > 0 && !errors[field];
   };
 
   const canProceed = isStepValid(currentStep);
-  const allFieldsComplete = filteredSteps.every((_, i) => isStepValid(i));
+  const allFieldsComplete = steps.every((_, i) => isStepValid(i));
 
   if (!registerModal.isOpen) return null;
 
-  const currentField = filteredSteps[currentStep];
+  const currentField = steps[currentStep];
   const IconComponent = currentField.icon;
-  const progress = ((currentStep + 1) / filteredSteps.length) * 100;
+  const progress = ((currentStep + 1) / steps.length) * 100;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 overflow-y-auto">
@@ -233,7 +236,7 @@ const RegisterModal = () => {
           {/* Progress Bar */}
           <div className="relative">
             <div className="flex justify-between text-xs mb-2">
-              <span>Step {currentStep + 1} of {filteredSteps.length}</span>
+              <span>Step {currentStep + 1} of {steps.length}</span>
               <span>{Math.round(progress)}% Complete</span>
             </div>
             <div className="w-full bg-white/20 rounded-full h-2 mb-1">
@@ -243,7 +246,7 @@ const RegisterModal = () => {
               />
             </div>
             <div className="flex justify-between px-1">
-              {filteredSteps.map((_, index) => (
+              {steps.map((_, index) => (
                 <button
                   key={index}
                   onClick={() => jumpToStep(index)}
@@ -425,7 +428,7 @@ const RegisterModal = () => {
               <div></div>
             )}
 
-            {currentStep < filteredSteps.length - 1 ? (
+            {currentStep < steps.length - 1 ? (
               <button
                 onClick={handleNext}
                 disabled={!canProceed || isLoading}
