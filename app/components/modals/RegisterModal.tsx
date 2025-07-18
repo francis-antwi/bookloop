@@ -273,15 +273,17 @@ const RegisterModal = () => {
           throw new Error('TIN Certificate is required');
         }
 
-        const uploadResponse = await axios.post('/api/verify', businessFormData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          timeout: 120000
-        });
-
-        if (!uploadResponse.data.success || !uploadResponse.data.tinCertificateUrl) {
-          throw new Error(uploadResponse.data.error || 'Business document upload failed');
-        }
-
+      const uploadResponse = await axios.post('/api/verify', businessFormData, {
+  headers: { 'Content-Type': 'multipart/form-data' },
+  timeout: 120000,
+  params: {
+    verificationStep: 'business'  // Explicitly set the verification step
+  }
+});
+       if (!uploadResponse.data.success || !uploadResponse.data.tinCertificateUrl) {
+  console.error('Upload response:', uploadResponse.data);
+  throw new Error(uploadResponse.data.error || 'Business document upload verification failed');
+}
         // 3. Combine all data for registration
         Object.assign(registrationPayload, {
           // Identity verification data
