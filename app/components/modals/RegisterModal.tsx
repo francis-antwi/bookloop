@@ -2,7 +2,7 @@
 
 import axios from 'axios';
 import { IoMdClose } from 'react-icons/io';
-import { useCallback, useState, useMemo } from 'react';
+import { useCallback, useState } from 'react';
 import { signIn } from "next-auth/react";
 import { FieldValues, SubmitHandler, useForm } from 'react-hook-form';
 import useRegisterModal from '@/app/hooks/useRegisterModal';
@@ -11,7 +11,7 @@ import toast from 'react-hot-toast';
 import { 
   FiUser, FiMail, FiPhone, FiLock, FiEye, FiEyeOff, 
   FiCheck, FiArrowRight, FiArrowLeft, FiCamera,
-  FiUpload, FiUserCheck, FiShield, FiFileText, FiAlertCircle, FiLoader,
+  FiUpload, FiAlertCircle, FiLoader,
   FiBriefcase, FiMapPin
 } from 'react-icons/fi';
 import Camera from '../inputs/Camera';
@@ -179,173 +179,185 @@ const RegisterModal = () => {
   }, []);
 
   const submitVerification = useCallback(async () => {
-  if (!selfieImageBlob || !idFile) {
-    toast.error('Please complete all identity verification steps');
-    throw new Error('Missing selfie or ID for identity verification');
-  }
-
-  setIsLoading(true);
-  setVerificationStatus(null);
-
-  try {
-    const verificationFormData = new FormData();
-    verificationFormData.append('selfie', new File([selfieImageBlob], 'selfie.jpg', { type: 'image/jpeg' }));
-    verificationFormData.append('idImage', idFile);
-    verificationFormData.append('email', watchedValues.email);
-    verificationFormData.append('verificationStep', 'identity');
-
-    const response = await axios.post<VerificationResponse>('/api/verify', verificationFormData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 60000
-    });
-
-    if (!response.data.success || !response.data.selfieUrl || !response.data.imageUrl) {
-      throw new Error(response.data.error || 'Verification failed - missing URLs');
+    if (!selfieImageBlob || !idFile) {
+      toast.error('Please complete all identity verification steps');
+      throw new Error('Missing selfie or ID for identity verification');
     }
 
-    const extractedData = response.data.extractedData || {};
-    const confidence = response.data.matchConfidence || extractedData.faceConfidence || 0;
+    setIsLoading(true);
+    setVerificationStatus(null);
 
-    if (confidence < 80) {
-      throw new Error(`Face match confidence too low (${confidence.toFixed(1)}%)`);
+    try {
+      const verificationFormData = new FormData();
+      verificationFormData.append('selfie', new File([selfieImageBlob], 'selfie.jpg', { type: 'image/jpeg' }));
+      verificationFormData.append('idImage', idFile);
+      verificationFormData.append('email', watchedValues.email);
+      verificationFormData.append('verificationStep', 'identity');
+
+      const response = await axios.post<VerificationResponse>('/api/verify', verificationFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 60000
+      });
+
+      if (!response.data.success || !response.data.selfieUrl || !response.data.imageUrl) {
+        throw new Error(response.data.error || 'Verification failed - missing URLs');
+      }
+
+      const extractedData = response.data.extractedData || {};
+      const confidence = response.data.matchConfidence || extractedData.faceConfidence || 0;
+
+      if (confidence < 80) {
+        throw new Error(`Face match confidence too low (${confidence.toFixed(1)}%)`);
+      }
+
+      setVerificationStatus({ success: true, confidence });
+      
+      return {
+        ...response.data,
+        idImageUrl: response.data.imageUrl
+      };
+
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.error || error.message || 'Verification failed';
+      setVerificationStatus({ 
+        success: false, 
+        error: errorMsg,
+        confidence: error.response?.data?.matchConfidence
+      });
+      toast.error(errorMsg);
+      throw error;
+    } finally {
+      setIsLoading(false);
     }
-
-    setVerificationStatus({ success: true, confidence });
-    return response.data;
-
-  } catch (error: any) {
-    const errorMsg = error.response?.data?.error || error.message || 'Verification failed';
-    setVerificationStatus({ 
-      success: false, 
-      error: errorMsg,
-      confidence: error.response?.data?.matchConfidence
-    });
-    toast.error(errorMsg);
-    throw error;
-  } finally {
-    setIsLoading(false);
-  }
-}, [selfieImageBlob, idFile, watchedValues.email]);
+  }, [selfieImageBlob, idFile, watchedValues.email]);
 
   const onSubmit: SubmitHandler<FieldValues> = useCallback(async (data) => {
-  setIsLoading(true);
-  
-  try {
-    const registrationPayload: any = {
-      name: data.name,
-      email: data.email,
-      contactPhone: data.contactPhone,
-      password: data.password,
-      role: data.role,
-      isPhoneVerified: true,
-      isFaceVerified: data.role === 'PROVIDER',
-      verified: data.role === 'PROVIDER',
-      extractionComplete: data.role === 'PROVIDER',
-      nationality: 'Ghanaian',
-      idType: 'GHANA_CARD'
-    };
-
-    if (data.role === 'PROVIDER') {
-      // 1. First verify identity
-      const verificationData = await submitVerification();
-      const extractedData = verificationData?.extractedData || {};
-      
-      // 2. Upload business documents
-      const businessFormData = new FormData();
-      Object.entries(businessFiles).forEach(([key, file]) => {
-        if (file) businessFormData.append(key, file);
-      });
-
-      // Ensure we have the required TIN certificate
-      if (!businessFiles.tinCertificate) {
-        throw new Error('TIN Certificate is required');
-      }
-
-      const uploadResponse = await axios.post('/api/verify', businessFormData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 120000
-      });
-
-      if (!uploadResponse.data.success || !uploadResponse.data.tinCertificateUrl) {
-        throw new Error(uploadResponse.data.error || 'Business document upload failed');
-      }
-
-      // 3. Combine all data for registration
-      Object.assign(registrationPayload, {
-        // Identity verification data
-        selfieImage: verificationData.selfieUrl,
-        idImage: verificationData.imageUrl,
-        faceConfidence: verificationData.matchConfidence,
-        idName: extractedData.idName,
-        idNumber: extractedData.idNumber || extractedData.personalIdNumber,
-        personalIdNumber: extractedData.personalIdNumber,
-        idDOB: extractedData.idDOB,
-        idExpiryDate: extractedData.idExpiryDate,
-        idIssueDate: extractedData.idIssueDate,
-        idIssuer: extractedData.idIssuer,
-        gender: extractedData.gender,
-        placeOfIssue: extractedData.placeOfIssue,
-        rawText: extractedData.rawText,
-        requiresApproval: true, 
-        status: 'PENDING_REVIEW',
-        tinNumber: data.tinNumber,
-        businessName: data.businessName,
-        businessType: data.businessType,
-        businessAddress: data.businessAddress,
-        businessPhone: data.businessPhone,
-        registrationNumber: data.registrationNumber,
-        businessVerified: false,
-        // Business documents
-        tinCertificateUrl: uploadResponse.data.tinCertificateUrl,
-        incorporationCertUrl: uploadResponse.data.incorporationCertUrl || null,
-        vatCertificateUrl: uploadResponse.data.vatCertificateUrl || null,
-        ssnitCertUrl: uploadResponse.data.ssnitCertUrl || null,
-        isFullProviderRegistration: true
-      });
-    }
-
-    // Final registration
-    const response = await axios.post('/api/register', registrationPayload);
-
-    if (!response.data.success) {
-      throw new Error(response.data.message || 'Registration failed');
-    }
-
-    if (response.data.shouldAutoLogin) {
-      const loginResult = await signIn('credentials', {
+    setIsLoading(true);
+    
+    try {
+      const registrationPayload: any = {
+        name: data.name,
         email: data.email,
+        contactPhone: data.contactPhone,
         password: data.password,
-        redirect: false
-      });
+        role: data.role,
+        isPhoneVerified: true,
+        isFaceVerified: data.role === 'PROVIDER',
+        verified: data.role === 'PROVIDER',
+        extractionComplete: data.role === 'PROVIDER',
+        nationality: 'Ghanaian',
+        idType: 'GHANA_CARD'
+      };
 
-      if (loginResult?.error) {
-        throw new Error('Auto-login failed');
-      }
-
-      toast.success('Account created and logged in!');
-      
       if (data.role === 'PROVIDER') {
-        router.push('/pending-approval');
-      } else {
-        router.push('/');
-      }
-    } else {
-      toast.success('Account created successfully!');
-      loginModal.onOpen();
-    }
+        // 1. Verify identity and get document URLs
+        const verificationData = await submitVerification();
+        const extractedData = verificationData?.extractedData || {};
+        
+        // 2. Upload business documents
+        const businessFormData = new FormData();
+        if (businessFiles.tinCertificate) {
+          businessFormData.append('tinCertificate', businessFiles.tinCertificate);
+        }
+        if (businessFiles.incorporationCert) {
+          businessFormData.append('incorporationCert', businessFiles.incorporationCert);
+        }
+        if (businessFiles.vatCertificate) {
+          businessFormData.append('vatCertificate', businessFiles.vatCertificate);
+        }
+        if (businessFiles.ssnitCert) {
+          businessFormData.append('ssnitCert', businessFiles.ssnitCert);
+        }
 
-    registerModal.onClose();
-    reset();
-  } catch (error: any) {
-    const errorMsg = error.response?.data?.error || 
-                   error.response?.data?.message || 
-                   error.message || 
-                   'Registration failed';
-    toast.error(errorMsg);
-  } finally {
-    setIsLoading(false);
-  }
-}, [submitVerification, businessFiles, router, loginModal, registerModal, reset]); [submitVerification, businessFiles, router, loginModal, registerModal, reset];
+        if (!businessFiles.tinCertificate) {
+          throw new Error('TIN Certificate is required');
+        }
+
+        const uploadResponse = await axios.post('/api/verify', businessFormData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 120000
+        });
+
+        if (!uploadResponse.data.success || !uploadResponse.data.tinCertificateUrl) {
+          throw new Error(uploadResponse.data.error || 'Business document upload failed');
+        }
+
+        // 3. Combine all data for registration
+        Object.assign(registrationPayload, {
+          // Identity verification data
+          selfieImage: verificationData.selfieUrl,
+          idImage: verificationData.imageUrl, // Required field
+          faceConfidence: verificationData.matchConfidence,
+          idName: extractedData.idName,
+          idNumber: extractedData.idNumber || extractedData.personalIdNumber,
+          personalIdNumber: extractedData.personalIdNumber,
+          idDOB: extractedData.idDOB,
+          idExpiryDate: extractedData.idExpiryDate,
+          idIssueDate: extractedData.idIssueDate,
+          idIssuer: extractedData.idIssuer,
+          gender: extractedData.gender,
+          placeOfIssue: extractedData.placeOfIssue,
+          rawText: extractedData.rawText,
+          requiresApproval: true, 
+          status: 'PENDING_REVIEW',
+          tinNumber: data.tinNumber,
+          businessName: data.businessName,
+          businessType: data.businessType,
+          businessAddress: data.businessAddress,
+          businessPhone: data.businessPhone,
+          registrationNumber: data.registrationNumber,
+          businessVerified: false,
+          // Business documents
+          tinCertificateUrl: uploadResponse.data.tinCertificateUrl, // Required field
+          incorporationCertUrl: uploadResponse.data.incorporationCertUrl || null,
+          vatCertificateUrl: uploadResponse.data.vatCertificateUrl || null,
+          ssnitCertUrl: uploadResponse.data.ssnitCertUrl || null,
+          isFullProviderRegistration: true
+        });
+      }
+
+      // Final registration
+      const response = await axios.post('/api/register', registrationPayload);
+
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Registration failed');
+      }
+
+      if (response.data.shouldAutoLogin) {
+        const loginResult = await signIn('credentials', {
+          email: data.email,
+          password: data.password,
+          redirect: false
+        });
+
+        if (loginResult?.error) {
+          throw new Error('Auto-login failed');
+        }
+
+        toast.success('Account created and logged in!');
+        
+        if (data.role === 'PROVIDER') {
+          router.push('/pending-approval');
+        } else {
+          router.push('/');
+        }
+      } else {
+        toast.success('Account created successfully!');
+        loginModal.onOpen();
+      }
+
+      registerModal.onClose();
+      reset();
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.error || 
+                     error.response?.data?.message || 
+                     error.message || 
+                     'Registration failed';
+      toast.error(errorMsg);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [submitVerification, businessFiles, router, loginModal, registerModal, reset]);
 
   const toggle = useCallback(() => {
     if (isLoading) return;
