@@ -231,6 +231,7 @@ const RegisterModal = () => {
     }
   }, [selfieImageBlob, idFile, watchedValues.email]);
 
+  
   const onSubmit: SubmitHandler<FieldValues> = useCallback(async (data) => {
     setIsLoading(true);
     
@@ -254,7 +255,7 @@ const RegisterModal = () => {
         const verificationData = await submitVerification();
         const extractedData = verificationData?.extractedData || {};
         
-        // 2. Upload business documents
+        // 2. Upload business documents with explicit verification step
         const businessFormData = new FormData();
         if (businessFiles.tinCertificate) {
           businessFormData.append('tinCertificate', businessFiles.tinCertificate);
@@ -273,22 +274,24 @@ const RegisterModal = () => {
           throw new Error('TIN Certificate is required');
         }
 
-      const uploadResponse = await axios.post('/api/verify', businessFormData, {
-  headers: { 'Content-Type': 'multipart/form-data' },
-  timeout: 120000,
-  params: {
-    verificationStep: 'business'  // Explicitly set the verification step
-  }
-});
-       if (!uploadResponse.data.success || !uploadResponse.data.tinCertificateUrl) {
-  console.error('Upload response:', uploadResponse.data);
-  throw new Error(uploadResponse.data.error || 'Business document upload verification failed');
-}
-        // 3. Combine all data for registration
+        const uploadResponse = await axios.post('/api/verify', businessFormData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 120000,
+          params: {
+            verificationStep: 'business'  // Explicit verification step
+          }
+        });
+
+        if (!uploadResponse.data.success || !uploadResponse.data.tinCertificateUrl) {
+          console.error('Business document upload failed:', uploadResponse.data);
+          throw new Error(uploadResponse.data.error || 'Business document verification failed');
+        }
+
+        // 3. Combine all data for registration with both required URLs
         Object.assign(registrationPayload, {
           // Identity verification data
           selfieImage: verificationData.selfieUrl,
-          idImage: verificationData.imageUrl, // Required field
+          idImage: verificationData.imageUrl, // This was missing in your payload
           faceConfidence: verificationData.matchConfidence,
           idName: extractedData.idName,
           idNumber: extractedData.idNumber || extractedData.personalIdNumber,
@@ -310,7 +313,7 @@ const RegisterModal = () => {
           registrationNumber: data.registrationNumber,
           businessVerified: false,
           // Business documents
-          tinCertificateUrl: uploadResponse.data.tinCertificateUrl, // Required field
+          tinCertificateUrl: uploadResponse.data.tinCertificateUrl, // This was missing in your payload
           incorporationCertUrl: uploadResponse.data.incorporationCertUrl || null,
           vatCertificateUrl: uploadResponse.data.vatCertificateUrl || null,
           ssnitCertUrl: uploadResponse.data.ssnitCertUrl || null,
