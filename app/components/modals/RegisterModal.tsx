@@ -165,7 +165,7 @@ const onSubmit: SubmitHandler<FieldValues> = async (data) => {
 
         toast.success('Account created and log in!');
         router.push('/');
-        router.refresh
+        router.refresh();
       } else {
         toast.success('Account created successfully!');
         loginModal.onOpen();
