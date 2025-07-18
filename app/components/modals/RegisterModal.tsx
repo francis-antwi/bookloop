@@ -11,9 +11,8 @@ import toast from 'react-hot-toast';
 import { 
   FiUser, FiMail, FiPhone, FiLock, FiEye, FiEyeOff, 
   FiCheck, FiArrowRight, FiArrowLeft, FiLoader,
-  FiUserCheck, FiShield
+  FiUserCheck
 } from 'react-icons/fi';
-import PhoneAuth from "@/app/components/PhoneAuth";
 import { useRouter } from 'next/navigation';
 
 const RegisterModal = () => {
@@ -23,7 +22,9 @@ const RegisterModal = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
-  const [isPhoneVerified, setIsPhoneVerified] = useState(false);
+  
+  // PHONE VERIFICATION DISABLED - Set to true by default
+  const [isPhoneVerified, setIsPhoneVerified] = useState(true);
 
   const {
     register,
@@ -51,6 +52,7 @@ const RegisterModal = () => {
     toast.success('Phone number verified successfully!');
   };
 
+  // PHONE VERIFICATION DISABLED - Removed phone verification step
   const steps = [
     { 
       field: 'name', 
@@ -71,14 +73,9 @@ const RegisterModal = () => {
       label: 'Phone Number', 
       icon: FiPhone, 
       placeholder: 'Enter your phone number',
-      description: 'For account security and notifications'
+      description: 'For account security and notifications (optional)'
     },
-    { 
-      field: 'phoneVerification', 
-      label: 'Verify Phone Number',
-      icon: FiShield,
-      description: 'We\'ll send a verification code to your phone'
-    },
+    // PHONE VERIFICATION STEP REMOVED
     { 
       field: 'password', 
       label: 'Password', 
@@ -105,7 +102,8 @@ const RegisterModal = () => {
         contactPhone: data.contactPhone,
         password: data.password,
         role: data.role,
-        isPhoneVerified: true,
+        // PHONE VERIFICATION DISABLED - Set to false since we're skipping verification
+        isPhoneVerified: false,
         // Set default values for providers without verification
         isFaceVerified: false,
         verified: false,
@@ -168,16 +166,6 @@ const RegisterModal = () => {
   const handleNext = async () => {
     const current = steps[currentStep];
     
-    // Special handling for phone verification step
-    if (current.field === 'phoneVerification') {
-      if (!isPhoneVerified) {
-        toast.error('Please verify your phone number first');
-        return;
-      }
-      setCurrentStep(prev => prev + 1);
-      return;
-    }
-
     // Validate current step
     const valid = await trigger(current.field);
     if (!valid) return;
@@ -200,8 +188,9 @@ const RegisterModal = () => {
 
   const isStepValid = (stepIndex: number) => {
     const field = steps[stepIndex].field;
-    if (field === 'phoneVerification') return isPhoneVerified;
     if (field === 'role') return !!watchedValues.role && !errors.role;
+    // PHONE VERIFICATION DISABLED - Make phone optional
+    if (field === 'contactPhone') return true; // Always valid now
     return watchedValues[field]?.trim().length > 0 && !errors[field];
   };
 
@@ -279,26 +268,7 @@ const RegisterModal = () => {
 
           {/* Form Fields */}
           <div className="space-y-4 sm:space-y-6">
-            {currentField.field === 'phoneVerification' ? (
-              <div className="space-y-4 sm:space-y-6">
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 sm:p-4 text-center">
-                  <p className="text-xs sm:text-sm text-blue-600 mb-1">We'll send a verification code to:</p>
-                  <p className="font-medium text-blue-800">{watchedValues.contactPhone}</p>
-                </div>
-
-                <PhoneAuth 
-                  phoneNumber={watchedValues.contactPhone}
-                  onVerified={handlePhoneVerified}
-                />
-
-                {isPhoneVerified && (
-                  <div className="flex items-center gap-2 text-green-600 bg-green-50 p-2 sm:p-3 rounded-xl text-sm">
-                    <FiCheck className="w-4 h-4 sm:w-5 sm:h-5" />
-                    <span className="font-medium">Phone number verified successfully!</span>
-                  </div>
-                )}
-              </div>
-            ) : currentField.field === 'role' ? (
+            {currentField.field === 'role' ? (
               <div className="space-y-3 sm:space-y-4">
                 <div className="grid grid-cols-1 gap-2 sm:gap-3">
                   {[
@@ -356,7 +326,8 @@ const RegisterModal = () => {
                     }`} />
                     <input
                       {...register(currentField.field, {
-                        required: `${currentField.label} is required`,
+                        // PHONE VERIFICATION DISABLED - Make phone optional
+                        required: currentField.field === 'contactPhone' ? false : `${currentField.label} is required`,
                         ...(currentField.field === 'email' && {
                           pattern: {
                             value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
