@@ -345,7 +345,7 @@ const RegisterModal = () => {
   } finally {
     setIsLoading(false);
   }
-}, [submitVerification, businessFiles, router, loginModal, registerModal, reset]); [submitVerification, businessFiles, router, loginModal, registerModal, reset]);
+}, [submitVerification, businessFiles, router, loginModal, registerModal, reset]); [submitVerification, businessFiles, router, loginModal, registerModal, reset];
 
   const toggle = useCallback(() => {
     if (isLoading) return;
