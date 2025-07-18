@@ -33,12 +33,14 @@ export const authOptions: AuthOptions = {
         const isValid = await bcrypt.compare(credentials.password, user.hashedPassword);
         if (!isValid) throw new Error("INVALID_CREDENTIALS");
 
-        if (
-          user.role === UserRole.PROVIDER &&
-          (!user.verified || user.requiresApproval || !user.isFaceVerified)
-        ) {
-          throw new Error("PROVIDER_NOT_APPROVED");
-        }
+       // 🟡 Temporarily allow provider login for verification flow
+if (
+  user.role === UserRole.PROVIDER &&
+  (!user.verified || user.requiresApproval || !user.isFaceVerified)
+) {
+  console.warn("🟡 PROVIDER not fully verified. Allowing login for verification flow.");
+}
+
 
         if (!user.role) throw new Error("MISSING_ROLE");
 
