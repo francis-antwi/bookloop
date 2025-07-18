@@ -112,38 +112,50 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
 try {
   setIsLoading(true);
 
-  // 📦 1. Retrieve saved provider info from localStorage
+  // 1. Retrieve pending provider registration data
   const stored = localStorage.getItem('pendingProviderRegistration');
   const pendingData = stored ? JSON.parse(stored) : {};
 
-  // ❗️2. Validate essential fields
   if (!pendingData?.email || !pendingData?.name || !pendingData?.password) {
-    toast.error("Missing required info. Please restart the registration.");
+    toast.error("Missing required info. Please restart registration.");
     router.push('/register');
     return;
   }
 
-  // 📤 3. Upload business documents (assumes you've already uploaded these earlier)
-  const tinCertificateUrl = uploadResponse.data.tinCertificateUrl;
-  const incorporationCertUrl = uploadResponse.data.incorporationCertUrl;
-  const vatCertificateUrl = uploadResponse.data.vatCertificateUrl;
-  const ssnitCertUrl = uploadResponse.data.ssnitCertUrl;
+  // 2. Prepare and upload business documents
+  const businessFormData = new FormData();
+  if (businessFiles.tinCertificate) {
+    businessFormData.append('tinCertificate', businessFiles.tinCertificate);
+  }
+  if (businessFiles.incorporationCertificate) {
+    businessFormData.append('incorporationCertificate', businessFiles.incorporationCertificate);
+  }
+  if (businessFiles.vatCertificate) {
+    businessFormData.append('vatCertificate', businessFiles.vatCertificate);
+  }
+  if (businessFiles.ssnitCertificate) {
+    businessFormData.append('ssnitCertificate', businessFiles.ssnitCertificate);
+  }
 
-  // 🧠 4. Build the final payload to send to /api/register
+  const uploadResponse = await axios.post('/api/upload-business-docs', businessFormData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+
+  // 3. Build the full registration payload
   const finalRegistrationData = {
-    ...pendingData,      // ✅ name, email, password, contactPhone, role
-    ...collectedData,    // ✅ selfieImage, idImage, faceConfidence, extractedData, etc.
-    tinCertificateUrl,
-    incorporationCertUrl,
-    vatCertificateUrl,
-    ssnitCertUrl,
+    ...pendingData,        // name, email, password, role, contactPhone
+    ...collectedData,      // selfieImage, idImage, extracted ID data, etc.
+    tinCertificateUrl: uploadResponse.data.tinCertificateUrl,
+    incorporationCertUrl: uploadResponse.data.incorporationCertUrl,
+    vatCertificateUrl: uploadResponse.data.vatCertificateUrl,
+    ssnitCertUrl: uploadResponse.data.ssnitCertUrl,
     role: "PROVIDER",
     isFullProviderRegistration: true,
   };
 
-  console.log("📦 [FRONTEND]: Sending final registration data to /api/register:", JSON.stringify(finalRegistrationData, null, 2));
+  console.log("📦 Final payload:", finalRegistrationData);
 
-  // 🚀 5. Submit the registration request
+  // 4. Submit registration
   const registerRes = await axios.post('/api/register', finalRegistrationData);
   const registerData = registerRes.data;
 
@@ -151,9 +163,9 @@ try {
     throw new Error(registerData.message || "Registration failed");
   }
 
-  // ✅ 6. Clean up and redirect
+  // 5. Clean up and redirect
   localStorage.removeItem('pendingProviderRegistration');
-  toast.success('Business verification submitted for review!');
+  toast.success('Business verification submitted!');
   router.push('/pending-approval');
   onComplete();
 
