@@ -73,7 +73,7 @@ const RegisterModal = () => {
       label: 'Phone Number', 
       icon: FiPhone, 
       placeholder: 'Enter your phone number',
-      description: 'For account security and notifications (optional)'
+      description: 'For account security and notifications'
     },
     // PHONE VERIFICATION STEP REMOVED
     { 
@@ -95,56 +95,71 @@ const RegisterModal = () => {
     setIsLoading(true);
     
     try {
-      // Common registration data
-      const registrationPayload = {
-        name: data.name,
-        email: data.email,
-        contactPhone: data.contactPhone,
-        password: data.password,
-        role: data.role,
-        // PHONE VERIFICATION DISABLED - Set to false since we're skipping verification
-        isPhoneVerified: false,
-        // Set default values for providers without verification
-        isFaceVerified: false,
-        verified: false,
-        extractionComplete: false,
-        nationality: 'Ghanaian',
-        idType: 'GHANA_CARD'
-      };
-
-      // Submit registration
-      const response = await axios.post('/api/register', registrationPayload);
-
-      if (!response.data.success) {
-        throw new Error(response.data.message || 'Registration failed');
-      }
-
-      // Handle successful registration
-      if (response.data.shouldAutoLogin) {
-        const loginResult = await signIn('credentials', {
+      // For providers, skip registration and redirect to verify page
+      if (data.role === 'PROVIDER') {
+        // Store the provider data in localStorage temporarily
+        const providerData = {
+          name: data.name,
           email: data.email,
+          contactPhone: data.contactPhone,
           password: data.password,
-          redirect: false
-        });
-
-        if (loginResult?.error) {
-          throw new Error('Auto-login failed');
-        }
-
-        toast.success('Account created and logged in!');
+          role: data.role,
+          timestamp: Date.now()
+        };
         
-        // Redirect providers to /verify, customers to home
-        if (data.role === 'PROVIDER') {
-          router.push('/verify');
-        } else {
-          router.push('/');
-        }
+        localStorage.setItem('pendingProviderRegistration', JSON.stringify(providerData));
+        
+        toast.success('Please complete your verification to finish registration.');
+        
+        // Close modal and redirect to verify page
+        registerModal.onClose();
+        router.push('/verify');
+        
       } else {
-        toast.success('Account created successfully!');
-        loginModal.onOpen();
+        // For customers, complete the full registration as before
+        const registrationPayload = {
+          name: data.name,
+          email: data.email,
+          contactPhone: data.contactPhone,
+          password: data.password,
+          role: data.role,
+          isPhoneVerified: false,
+          isFaceVerified: false,
+          verified: false,
+          extractionComplete: false,
+          nationality: 'Ghanaian',
+          idType: 'GHANA_CARD',
+          registrationComplete: true
+        };
+
+        const response = await axios.post('/api/register', registrationPayload);
+
+        if (!response.data.success) {
+          throw new Error(response.data.message || 'Registration failed');
+        }
+
+        // Handle successful customer registration
+        if (response.data.shouldAutoLogin) {
+          const loginResult = await signIn('credentials', {
+            email: data.email,
+            password: data.password,
+            redirect: false
+          });
+
+          if (loginResult?.error) {
+            throw new Error('Auto-login failed');
+          }
+
+          toast.success('Account created and logged in!');
+          router.push('/');
+        } else {
+          toast.success('Account created successfully!');
+          loginModal.onOpen();
+        }
+        
+        registerModal.onClose();
       }
 
-      registerModal.onClose();
       reset();
     } catch (error: any) {
       const errorMsg = error.response?.data?.error || 
@@ -425,11 +440,11 @@ const RegisterModal = () => {
                 {isLoading ? (
                   <>
                     <FiLoader className="animate-spin text-lg" />
-                    <span>Creating Account...</span>
+                    <span>Processing...</span>
                   </>
                 ) : (
                   <>
-                    Create Account
+                    {watchedValues.role === 'PROVIDER' ? 'Continue to Verification' : 'Create Account'}
                     <FiCheck className="w-3 h-3 sm:w-4 sm:h-4" />
                   </>
                 )}
