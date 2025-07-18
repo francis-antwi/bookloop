@@ -179,172 +179,173 @@ const RegisterModal = () => {
   }, []);
 
   const submitVerification = useCallback(async () => {
-    if (!selfieImageBlob || !idFile) {
-      toast.error('Please complete all identity verification steps');
-      throw new Error('Missing selfie or ID for identity verification');
+  if (!selfieImageBlob || !idFile) {
+    toast.error('Please complete all identity verification steps');
+    throw new Error('Missing selfie or ID for identity verification');
+  }
+
+  setIsLoading(true);
+  setVerificationStatus(null);
+
+  try {
+    const verificationFormData = new FormData();
+    verificationFormData.append('selfie', new File([selfieImageBlob], 'selfie.jpg', { type: 'image/jpeg' }));
+    verificationFormData.append('idImage', idFile);
+    verificationFormData.append('email', watchedValues.email);
+    verificationFormData.append('verificationStep', 'identity');
+
+    const response = await axios.post<VerificationResponse>('/api/verify', verificationFormData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000
+    });
+
+    if (!response.data.success || !response.data.selfieUrl || !response.data.imageUrl) {
+      throw new Error(response.data.error || 'Verification failed - missing URLs');
     }
 
-    setIsLoading(true);
-    setVerificationStatus(null);
+    const extractedData = response.data.extractedData || {};
+    const confidence = response.data.matchConfidence || extractedData.faceConfidence || 0;
 
-    try {
-      const verificationFormData = new FormData();
-      verificationFormData.append('selfie', new File([selfieImageBlob], 'selfie.jpg', { type: 'image/jpeg' }));
-      verificationFormData.append('idImage', idFile);
-      verificationFormData.append('email', watchedValues.email);
-      verificationFormData.append('verificationStep', 'identity');
-
-      const response = await axios.post<VerificationResponse>('/api/verify', verificationFormData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 60000
-      });
-
-      if (!response.data.success) {
-        throw new Error(response.data.error || 'Verification failed');
-      }
-
-      const extractedData = response.data.extractedData || {};
-      const confidence = response.data.matchConfidence || extractedData.faceConfidence || 0;
-
-      if (confidence < 80) {
-        throw new Error(`Face match confidence too low (${confidence.toFixed(1)}%)`);
-      }
-
-      setVerificationStatus({ success: true, confidence });
-      return {
-        ...response.data,
-        extractedData: {
-          ...extractedData,
-          idType: extractedData.idType || 'GHANA_CARD',
-          nationality: extractedData.nationality || 'Ghanaian'
-        }
-      };
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.error || error.message || 'Verification failed';
-      setVerificationStatus({ 
-        success: false, 
-        error: errorMsg,
-        confidence: error.response?.data?.matchConfidence
-      });
-      toast.error(errorMsg);
-      throw error;
-    } finally {
-      setIsLoading(false);
+    if (confidence < 80) {
+      throw new Error(`Face match confidence too low (${confidence.toFixed(1)}%)`);
     }
-  }, [selfieImageBlob, idFile, watchedValues.email]);
+
+    setVerificationStatus({ success: true, confidence });
+    return response.data;
+
+  } catch (error: any) {
+    const errorMsg = error.response?.data?.error || error.message || 'Verification failed';
+    setVerificationStatus({ 
+      success: false, 
+      error: errorMsg,
+      confidence: error.response?.data?.matchConfidence
+    });
+    toast.error(errorMsg);
+    throw error;
+  } finally {
+    setIsLoading(false);
+  }
+}, [selfieImageBlob, idFile, watchedValues.email]);
 
   const onSubmit: SubmitHandler<FieldValues> = useCallback(async (data) => {
-    setIsLoading(true);
-    
-    try {
-      const registrationPayload: any = {
-        name: data.name,
-        email: data.email,
-        contactPhone: data.contactPhone,
-        password: data.password,
-        role: data.role,
-        isPhoneVerified: true,
-        isFaceVerified: data.role === 'PROVIDER',
-        verified: data.role === 'PROVIDER',
-        extractionComplete: data.role === 'PROVIDER',
-        nationality: 'Ghanaian',
-        idType: 'GHANA_CARD'
-      };
+  setIsLoading(true);
+  
+  try {
+    const registrationPayload: any = {
+      name: data.name,
+      email: data.email,
+      contactPhone: data.contactPhone,
+      password: data.password,
+      role: data.role,
+      isPhoneVerified: true,
+      isFaceVerified: data.role === 'PROVIDER',
+      verified: data.role === 'PROVIDER',
+      extractionComplete: data.role === 'PROVIDER',
+      nationality: 'Ghanaian',
+      idType: 'GHANA_CARD'
+    };
 
-      if (data.role === 'PROVIDER') {
-        const verificationData = await submitVerification();
-        const extractedData = verificationData?.extractedData || {};
-        
-        Object.assign(registrationPayload, {
-          selfieImage: verificationData.selfieUrl,
-          idImage: verificationData.imageUrl,
-          faceConfidence: verificationData.matchConfidence,
-          idName: extractedData.idName,
-          idNumber: extractedData.idNumber || extractedData.personalIdNumber,
-          personalIdNumber: extractedData.personalIdNumber,
-          idDOB: extractedData.idDOB,
-          idExpiryDate: extractedData.idExpiryDate,
-          idIssueDate: extractedData.idIssueDate,
-          idIssuer: extractedData.idIssuer,
-          gender: extractedData.gender,
-          placeOfIssue: extractedData.placeOfIssue,
-          rawText: extractedData.rawText,
-          requiresApproval: true, 
-          status: 'PENDING_REVIEW',
-          tinNumber: data.tinNumber,
-          businessName: data.businessName,
-          businessType: data.businessType,
-          businessAddress: data.businessAddress,
-          businessPhone: data.businessPhone,
-          registrationNumber: data.registrationNumber,
-          businessVerified: false,
-          idImage: idImageUrl,
-          tinCertificateUrl: tinCertificateUrl,
-        });
+    if (data.role === 'PROVIDER') {
+      // 1. First verify identity
+      const verificationData = await submitVerification();
+      const extractedData = verificationData?.extractedData || {};
+      
+      // 2. Upload business documents
+      const businessFormData = new FormData();
+      Object.entries(businessFiles).forEach(([key, file]) => {
+        if (file) businessFormData.append(key, file);
+      });
 
-        const businessFormData = new FormData();
-        Object.entries(businessFiles).forEach(([key, file]) => {
-          if (file) businessFormData.append(key, file);
-        });
-
-        const uploadResponse = await axios.post('/api/verify', businessFormData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          timeout: 120000
-        });
-
-        if (!uploadResponse.data.success) {
-          throw new Error(uploadResponse.data.error || 'Business document upload failed');
-        }
-
-        Object.assign(registrationPayload, {
-          tinCertificateUrl: uploadResponse.data.tinCertificateUrl,
-          incorporationCertUrl: uploadResponse.data.incorporationCertUrl,
-          vatCertificateUrl: uploadResponse.data.vatCertificateUrl,
-          ssnitCertUrl: uploadResponse.data.ssnitCertUrl,
-        });
+      // Ensure we have the required TIN certificate
+      if (!businessFiles.tinCertificate) {
+        throw new Error('TIN Certificate is required');
       }
 
-      const response = await axios.post('/api/register', registrationPayload);
+      const uploadResponse = await axios.post('/api/verify', businessFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 120000
+      });
 
-      if (!response.data.success) {
-        throw new Error(response.data.message || 'Registration failed');
+      if (!uploadResponse.data.success || !uploadResponse.data.tinCertificateUrl) {
+        throw new Error(uploadResponse.data.error || 'Business document upload failed');
       }
 
-      if (response.data.shouldAutoLogin) {
-        const loginResult = await signIn('credentials', {
-          email: data.email,
-          password: data.password,
-          redirect: false
-        });
-
-        if (loginResult?.error) {
-          throw new Error('Auto-login failed');
-        }
-
-        toast.success('Account created and logged in!');
-        
-        if (data.role === 'PROVIDER') {
-          router.push('/pending-approval');
-        } else {
-          router.push('/');
-        }
-      } else {
-        toast.success('Account created successfully!');
-        loginModal.onOpen();
-      }
-
-      registerModal.onClose();
-      reset();
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.error || 
-                     error.response?.data?.message || 
-                     error.message || 
-                     'Registration failed';
-      toast.error(errorMsg);
-    } finally {
-      setIsLoading(false);
+      // 3. Combine all data for registration
+      Object.assign(registrationPayload, {
+        // Identity verification data
+        selfieImage: verificationData.selfieUrl,
+        idImage: verificationData.imageUrl,
+        faceConfidence: verificationData.matchConfidence,
+        idName: extractedData.idName,
+        idNumber: extractedData.idNumber || extractedData.personalIdNumber,
+        personalIdNumber: extractedData.personalIdNumber,
+        idDOB: extractedData.idDOB,
+        idExpiryDate: extractedData.idExpiryDate,
+        idIssueDate: extractedData.idIssueDate,
+        idIssuer: extractedData.idIssuer,
+        gender: extractedData.gender,
+        placeOfIssue: extractedData.placeOfIssue,
+        rawText: extractedData.rawText,
+        requiresApproval: true, 
+        status: 'PENDING_REVIEW',
+        tinNumber: data.tinNumber,
+        businessName: data.businessName,
+        businessType: data.businessType,
+        businessAddress: data.businessAddress,
+        businessPhone: data.businessPhone,
+        registrationNumber: data.registrationNumber,
+        businessVerified: false,
+        // Business documents
+        tinCertificateUrl: uploadResponse.data.tinCertificateUrl,
+        incorporationCertUrl: uploadResponse.data.incorporationCertUrl || null,
+        vatCertificateUrl: uploadResponse.data.vatCertificateUrl || null,
+        ssnitCertUrl: uploadResponse.data.ssnitCertUrl || null,
+        isFullProviderRegistration: true
+      });
     }
-  }, [submitVerification, businessFiles, router, loginModal, registerModal, reset]);
+
+    // Final registration
+    const response = await axios.post('/api/register', registrationPayload);
+
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Registration failed');
+    }
+
+    if (response.data.shouldAutoLogin) {
+      const loginResult = await signIn('credentials', {
+        email: data.email,
+        password: data.password,
+        redirect: false
+      });
+
+      if (loginResult?.error) {
+        throw new Error('Auto-login failed');
+      }
+
+      toast.success('Account created and logged in!');
+      
+      if (data.role === 'PROVIDER') {
+        router.push('/pending-approval');
+      } else {
+        router.push('/');
+      }
+    } else {
+      toast.success('Account created successfully!');
+      loginModal.onOpen();
+    }
+
+    registerModal.onClose();
+    reset();
+  } catch (error: any) {
+    const errorMsg = error.response?.data?.error || 
+                   error.response?.data?.message || 
+                   error.message || 
+                   'Registration failed';
+    toast.error(errorMsg);
+  } finally {
+    setIsLoading(false);
+  }
+}, [submitVerification, businessFiles, router, loginModal, registerModal, reset]); [submitVerification, businessFiles, router, loginModal, registerModal, reset]);
 
   const toggle = useCallback(() => {
     if (isLoading) return;
