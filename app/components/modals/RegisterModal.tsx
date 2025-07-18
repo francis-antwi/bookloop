@@ -163,7 +163,7 @@ const onSubmit: SubmitHandler<FieldValues> = async (data) => {
           throw new Error('Auto-login failed');
         }
 
-        toast.success('Account created and log in!');
+        toast.success('Account created and logged in!');
         router.push('/');
         router.refresh();
       } else {
