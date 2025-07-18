@@ -117,7 +117,7 @@ const onSubmit: SubmitHandler<FieldValues> = async (data) => {
         password: data.password,
         redirect: false
       });
-
+      console.log('loginResult:', loginResult);
       if (!loginResult?.ok || loginResult.error) {
         throw new Error('Registration successful but auto-login failed. Please sign in manually.');
       }
