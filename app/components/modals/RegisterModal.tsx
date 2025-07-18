@@ -118,7 +118,7 @@ const onSubmit: SubmitHandler<FieldValues> = async (data) => {
         redirect: false
       });
 
-      if (loginResult?.error) {
+      if (!loginResult?.ok || loginResult.error) {
         throw new Error('Registration successful but auto-login failed. Please sign in manually.');
       }
 
@@ -129,9 +129,9 @@ const onSubmit: SubmitHandler<FieldValues> = async (data) => {
       registerModal.onClose();
       reset();
       
-      // Redirect to verify page
-      router.push('/verify');
-      
+    setTimeout(() => {
+  router.push('/verify');
+}, 200);
     } else {
       // For CUSTOMER - complete registration as before
       const customerRegistrationPayload = {
