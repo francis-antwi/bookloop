@@ -1,3 +1,4 @@
+// Updated RegisterModal.tsx with improved provider registration flow
 'use client';
 
 import axios from 'axios';
@@ -22,8 +23,6 @@ const RegisterModal = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
-  
-  // PHONE VERIFICATION DISABLED - Set to true by default
   const [isPhoneVerified, setIsPhoneVerified] = useState(true);
 
   const {
@@ -47,12 +46,6 @@ const RegisterModal = () => {
 
   const watchedValues = watch();
 
-  const handlePhoneVerified = (phoneNumber: string, otp: string) => {
-    setIsPhoneVerified(true);
-    toast.success('Phone number verified successfully!');
-  };
-
-  // PHONE VERIFICATION DISABLED - Removed phone verification step
   const steps = [
     { 
       field: 'name', 
@@ -75,7 +68,6 @@ const RegisterModal = () => {
       placeholder: 'Enter your phone number',
       description: 'For account security and notifications'
     },
-    // PHONE VERIFICATION STEP REMOVED
     { 
       field: 'password', 
       label: 'Password', 
@@ -90,87 +82,108 @@ const RegisterModal = () => {
       description: 'Choose how you\'ll use our platform'
     }
   ];
+// Fix the onSubmit function in RegisterModal.tsx
 
-  const onSubmit: SubmitHandler<FieldValues> = async (data) => {
-    setIsLoading(true);
-    
-    try {
-      // For providers, skip registration and redirect to verify page
-      if (data.role === 'PROVIDER') {
-        // Store the provider data in localStorage temporarily
-        const providerData = {
-          name: data.name,
-          email: data.email,
-          contactPhone: data.contactPhone,
-          password: data.password,
-          role: data.role,
-          timestamp: Date.now()
-        };
-        
-        localStorage.setItem('pendingProviderRegistration', JSON.stringify(providerData));
-        
-        toast.success('Please complete your verification to finish registration.');
-        
-        // Close modal and redirect to verify page
-        registerModal.onClose();
-        router.push('/verify');
-        
-      } else {
-        // For customers, complete the full registration as before
-        const registrationPayload = {
-          name: data.name,
-          email: data.email,
-          contactPhone: data.contactPhone,
-          password: data.password,
-          role: data.role,
-          isPhoneVerified: false,
-          isFaceVerified: false,
-          verified: false,
-          extractionComplete: false,
-          nationality: 'Ghanaian',
-          idType: 'GHANA_CARD',
-          registrationComplete: true
-        };
+const onSubmit: SubmitHandler<FieldValues> = async (data) => {
+  setIsLoading(true);
+  
+  try {
+    if (data.role === 'PROVIDER') {
+      // For PROVIDER - create account with minimal data, mark as incomplete
+      const providerRegistrationPayload = {
+        name: data.name,
+        email: data.email,
+        contactPhone: data.contactPhone,
+        password: data.password,
+        role: data.role,
+        // Set provider-specific defaults that API expects
+        verified: false,
+        isFaceVerified: false,
+        requiresApproval: true,
+        status: "PENDING_REVIEW",
+        businessVerified: false
+      };
 
-        const response = await axios.post('/api/register', registrationPayload);
+      // Register the provider with basic info only
+      const registrationResponse = await axios.post('/api/register', providerRegistrationPayload);
 
-        if (!response.data.success) {
-          throw new Error(response.data.message || 'Registration failed');
-        }
-
-        // Handle successful customer registration
-        if (response.data.shouldAutoLogin) {
-          const loginResult = await signIn('credentials', {
-            email: data.email,
-            password: data.password,
-            redirect: false
-          });
-
-          if (loginResult?.error) {
-            throw new Error('Auto-login failed');
-          }
-
-          toast.success('Account created and logged in!');
-          router.push('/');
-        } else {
-          toast.success('Account created successfully!');
-          loginModal.onOpen();
-        }
-        
-        registerModal.onClose();
+      if (!registrationResponse.data.success) {
+        throw new Error(registrationResponse.data.message || 'Registration failed');
       }
 
+      // Auto-login the provider after successful registration
+      const loginResult = await signIn('credentials', {
+        email: data.email,
+        password: data.password,
+        redirect: false
+      });
+
+      if (loginResult?.error) {
+        throw new Error('Registration successful but auto-login failed. Please sign in manually.');
+      }
+
+      // Show success message
+      toast.success('Account created! Please complete your verification.');
+      
+      // Close modal and redirect to verify page
+      registerModal.onClose();
       reset();
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.error || 
-                     error.response?.data?.message || 
-                     error.message || 
-                     'Registration failed';
-      toast.error(errorMsg);
-    } finally {
-      setIsLoading(false);
+      
+      // Redirect to verify page
+      router.push('/verify');
+      
+    } else {
+      // For CUSTOMER - complete registration as before
+      const customerRegistrationPayload = {
+        name: data.name,
+        email: data.email,
+        contactPhone: data.contactPhone,
+        password: data.password,
+        role: data.role,
+        verified: true, // Customers are auto-verified
+        isFaceVerified: false,
+        status: "ACTIVE"
+      };
+
+      const response = await axios.post('/api/register', customerRegistrationPayload);
+
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Registration failed');
+      }
+
+      // Handle successful customer registration
+      if (response.data.shouldAutoLogin) {
+        const loginResult = await signIn('credentials', {
+          email: data.email,
+          password: data.password,
+          redirect: false
+        });
+
+        if (loginResult?.error) {
+          throw new Error('Auto-login failed');
+        }
+
+        toast.success('Account created and logged in!');
+        router.push('/');
+      } else {
+        toast.success('Account created successfully!');
+        loginModal.onOpen();
+      }
+      
+      registerModal.onClose();
+      reset();
     }
-  };
+  } catch (error: any) {
+    console.error('Registration error:', error);
+    const errorMsg = error.response?.data?.error || 
+                   error.response?.data?.message || 
+                   error.message || 
+                   'Registration failed';
+    toast.error(errorMsg);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const toggle = useCallback(() => {
     if (isLoading) return;
@@ -204,8 +217,7 @@ const RegisterModal = () => {
   const isStepValid = (stepIndex: number) => {
     const field = steps[stepIndex].field;
     if (field === 'role') return !!watchedValues.role && !errors.role;
-    // PHONE VERIFICATION DISABLED - Make phone optional
-    if (field === 'contactPhone') return true; // Always valid now
+    if (field === 'contactPhone') return true; // Phone is optional
     return watchedValues[field]?.trim().length > 0 && !errors[field];
   };
 
@@ -341,7 +353,6 @@ const RegisterModal = () => {
                     }`} />
                     <input
                       {...register(currentField.field, {
-                        // PHONE VERIFICATION DISABLED - Make phone optional
                         required: currentField.field === 'contactPhone' ? false : `${currentField.label} is required`,
                         ...(currentField.field === 'email' && {
                           pattern: {

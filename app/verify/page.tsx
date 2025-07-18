@@ -109,67 +109,49 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
 
     setIsLoading(true);
     setIdentityVerificationStatus(null);
-try {
-  setIsLoading(true);
 
-  // 1. Retrieve pending provider registration data
-  const stored = localStorage.getItem('pendingProviderRegistration');
-  const pendingData = stored ? JSON.parse(stored) : {};
+    try {
+      const verificationFormData = new FormData();
+      verificationFormData.append('selfie', new File([selfieImageFile], 'selfie.jpg', { type: 'image/jpeg' }));
+      verificationFormData.append('idImage', idImageFile);
+      verificationFormData.append('verificationStep', 'identity');
 
-  if (!pendingData?.email || !pendingData?.name || !pendingData?.password) {
-    toast.error("Missing required info. Please restart registration.");
-    router.push('/register');
-    return;
-  }
+      const response = await axios.post('/api/verify', verificationFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 60000
+      });
 
-  // 2. Prepare and upload business documents
-  const businessFormData = new FormData();
-  if (businessFiles.tinCertificate) {
-    businessFormData.append('tinCertificate', businessFiles.tinCertificate);
-  }
-  if (businessFiles.incorporationCertificate) {
-    businessFormData.append('incorporationCertificate', businessFiles.incorporationCertificate);
-  }
-  if (businessFiles.vatCertificate) {
-    businessFormData.append('vatCertificate', businessFiles.vatCertificate);
-  }
-  if (businessFiles.ssnitCertificate) {
-    businessFormData.append('ssnitCertificate', businessFiles.ssnitCertificate);
-  }
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Identity verification failed');
+      }
 
-  const uploadResponse = await axios.post('/api/upload-business-docs', businessFormData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+      setIdentityVerificationStatus({ 
+        success: true, 
+        confidence: response.data.matchConfidence 
+      });
+      toast.success('Identity verification complete!');
 
-  // 3. Build the full registration payload
-  const finalRegistrationData = {
-    ...pendingData,        // name, email, password, role, contactPhone
-    ...collectedData,      // selfieImage, idImage, extracted ID data, etc.
-    tinCertificateUrl: uploadResponse.data.tinCertificateUrl,
-    incorporationCertUrl: uploadResponse.data.incorporationCertUrl,
-    vatCertificateUrl: uploadResponse.data.vatCertificateUrl,
-    ssnitCertUrl: uploadResponse.data.ssnitCertUrl,
-    role: "PROVIDER",
-    isFullProviderRegistration: true,
-  };
+      setCollectedData((prev: any) => {
+        const updatedData = {
+          ...prev,
+          selfieImage: response.data.selfieUrl,
+          idImage: response.data.idUrl,
+          faceConfidence: response.data.matchConfidence,
+          ...response.data.extractedData,
+          verified: true,
+          extractionComplete: true,
+          businessVerified: false
 
-  console.log("📦 Final payload:", finalRegistrationData);
+        };
+        console.log("📦 [FRONTEND]: Collected Identity Data (after update):", JSON.stringify(updatedData, null, 2));
+        return updatedData;
+      });
 
-  // 4. Submit registration
-  const registerRes = await axios.post('/api/register', finalRegistrationData);
-  const registerData = registerRes.data;
+      setTimeout(() => {
+        setCurrentStep('business');
+      }, 1500);
 
-  if (!registerData.success) {
-    throw new Error(registerData.message || "Registration failed");
-  }
-
-  // 5. Clean up and redirect
-  localStorage.removeItem('pendingProviderRegistration');
-  toast.success('Business verification submitted!');
-  router.push('/pending-approval');
-  onComplete();
-
-}catch (error: any) {
+    } catch (error: any) {
       const errorMsg = error.response?.data?.error || error.message || 'Verification failed';
       setIdentityVerificationStatus({ success: false, error: errorMsg });
       toast.error(errorMsg);
@@ -220,26 +202,32 @@ try {
         isFullProviderRegistration: true,
       };
 
-        console.log("📦 [FRONTEND]: Sending final registration data to /api/register:", JSON.stringify(finalRegistrationData, null, 2));
+      console.log("📦 [FRONTEND]: Sending final registration data to /api/register:", JSON.stringify(finalRegistrationData, null, 2));
 
+      const registerRes = await axios.post('/api/register', finalRegistrationData);
+      const registerData = registerRes.data;
 
-          toast.success('Business verification submitted for review!');
-          router.push('/pending-approval');
-          onComplete();
-        } catch (error: any) {
-          const errorMsg = error.response?.data?.error || error.message || 'Business verification failed';
-        } finally {
-          setIsLoading(false);
-        }
-      };
+      if (!registerData.success) {
+        throw new Error(registerData.message || "Registration failed");
+      }
 
-      const nextStep = () => {
-        if (currentStep === 'selfie' && selfieImageFile) {
-          setCurrentStep('id');
-        } else if (currentStep === 'id' && idImageFile) {
-          submitIdentityVerification();
-        }
-      };
+      toast.success('Business verification submitted for review!');
+      router.push('/pending-approval');
+      onComplete();
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.error || error.message || 'Business verification failed';
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const nextStep = () => {
+    if (currentStep === 'selfie' && selfieImageFile) {
+      setCurrentStep('id');
+    } else if (currentStep === 'id' && idImageFile) {
+      submitIdentityVerification();
+    }
+  };
 
   const prevStep = () => {
     if (currentStep === 'id') {
