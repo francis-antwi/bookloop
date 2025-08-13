@@ -64,7 +64,7 @@ model User {
   image             String?
   resetToken        String?
   resetTokenExpiry  DateTime?
-
+   allowedCategories String[] 
   favouriteIds      String[]   @default([])
   accounts          Account[]
   listings          Listing[]
@@ -96,7 +96,7 @@ model BusinessVerification {
   verificationNotes   String?
   submittedAt         DateTime @default(now())
   updatedAt           DateTime @updatedAt
-
+  allowedCategories   String[] @default([])
   user                User     @relation("UserToBusinessVerification", fields: [userId], references: [id], onDelete: Cascade)
 }
 

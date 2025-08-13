@@ -22,16 +22,18 @@ export async function GET() {
 // POST: Create a new listing
 export async function POST(request: Request) {
   try {
-
-
     const currentUser = await getCurrentUser();
     if (!currentUser) {
-   
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
- 
-    const body = await request.json();
 
+    // Fetch user with business verification details
+    const userWithBusiness = await prisma.user.findUnique({
+      where: { id: currentUser.id },
+      include: { businessVerification: true }
+    });
+
+    const body = await request.json();
 
     const {
       title,
@@ -82,11 +84,36 @@ export async function POST(request: Request) {
       !email ||
       !address
     ) {
- 
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
       );
+    }
+
+    // Business category validation
+    if (userWithBusiness?.businessVerified && userWithBusiness?.businessVerification) {
+      const businessType = userWithBusiness.businessVerification.businessType;
+      
+      // Define allowed categories for each business type
+      const businessCategoryMapping: { [key: string]: string[] } = {
+        'real-estate': ['accommodation', 'real-estate'],
+        'automotive': ['vehicles', 'automotive-services'],
+        'hospitality': ['accommodation', 'restaurants', 'events'],
+        'food-service': ['restaurants', 'catering'],
+        'event-planning': ['events', 'entertainment'],
+        'transportation': ['vehicles', 'services'],
+        'retail': ['products', 'services'],
+        'services': ['services'],
+        // Add more mappings as needed
+      };
+
+      const allowedCategories = businessCategoryMapping[businessType?.toLowerCase() || ''] || [];
+      
+      if (businessType && !allowedCategories.includes(category.toLowerCase())) {
+        return NextResponse.json({
+          error: `Business verified users with '${businessType}' can only create listings in: ${allowedCategories.join(', ')}. Your selected category '${category}' is not allowed.`
+        }, { status: 403 });
+      }
     }
 
     const data: any = {
@@ -135,18 +162,17 @@ export async function POST(request: Request) {
       data.requiresBooking = Boolean(requiresBooking);
     if (serviceProvider !== undefined) data.serviceProvider = serviceProvider;
 
-
     const listing = await prisma.listing.create({ data });
 
     console.log("Listing created with ID:", listing.id);
 
- if (currentUser.role !== "ADMIN") {
-  await sendNotification(
-    currentUser.id,
-    `Your listing "${listing.title}" has been submitted for admin review.`,
-    "SYSTEM"
-  );
-}
+    if (currentUser.role !== "ADMIN") {
+      await sendNotification(
+        currentUser.id,
+        `Your listing "${listing.title}" has been submitted for admin review.`,
+        "SYSTEM"
+      );
+    }
 
     console.log("Notification sent to listing owner");
 

@@ -3,7 +3,7 @@ import axios from "axios";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { FieldValues, SubmitHandler } from "react-hook-form";
 import { categories } from "../navbar/Categories";
 import CategoryInput from "../inputs/CategoryInput"; 
@@ -11,8 +11,23 @@ import Input from "../inputs/Input";
 import Modal from "./Modal";
 import useRentModal from "@/app/hooks/useRental";
 import ImageUpload from "../inputs/ImageUpload";
+import { useSession } from "next-auth/react";
 
 const baseSteps = ['CATEGORY', 'IMAGES', 'DESCRIPTION', 'PRICE', 'CONTACT'];
+
+// Business category mapping - same as in your API
+const businessCategoryMapping: { [key: string]: string[] } = {
+  'real-estate': ['Apartments', 'Real Estate'],
+  'automotive': ['Cars', 'Automotive Services'],
+  'hospitality': ['Apartments', 'Restaurants', 'Event Centers'],
+  'food-service': ['Restaurants', 'Catering'],
+  'event-planning': ['Event Centers', 'Entertainment'],
+  'transportation': ['Cars', 'Services'],
+  'retail': ['Products', 'Services'],
+  'services': ['Services', 'Appointments'],
+  // Add more mappings as needed
+};
+
 const categorySpecificFields = {
   Apartments: {
     extraFields: {
@@ -116,8 +131,12 @@ const ProgressStepper = ({ steps, currentStep }) => {
 const RentModal = () => {
   const router = useRouter();
   const rentModal = useRentModal();
+  const { data: session } = useSession();
   const [step, setStep] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [userBusinessInfo, setUserBusinessInfo] = useState(null);
+  const [filteredCategories, setFilteredCategories] = useState(categories);
+
   const {
     register,
     handleSubmit,
@@ -144,10 +163,56 @@ const RentModal = () => {
       serviceType: '', availableDates: '', duration: '', requiresBooking: false, serviceProvider: ''
     }
   });
+
   const category = watch('category');
   const imageSrc = watch('imageSrc');
   const extraStep = category && categorySpecificFields[category] ? `${category.toUpperCase()}_DETAILS` : null;
   const steps = extraStep ? [...baseSteps, extraStep] : baseSteps;
+
+  // Fetch user business information when modal opens
+  useEffect(() => {
+    if (rentModal.isOpen && session?.user) {
+      fetchUserBusinessInfo();
+    }
+  }, [rentModal.isOpen, session]);
+
+  const fetchUserBusinessInfo = async () => {
+    try {
+      const response = await axios.get('/api/user/business-info');
+      const userData = response.data;
+      setUserBusinessInfo(userData);
+
+      // Filter categories based on business verification
+      if (userData.businessVerified && userData.businessVerification?.businessType) {
+        const businessType = userData.businessVerification.businessType.toLowerCase();
+        const allowedCategories = businessCategoryMapping[businessType] || [];
+        
+        const filtered = categories.filter(cat => 
+          allowedCategories.includes(cat.label) || 
+          allowedCategories.some(allowed => 
+            allowed.toLowerCase() === cat.label.toLowerCase()
+          )
+        );
+        
+        setFilteredCategories(filtered);
+        
+        // Show info message about restricted categories
+        if (filtered.length < categories.length && filtered.length > 0) {
+          toast.success(`Showing categories available for your ${userData.businessVerification.businessType} business`);
+        } else if (filtered.length === 0) {
+          toast.error(`No categories available for your business type: ${userData.businessVerification.businessType}`);
+        }
+      } else {
+        // Non-business verified users see all categories
+        setFilteredCategories(categories);
+      }
+    } catch (error) {
+      console.error('Error fetching user business info:', error);
+      // If error, show all categories as fallback
+      setFilteredCategories(categories);
+    }
+  };
+
   const setCustomValue = (id, value) => {
     setValue(id, value, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
   };
@@ -191,7 +256,10 @@ const RentModal = () => {
         setStep(0);
         rentModal.onClose();
       })
-      .catch(() => toast.error('Something went wrong'))
+      .catch((error) => {
+        const errorMessage = error.response?.data?.error || 'Something went wrong';
+        toast.error(errorMessage);
+      })
       .finally(() => setIsLoading(false));
   };
   const actionLabel = useMemo(() => step === steps.length - 1 ? 'Create Listing' : 'Continue', [step, steps.length]);
@@ -199,8 +267,11 @@ const RentModal = () => {
   const handleClose = () => {
     reset();
     setStep(0);
+    setFilteredCategories(categories); // Reset to all categories
+    setUserBusinessInfo(null);
     rentModal.onClose();
   };
+
   let bodyContent = null;
   
   if (steps[step] === 'CATEGORY') {
@@ -216,27 +287,55 @@ const RentModal = () => {
             What are you listing?
           </h2>
           <p className="text-gray-500 text-lg max-w-md mx-auto leading-relaxed">
-            Choose the category that best describes your listing to get started
+            {userBusinessInfo?.businessVerified 
+              ? `Choose from categories available for your ${userBusinessInfo.businessVerification?.businessType} business`
+              : 'Choose the category that best describes your listing to get started'
+            }
           </p>
+          
+          {/* Business verification status indicator */}
+          {userBusinessInfo?.businessVerified && (
+            <div className="inline-flex items-center px-3 py-1 rounded-full bg-green-50 border border-green-200">
+              <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+              <span className="text-green-700 font-medium text-sm">Business Verified</span>
+            </div>
+          )}
         </div>
         
         <ProgressStepper steps={steps} currentStep={step} />
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
-          {categories.map((item) => (
-            <div
-              key={item.label}
-              className="transform transition-all duration-200 hover:scale-105 hover:-translate-y-1"
-            >
-              <CategoryInput
-                icon={item.icon}
-                label={item.label}
-                selected={category === item.label}
-                onClick={(value) => setCustomValue('category', value)}
-              />
+        {filteredCategories.length === 0 ? (
+          <div className="text-center space-y-4 p-8">
+            <div className="mx-auto w-16 h-16 bg-red-100 rounded-2xl flex items-center justify-center">
+              <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.664-.833-2.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
             </div>
-          ))}
-        </div>
+            <h3 className="text-lg font-semibold text-gray-900">No Categories Available</h3>
+            <p className="text-gray-500">
+              No listing categories are available for your business type. 
+              Please contact support for assistance.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
+            {filteredCategories.map((item) => (
+              <div
+                key={item.label}
+                className="transform transition-all duration-200 hover:scale-105 hover:-translate-y-1"
+              >
+                <CategoryInput
+                  icon={item.icon}
+                  label={item.label}
+                  selected={category === item.label}
+                  onClick={(value) => setCustomValue('category', value)}
+                />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   } else if (steps[step] === 'IMAGES') {
