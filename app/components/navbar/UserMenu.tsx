@@ -11,8 +11,21 @@ import useLoginModal from "@/app/hooks/useLoginModal";
 import useRentModal from "@/app/hooks/useRental";
 import { signOut, useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FiMail, FiHome, FiHeart, FiCalendar, FiList, FiCheck, FiBell, FiLogOut, FiUser, FiPlus } from "react-icons/fi";
+import { 
+  FiMail, 
+  FiHome, 
+  FiHeart, 
+  FiCalendar, 
+  FiList, 
+  FiCheck, 
+  FiBell, 
+  FiLogOut, 
+  FiUser, 
+  FiPlus, 
+  FiBarChart 
+} from "react-icons/fi";
 import axios from "axios";
+
 interface UserMenuProps {
   currentUser?: User | null;
 }
@@ -29,19 +42,20 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuItemsRef = useRef<(HTMLDivElement | null)[]>([]);
   const { data: session, update } = useSession(); 
-const [unreadCount, setUnreadCount] = useState(0);
-useEffect(() => {
-  if (!currentUser) return;
-  axios.get('/api/messages/inbox')
-    .then((res) => {
-      const unread = res.data.filter((c: any) => c.unread).length;
-      setUnreadCount(unread);
-    })
-    .catch((err) => {
-      console.error("Inbox load failed", err);
-      setUnreadCount(0);
-    });
-}, [currentUser]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    axios.get('/api/messages/inbox')
+      .then((res) => {
+        const unread = res.data.filter((c: any) => c.unread).length;
+        setUnreadCount(unread);
+      })
+      .catch((err) => {
+        console.error("Inbox load failed", err);
+        setUnreadCount(0);
+      });
+  }, [currentUser]);
 
   const toggleOpen = useCallback(() => {
     setIsOpen((value) => !value);
@@ -135,16 +149,29 @@ useEffect(() => {
     }
   };
 
-const isVerifiedProvider =
-  currentUser?.role === "PROVIDER" &&
-  currentUser?.isFaceVerified &&
-  currentUser?.businessVerified
+  const isVerifiedProvider =
+    currentUser?.role === "PROVIDER" &&
+    currentUser?.isFaceVerified &&
+    currentUser?.businessVerified;
 
-const adminMenuItems = currentUser?.isAdmin || currentUser?.role === 'admin'
-  ? [
-      { onClick: () => router.push("/admin"), label: "Admin Dashboard", icon: <FiBarChart className="w-4 h-4" /> },
-    ]
-  : [];
+  // Check if user is admin - using the correct role from Prisma schema
+  const isAdmin = currentUser?.role === 'ADMIN';
+
+  // Debug logging (remove after testing)
+  console.log('Current user role:', currentUser?.role);
+  console.log('Is admin?', isAdmin);
+
+  const adminMenuItems = isAdmin
+    ? [
+        { 
+          onClick: () => router.push("/admin"), 
+          label: "Admin Dashboard", 
+          icon: <FiBarChart className="w-4 h-4" />,
+          className: "text-blue-600 hover:bg-blue-50 border-t border-gray-100"
+        },
+      ]
+    : [];
+
   const menuItems = currentUser
     ? [
         { onClick: () => router.push("/"), label: "Home", icon: <FiHome className="w-4 h-4" /> },
@@ -157,31 +184,28 @@ const adminMenuItems = currentUser?.isAdmin || currentUser?.role === 'admin'
             ]
           : []),
         {
-       
-  onClick: () => router.push("/chat/inbox"),
-  label: (
-    <div className="flex justify-between items-center w-full">
-      <span className="flex items-center gap-2">
-        <FiMail className="w-4 h-4" />
-        Inbox
-      </span>
-      {unreadCount > 0 && (
-        <span className="ml-2 text-xs font-semibold text-white bg-red-500 rounded-full w-5 h-5 flex items-center justify-center">
-          {unreadCount > 99 ? "99+" : unreadCount}
-
-        </span>
-      )}
-    </div>
-  ),
-},
-
+          onClick: () => router.push("/chat/inbox"),
+          label: (
+            <div className="flex justify-between items-center w-full">
+              <span className="flex items-center gap-2">
+                <FiMail className="w-4 h-4" />
+                Inbox
+              </span>
+              {unreadCount > 0 && (
+                <span className="ml-2 text-xs font-semibold text-white bg-red-500 rounded-full w-5 h-5 flex items-center justify-center">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
+            </div>
+          ),
+        },
         { onClick: () => router.push("/notifications"), label: "Notifications", icon: <FiBell className="w-4 h-4" /> },
         ...(isVerifiedProvider
           ? [{ onClick: onRent, label: "Get Listed", icon: <FiPlus className="w-4 h-4" /> }]
           : []),
-
+        // Include admin menu items here
+        ...adminMenuItems,
         {
-
           onClick: handleSignOut,
           label: "Logout",
           icon: <FiLogOut className="w-4 h-4" />,
@@ -286,12 +310,20 @@ const adminMenuItems = currentUser?.isAdmin || currentUser?.role === 'admin'
                       <p className="text-xs text-gray-600 truncate">
                         {currentUser.email}
                       </p>
-                      {isVerifiedProvider && (
-                        <div className="inline-flex items-center gap-1 mt-1">
-                          <div className="w-2 h-2 bg-green-500 rounded-full" />
-                          <span className="text-xs text-green-600 font-medium">Verified Provider</span>
-                        </div>
-                      )}
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {isVerifiedProvider && (
+                          <div className="inline-flex items-center gap-1">
+                            <div className="w-2 h-2 bg-green-500 rounded-full" />
+                            <span className="text-xs text-green-600 font-medium">Verified Provider</span>
+                          </div>
+                        )}
+                        {isAdmin && (
+                          <div className="inline-flex items-center gap-1">
+                            <div className="w-2 h-2 bg-blue-500 rounded-full" />
+                            <span className="text-xs text-blue-600 font-medium">Admin</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -316,14 +348,18 @@ const adminMenuItems = currentUser?.isAdmin || currentUser?.role === 'admin'
                         <div className="flex items-center gap-3 py-1">
                           <div className={`transition-colors duration-200 ${
                             item.label === "Logout" 
-                              ? "text-red-500 group-hover:text-red-600" 
+                              ? "text-red-500 group-hover:text-red-600"
+                              : item.label === "Admin Dashboard"
+                              ? "text-blue-500 group-hover:text-blue-600" 
                               : "text-gray-500 group-hover:text-blue-600"
                           }`}>
                             {item.icon}
                           </div>
                           <span className={`font-medium ${
                             item.label === "Logout" 
-                              ? "text-red-600" 
+                              ? "text-red-600"
+                              : item.label === "Admin Dashboard"
+                              ? "text-blue-600"
                               : "text-gray-700 group-hover:text-gray-900"
                           }`}>
                             {item.label === "Logout" && isSigningOut
@@ -337,9 +373,11 @@ const adminMenuItems = currentUser?.isAdmin || currentUser?.role === 'admin'
                           )}
                         </div>
                       }
-                      className={`rounded-xl transition-all duration-200 hover:bg-gray-50 ${
+                      className={`rounded-xl transition-all duration-200 ${
                         item.label === "Logout" 
-                          ? "hover:bg-red-50 border-t border-gray-100 mt-2" 
+                          ? "hover:bg-red-50 border-t border-gray-100 mt-2"
+                          : item.label === "Admin Dashboard"
+                          ? "hover:bg-blue-50 border-t border-gray-100"
                           : "hover:bg-blue-50"
                       }`}
                       role="menuitem"
