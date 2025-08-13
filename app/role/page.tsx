@@ -114,7 +114,7 @@ const RoleSelector = () => {
       label: "Customer",
       icon: "🛍️",
       desc: "Looking for services and solutions",
-      features: ["Browse services", "Book appointments", "Rate providers"],
+      features: ["Browse services", "Book appointments", "Rate sellers"],
       style: {
         gradient: "from-blue-50 to-indigo-50",
         border: "border-blue-200",
@@ -124,7 +124,7 @@ const RoleSelector = () => {
     },
     {
       value: "PROVIDER",
-      label: "Service Provider",
+      label: "Service Seller",
       icon: "⚡",
       desc: "Offering professional services",
       features: ["List services", "Manage bookings", "Earn income"],

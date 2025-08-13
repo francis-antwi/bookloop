@@ -167,7 +167,7 @@ const PropertiesClient: React.FC<PropertiesClientProps> = ({ listings }) => {
         availableDates: { type: 'text', placeholder: 'Available dates (e.g., Mon-Fri, Weekends)', label: 'Available Dates' },
         duration: { type: 'number', placeholder: 'Duration in minutes', label: 'Duration (minutes)' },
         requiresBooking: { type: 'checkbox', placeholder: 'Requires booking?', label: 'Requires Booking' },
-        serviceProvider: { type: 'text', placeholder: 'Service provider name', label: 'Service Provider' },
+        serviceSeller: { type: 'text', placeholder: 'Seller name', label: 'Seller' },
     };
 
     const onInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {

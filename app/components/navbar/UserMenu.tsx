@@ -140,7 +140,11 @@ const isVerifiedProvider =
   currentUser?.isFaceVerified &&
   currentUser?.businessVerified
 
-
+const adminMenuItems = currentUser?.isAdmin || currentUser?.role === 'admin'
+  ? [
+      { onClick: () => router.push("/admin"), label: "Admin Dashboard", icon: <FiBarChart className="w-4 h-4" /> },
+    ]
+  : [];
   const menuItems = currentUser
     ? [
         { onClick: () => router.push("/"), label: "Home", icon: <FiHome className="w-4 h-4" /> },
@@ -175,7 +179,9 @@ const isVerifiedProvider =
         ...(isVerifiedProvider
           ? [{ onClick: onRent, label: "Get Listed", icon: <FiPlus className="w-4 h-4" /> }]
           : []),
+
         {
+
           onClick: handleSignOut,
           label: "Logout",
           icon: <FiLogOut className="w-4 h-4" />,
