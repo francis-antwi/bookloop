@@ -46,7 +46,8 @@ export async function GET(request: Request) {
         idImage: true,
         verified: true,
         hasSelectedRole: true,
-        requiresApproval: true, // ✅ Include this
+        requiresApproval: true,
+        category: true  // ✅ Include this
       },
     });
 

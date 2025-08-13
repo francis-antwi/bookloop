@@ -61,7 +61,9 @@ export default async function getCurrentUser(): Promise<SanitizedUser | null> {
         role: true,
         isOtpVerified: true,
         isFaceVerified: true,
-        businessVerified: true, // ✅ FIXED: no type annotation
+        businessVerified: true, 
+        category: true 
+        // ✅ FIXED: no type annotation
       },
     });
 
