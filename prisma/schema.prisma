@@ -64,7 +64,7 @@ model User {
   image             String?
   resetToken        String?
   resetTokenExpiry  DateTime?
-   allowedCategories String[] 
+  category   ServiceCategory
   favouriteIds      String[]   @default([])
   accounts          Account[]
   listings          Listing[]
@@ -79,6 +79,17 @@ model User {
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 }
+enum ServiceCategory {
+  APARTMENTS
+  CARS
+  EVENT_CENTERS
+  HOTEL_ROOMS
+  TOUR_SERVICES
+  EVENT_TICKETS
+  RESTAURANTS
+  APPOINTMENTS
+}
+
 
 model BusinessVerification {
   id                  String   @id @default(uuid())
@@ -96,7 +107,7 @@ model BusinessVerification {
   verificationNotes   String?
   submittedAt         DateTime @default(now())
   updatedAt           DateTime @updatedAt
-  allowedCategories   String[] @default([])
+  allowedCategories   ServiceCategory[]
   user                User     @relation("UserToBusinessVerification", fields: [userId], references: [id], onDelete: Cascade)
 }
 

@@ -15,17 +15,16 @@ import { useSession } from "next-auth/react";
 
 const baseSteps = ['CATEGORY', 'IMAGES', 'DESCRIPTION', 'PRICE', 'CONTACT'];
 
-// Business category mapping - same as in your API
-const businessCategoryMapping: { [key: string]: string[] } = {
-  'real-estate': ['Apartments', 'Real Estate'],
-  'automotive': ['Cars', 'Automotive Services'],
-  'hospitality': ['Apartments', 'Restaurants', 'Event Centers'],
-  'food-service': ['Restaurants', 'Catering'],
-  'event-planning': ['Event Centers', 'Entertainment'],
-  'transportation': ['Cars', 'Services'],
-  'retail': ['Products', 'Services'],
-  'services': ['Services', 'Appointments'],
-  // Add more mappings as needed
+// Map ServiceCategory enum to category labels
+const serviceCategoryToLabel = {
+  APARTMENTS: 'Apartments',
+  CARS: 'Cars',
+  EVENT_CENTERS: 'Event Centers',
+  HOTEL_ROOMS: 'Hotel Rooms',
+  TOUR_SERVICES: 'Tour Services',
+  EVENT_TICKETS: 'Event Tickets',
+  RESTAURANTS: 'Restaurants',
+  APPOINTMENTS: 'Appointments'
 };
 
 const categorySpecificFields = {
@@ -70,6 +69,30 @@ const categorySpecificFields = {
       duration: { label: 'Appointment Duration (mins)', type: 'number', required: true },
       requiresBooking: { label: 'Requires Prior Booking', type: 'checkbox', required: false },
       serviceProvider: { label: 'Service Provider Name', type: 'text', required: false },
+    }
+  },
+  'Hotel Rooms': {
+    extraFields: {
+      bedrooms: { label: 'Bedrooms', type: 'number', required: true },
+      bathrooms: { label: 'Bathrooms', type: 'number', required: true },
+      roomType: { label: 'Room Type', type: 'text', required: true },
+      amenities: { label: 'Amenities', type: 'text', required: false },
+    }
+  },
+  'Tour Services': {
+    extraFields: {
+      duration: { label: 'Tour Duration (hours)', type: 'number', required: true },
+      groupSize: { label: 'Maximum Group Size', type: 'number', required: true },
+      languages: { label: 'Available Languages', type: 'text', required: false },
+      includes: { label: 'What\'s Included', type: 'text', required: false },
+    }
+  },
+  'Event Tickets': {
+    extraFields: {
+      eventDate: { label: 'Event Date', type: 'date', required: true },
+      venue: { label: 'Venue', type: 'text', required: true },
+      ticketType: { label: 'Ticket Type', type: 'text', required: false },
+      seatInfo: { label: 'Seat Information', type: 'text', required: false },
     }
   }
 };
@@ -160,7 +183,9 @@ const RentModal = () => {
       make: '', model: '', year: '', seats: '', fuelType: '',
       capacity: '', rooms: '', hasStage: false, parkingAvailable: false,
       cuisineType: '', seatingCapacity: '', openingHours: '', deliveryAvailable: false, menuHighlights: '',
-      serviceType: '', availableDates: '', duration: '', requiresBooking: false, serviceProvider: ''
+      serviceType: '', availableDates: '', duration: '', requiresBooking: false, serviceProvider: '',
+      roomType: '', amenities: '', groupSize: '', languages: '', includes: '',
+      eventDate: '', venue: '', ticketType: '', seatInfo: ''
     }
   });
 
@@ -183,14 +208,12 @@ const RentModal = () => {
       setUserBusinessInfo(userData);
 
       // Filter categories based on business verification
-      if (userData.businessVerified && userData.businessVerification?.businessType) {
-        const businessType = userData.businessVerification.businessType.toLowerCase();
-        const allowedCategories = businessCategoryMapping[businessType] || [];
+      if (userData.businessVerified && userData.businessVerification?.allowedCategories) {
+        const allowedCategories = userData.businessVerification.allowedCategories;
         
         const filtered = categories.filter(cat => 
-          allowedCategories.includes(cat.label) || 
           allowedCategories.some(allowed => 
-            allowed.toLowerCase() === cat.label.toLowerCase()
+            serviceCategoryToLabel[allowed] === cat.label
           )
         );
         
@@ -198,9 +221,9 @@ const RentModal = () => {
         
         // Show info message about restricted categories
         if (filtered.length < categories.length && filtered.length > 0) {
-          toast.success(`Showing categories available for your ${userData.businessVerification.businessType} business`);
+          toast.success(`Showing categories available for your business`);
         } else if (filtered.length === 0) {
-          toast.error(`No categories available for your business type: ${userData.businessVerification.businessType}`);
+          toast.error(`No categories available for your business`);
         }
       } else {
         // Non-business verified users see all categories
@@ -288,7 +311,7 @@ const RentModal = () => {
           </h2>
           <p className="text-gray-500 text-lg max-w-md mx-auto leading-relaxed">
             {userBusinessInfo?.businessVerified 
-              ? `Choose from categories available for your ${userBusinessInfo.businessVerification?.businessType} business`
+              ? 'Choose from categories available for your business'
               : 'Choose the category that best describes your listing to get started'
             }
           </p>
