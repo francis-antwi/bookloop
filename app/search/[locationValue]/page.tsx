@@ -3,7 +3,8 @@ import { SafeListing } from "@/app/types";
 import { notFound } from "next/navigation";
 
 async function getListings(locationValue: string): Promise<SafeListing[]> {
-  const res = await fetch(`/api/query?address=${locationValue}`, {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+  const res = await fetch(`${baseUrl}/api/search?address=${locationValue}`, {
     cache: "no-store",
   });
 
