@@ -16,7 +16,6 @@ import useSearchModal from '../hooks/useSearchModal';
 import axios from 'axios';
 import qs from 'query-string';
 import { FaMagic } from "react-icons/fa";
-
 import {
   FaLocationDot,
   FaCheck,
@@ -118,8 +117,7 @@ const SearchModal = () => {
             libraries: ['places'],
           });
 
-          await loader.load(); // this loads Google Maps API the proper way
-    
+          await loader.load();
         }
 
         scriptsLoadedRef.current = true;
@@ -238,47 +236,42 @@ const SearchModal = () => {
       setSuccessMessage('');
       setShowSuggestions(false);
 
-try {
-  const response = await axios.get<ApiResponse>('/api/query', {
-    params: { address: data.location },
-    timeout: 10000,
-  });
+      try {
+        const response = await axios.get<ApiResponse>('/api/query', {
+          params: { address: data.location },
+          timeout: 10000,
+        });
 
-  const listings = response.data.listings;
+        const listings = response.data.listings;
 
-  if (
-    response.status === 200 &&
-    response.data.success &&
-    Array.isArray(listings) &&
-    listings.length > 0
-  ) {
-    // Store listings in global state or context if needed
-    // Redirect using the actual query (not just the first match)
-    const normalizedLocation = data.location
-      .toLowerCase()
-      .replace(/[^\w\s]/g, '')
-      .replace(/\s+/g, '-');
+        if (
+          response.status === 200 &&
+          response.data.success &&
+          Array.isArray(listings) &&
+          listings.length > 0
+        ) {
+          const normalizedLocation = data.location
+            .toLowerCase()
+            .replace(/[^\w\s]/g, '')
+            .replace(/\s+/g, '-');
 
-    router.push(`/search/${normalizedLocation}`);
-     handleClose();
-  } else {
-    setErrorMessage(`🔍 "${data.location}" not found. Try a different location or check your spelling.`);
-    
-  }
-} catch (error: any) {
-  console.error('Search error:', error);
+          router.push(`/search/${normalizedLocation}`);
+          handleClose();
+        } else {
+          setErrorMessage(`🔍 "${data.location}" not found. Try a different location or check your spelling.`);
+        }
+      } catch (error: any) {
+        console.error('Search error:', error);
 
-  if (error.response?.status === 400) {
-    const errorData = error.response.data;
-    setErrorMessage(`❌ ${errorData.details || 'Invalid input'}`);
-  } else {
-    setErrorMessage('🔍 Oops! Something went wrong.');
-  }
-} finally {
-  setIsLoading(false);
-}
-
-
+        if (error.response?.status === 400) {
+          const errorData = error.response.data;
+          setErrorMessage(`❌ ${errorData.details || 'Invalid input'}`);
+        } else {
+          setErrorMessage('🔍 Oops! Something went wrong.');
+        }
+      } finally {
+        setIsLoading(false);
+      }
     },
     [params, router, handleClose]
   );
@@ -288,7 +281,7 @@ try {
     return '🚀 Find My Adventure!';
   }, [isLoading]);
 
-  // Sparkle component - Fixed to always return JSX
+  // Sparkle component
   const Sparkles = () => (
     <div className="absolute inset-0 pointer-events-none overflow-hidden">
       {[...Array(8)].map((_, i) => (
@@ -308,7 +301,7 @@ try {
     </div>
   );
 
-  // Voice visualizer - Fixed to always return JSX
+  // Voice visualizer
   const VoiceVisualizer = () => (
     <div className="flex items-center justify-center gap-1 h-12">
       {[...Array(5)].map((_, i) => (
@@ -325,7 +318,6 @@ try {
     </div>
   );
 
-  // Ensure Modal component can handle undefined props
   if (!searchModal || typeof searchModal.isOpen !== 'boolean') {
     return null;
   }
@@ -357,6 +349,7 @@ try {
           {showSparkles && <Sparkles />}
           
           <div className={`space-y-6 transition-all duration-500 ${pulseAnimation ? 'scale-105' : ''}`}>
+            {/* Header Section */}
             <div className="text-center space-y-2">
               <h3 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                 🌎 Where to Next?
@@ -364,6 +357,7 @@ try {
               <p className="text-gray-600 animate-pulse">Find your listing location!</p>
             </div>
             
+            {/* Input Section */}
             <div className="relative group">
               <Input
                 id="location"
@@ -381,6 +375,7 @@ try {
               <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
             </div>
             
+            {/* Voice Input Button */}
             <div className="flex justify-center">
               <button
                 type="button"
@@ -399,6 +394,7 @@ try {
               </button>
             </div>
             
+            {/* Voice Visualizer */}
             {isListening && (
               <div className="flex flex-col items-center space-y-4 p-6 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border-2 border-blue-200 animate-pulse">
                 <VoiceVisualizer />
@@ -430,7 +426,7 @@ try {
             )}
           </div>
 
-          {/* Animated Messages */}
+          {/* Error/Success Messages */}
           {errorMessage && (
             <div className="bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-200 text-red-700 p-4 rounded-xl flex items-center gap-3 animate-shake">
               <FaExclamation className="text-red-500 flex-shrink-0 animate-bounce text-xl" />

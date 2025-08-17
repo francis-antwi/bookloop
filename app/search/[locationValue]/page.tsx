@@ -4,11 +4,15 @@ import { notFound } from "next/navigation";
 
 async function getListings(locationValue: string): Promise<SafeListing[]> {
   const res = await fetch(
-    `${process.env.NEXT_PUBLIC_BASE_URL}/api/query?address=${locationValue}`,
+    `${process.env.NEXTAUTH_URL ?? ""}/api/query?address=${locationValue}`,
     {
       cache: "no-store",
     }
   );
+
+  if (!res.ok) {
+    return [];
+  }
 
   const data = await res.json();
 
@@ -18,6 +22,8 @@ async function getListings(locationValue: string): Promise<SafeListing[]> {
 
   return data.listings;
 }
+
+
 
 export default async function SearchPage(props: {
   params: { locationValue: string };
