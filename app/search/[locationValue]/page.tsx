@@ -4,33 +4,26 @@ import { notFound } from "next/navigation";
 
 async function getListings(locationValue: string): Promise<SafeListing[]> {
   try {
-    const encodedLocation = encodeURIComponent(locationValue);
-    const apiUrl = `${process.env.NEXTAUTH_URL}/api/query?address=${encodedLocation}`;
-    
-    if (!process.env.NEXTAUTH_URL) {
-      console.error("NEXTAUTH_URL is not defined");
-      return [];
-    }
-
-    const res = await fetch(apiUrl, {
-      cache: "no-store",
-    });
+    const res = await fetch(
+      `${process.env.NEXTAUTH_URL}/api/query?address=${encodeURIComponent(locationValue)}`,
+      { cache: 'no-store' }
+    );
 
     if (!res.ok) {
-      console.error(`API request failed with status ${res.status}`);
+      console.error('Fetch failed with status:', res.status);
       return [];
     }
 
-    const data = await res.json();
-
-    if (!data?.success || !Array.isArray(data.listings)) {
-      console.error("Invalid API response structure");
+    const { success, listings } = await res.json();
+    
+    if (!success || !Array.isArray(listings)) {
+      console.error('Invalid response format');
       return [];
     }
 
-    return data.listings;
+    return listings;
   } catch (error) {
-    console.error("Failed to fetch listings:", error);
+    console.error('Fetch error:', error);
     return [];
   }
 }
