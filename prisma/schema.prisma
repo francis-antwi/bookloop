@@ -162,7 +162,7 @@ model Listing {
   description      String
   imageSrc         String[]
   createdAt        DateTime       @default(now())
-  category ServiceCategory?
+  category          String?
   userId           String
   price            Int
   email            String?
