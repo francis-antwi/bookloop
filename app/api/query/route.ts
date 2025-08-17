@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/app/libs/prismadb';
 
+const CACHE_TTL = 10 * 60 * 1000; // 10 minutes cache
 const locationCache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_TTL = 10 * 60 * 1000;
 
 function normalizeAddress(address: string): string {
   return address
@@ -10,16 +10,6 @@ function normalizeAddress(address: string): string {
     .trim()
     .replace(/[^\w\s,]/g, '')
     .replace(/\s+/g, ' ');
-}
-
-function extractLocationComponents(address: string) {
-  const normalized = normalizeAddress(address);
-  const parts = normalized.split(',').map(part => part.trim());
-  return {
-    full: normalized,
-    city: parts[0] || '',
-    parts: parts.filter(p => p.length > 3)
-  };
 }
 
 function getCachedResult(key: string) {
@@ -39,90 +29,94 @@ function setCachedResult(key: string, data: any) {
   locationCache.set(key, { data, timestamp: Date.now() });
 }
 
-function generateLocationValue(address: string): string {
-  return address
-    .toLowerCase()
-    .replace(/[^\w\s]/g, '')
-    .replace(/\s+/g, '-')
-    .substring(0, 50);
-}
-
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const address = searchParams.get('address');
+  const category = searchParams.get('category');
 
   if (!address || address.length < 2 || address.length > 200) {
     return NextResponse.json({
       success: false,
-      details: 'Please provide a location between 2 and 200 characters'
+      message: 'Please provide a location between 2 and 200 characters'
     }, { status: 400 });
   }
 
   try {
     const normalizedAddress = normalizeAddress(address);
-    const cacheKey = `search:${normalizedAddress}`;
+    const cacheKey = `search:${normalizedAddress}:${category || 'all'}`;
+    
     const cached = getCachedResult(cacheKey);
     if (cached) {
-      return NextResponse.json(cached, {
-        status: 200,
-        headers: { 'X-Cache': 'HIT' }
+      return NextResponse.json({
+        success: true,
+        listings: cached,
+        cached: true
       });
     }
 
-    const locationComponents = extractLocationComponents(address);
+    const whereClause: any = {
+      AND: [
+        { address: { not: null } },
+        { 
+          OR: [
+            { address: { contains: normalizedAddress, mode: 'insensitive' } },
+            { title: { contains: normalizedAddress, mode: 'insensitive' } },
+            { description: { contains: normalizedAddress, mode: 'insensitive' } }
+          ]
+        },
+        { status: 'APPROVED' } // Only show approved listings
+      ]
+    };
 
-    const orConditions = [
-      { address: { equals: normalizedAddress, mode: 'insensitive' } },
-      { address: { contains: normalizedAddress, mode: 'insensitive' } },
-      ...locationComponents.parts.map(part => ({
-        address: { contains: part, mode: 'insensitive' }
-      }))
-    ];
+    if (category) {
+      whereClause.AND.push({ category });
+    }
 
     const listings = await prisma.listing.findMany({
-      where: {
-        AND: [
-          { address: { not: null } },
-          { OR: orConditions }
-        ]
-      },
+      where: whereClause,
       select: {
         id: true,
         title: true,
+        description: true,
         address: true,
         category: true,
-        imageSrc: true,         // ✅ Required by ListingCard
-        price: true,            // ✅ Required by ListingCard
-        availableDates: true    // ✅ Optional but used in some views
+        imageSrc: true,
+        price: true,
+        availableDates: true,
+        userId: true,
+        createdAt: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            image: true,
+            verified: true
+          }
+        }
       },
       orderBy: { createdAt: 'desc' },
-      take: 10
+      take: 20
     });
 
-    const transformedListings = listings.map(listing => ({
+    const responseData = listings.map(listing => ({
       ...listing,
-      locationValue: generateLocationValue(listing.address)
+      createdAt: listing.createdAt.toISOString(),
+      availableDates: listing.availableDates ? JSON.parse(listing.availableDates) : [],
+      user: listing.user
     }));
 
-    const result = {
+    setCachedResult(cacheKey, responseData);
+
+    return NextResponse.json({
       success: true,
-      listings: transformedListings,
-      searchQuery: address,
-      normalizedQuery: normalizedAddress
-    };
-
-    setCachedResult(cacheKey, result);
-
-    return NextResponse.json(result, {
-      status: 200,
-      headers: { 'X-Cache': listings.length > 0 ? 'MISS' : 'MISS' }
+      listings: responseData
     });
 
-  } catch (error: any) {
-    console.error('Search failed:', error);
+  } catch (error) {
+    console.error('Search error:', error);
     return NextResponse.json({
       success: false,
-      details: error.message || 'An unexpected error occurred while searching'
+      message: 'Internal server error'
     }, { status: 500 });
   }
 }
