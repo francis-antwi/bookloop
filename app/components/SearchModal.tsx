@@ -30,7 +30,7 @@ import { FaMicrophone, FaCompass } from 'react-icons/fa6';
 import { FiChevronRight, FiChevronDown } from 'react-icons/fi';
 import { BiError } from 'react-icons/bi';
 
-// Add proper type definitions
+// Type definitions
 declare global {
   interface Window {
     google: any;
@@ -39,7 +39,6 @@ declare global {
   }
 }
 
-// Type definitions to match the API response
 interface ApiResponse {
   success: boolean;
   data?: {
@@ -59,14 +58,12 @@ interface ApiResponse {
 }
 
 const SearchModal = () => {
-  // Hooks and Refs
   const searchModal = useSearchModal();
   const router = useRouter();
   const params = useSearchParams();
   const autocompleteRef = useRef<any>(null);
   const scriptsLoadedRef = useRef(false);
 
-  // State Management
   const [isLoading, setIsLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [voiceLevel, setVoiceLevel] = useState(0);
@@ -76,7 +73,6 @@ const SearchModal = () => {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
-  // Form Handling
   const {
     register,
     handleSubmit,
@@ -87,7 +83,6 @@ const SearchModal = () => {
   } = useForm();
   const locationValue = watch('location');
 
-  // Effects
   useEffect(() => {
     let animationFrame: number;
     if (isListening) {
@@ -99,7 +94,7 @@ const SearchModal = () => {
     }
     return () => {
       if (animationFrame) {
-        cancelAnimationFrame(animate);
+        cancelAnimationFrame(animationFrame);
       }
     };
   }, [isListening]);
@@ -154,7 +149,6 @@ const SearchModal = () => {
     }
   }, [scriptsLoaded, setValue]);
 
-  // Event Handlers
   const handleClose = useCallback(() => {
     searchModal.onClose();
     setErrorMessage('');
@@ -262,23 +256,21 @@ const SearchModal = () => {
     [params, router, handleClose]
   );
 
-  // Memoized Values
   const actionLabel = useMemo(() => {
     if (isLoading) return 'Searching...';
-    return 'Start your Adventure';
+    return 'Start Your Adventure';
   }, [isLoading]);
 
-  // Components
   const VoiceVisualizer = () => (
-    <div className="flex items-center justify-center gap-1 h-6">
+    <div className="flex items-center justify-center gap-1.5 h-6">
       {[...Array(5)].map((_, i) => (
         <div
           key={i}
-          className="bg-accent-500 rounded-full transition-all duration-75"
+          className="bg-indigo-500 rounded-full transition-all duration-100 ease-in-out"
           style={{
-            width: '4px',
-            height: `${Math.min(24, Math.max(4, voiceLevel * Math.random() * 0.8))}px`,
-            animationDelay: `${i * 100}ms`
+            width: '5px',
+            height: `${Math.min(24, Math.max(6, voiceLevel * Math.random() * 0.9))}px`,
+            animation: `pulse ${0.3 + i * 0.1}s ease-in-out infinite alternate`
           }}
         />
       ))}
@@ -295,40 +287,40 @@ const SearchModal = () => {
       onClose={handleClose}
       onSubmit={handleSubmit(onSubmit)}
       title={
-        <div className="flex items-center gap-2">
-          <FaCompass className="text-accent-500" />
-          <span className="text-gray-900 font-medium tracking-wide">
+        <div className="flex items-center gap-3">
+          <FaCompass className="text-indigo-600 text-xl" />
+          <span className="text-gray-900 text-lg font-semibold tracking-tight">
             Find Your Destination
           </span>
         </div>
       }
       actionLabel={
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5 font-medium">
           {isLoading ? (
-            <div className="animate-spin">
+            <div className="animate-spin text-indigo-600">
               <FaSearch />
             </div>
           ) : (
-            <FaCompass className="text-lg" />
+            <FaCompass className="text-indigo-600 text-lg" />
           )}
-          <span>{actionLabel}</span>
+          <span className="text-white">{actionLabel}</span>
           {!isLoading && (
-            <FiChevronRight className="transition-transform duration-300 transform group-hover:translate-x-1" />
+            <FiChevronRight className="text-white transition-transform duration-300 group-hover:translate-x-1.5" />
           )}
         </div>
       }
       disabled={isLoading}
       body={
-        <div className="flex flex-col gap-6 font-sans">
+        <div className="flex flex-col gap-6 p-2 font-sans">
           <div className="space-y-2 text-center">
-            <h3 className="text-2xl font-bold text-gray-900">
+            <h3 className="text-2xl font-bold text-gray-900 tracking-tight">
               Where will your journey take you?
             </h3>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500 leading-relaxed">
               Search for cities, towns, or neighborhoods to find your next stay.
             </p>
           </div>
-          
+
           <div className="relative">
             <Input
               id="location"
@@ -337,68 +329,67 @@ const SearchModal = () => {
               register={register}
               errors={errors}
               required
+              className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl py-3 px-4"
             />
             {locationValue && (
-              <div className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400">
-                <FaLocationDot />
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 text-indigo-500">
+                <FaLocationDot className="text-lg" />
               </div>
             )}
           </div>
-          
+
           <div className="flex justify-center">
             <button
               type="button"
               onClick={handleVoiceInput}
               disabled={isListening}
               className={`
-                group flex items-center gap-2 px-4 py-2 rounded-lg 
-                transition-all duration-300 transform hover:scale-105
-                shadow-sm hover:shadow-md
+                group flex items-center gap-2.5 px-5 py-2.5 rounded-xl
+                transition-all duration-300 hover:scale-105
+                shadow-sm hover:shadow-lg
                 text-sm font-medium
-                ${
-                  isListening 
-                    ? 'bg-red-600 text-white' 
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                ${isListening
+                  ? 'bg-red-500 text-white'
+                  : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
                 }
               `}
             >
               <FaMicrophone className={isListening ? 'animate-pulse' : ''} />
-              <span>
-                {isListening ? 'Listening...' : 'Voice Search'}
-              </span>
+              <span>{isListening ? 'Listening...' : 'Voice Search'}</span>
             </button>
           </div>
-          
+
           {isListening && (
-            <div className="flex flex-col items-center space-y-2 p-4 bg-gray-100 rounded-lg">
+            <div className="flex flex-col items-center space-y-3 p-4 bg-gray-50 rounded-xl shadow-sm">
               <VoiceVisualizer />
-              <p className="text-gray-600 text-sm">
+              <p className="text-gray-600 text-sm font-medium">
                 Listening for your location...
               </p>
             </div>
           )}
 
           {showSuggestions && suggestions.length > 0 && (
-            <div className="bg-gray-100 rounded-lg p-4">
+            <div className="bg-white rounded-xl p-4 shadow-md border border-gray-100">
               <div className="flex items-center gap-2 mb-3">
-                <FiChevronDown className="text-accent-500" />
-                <h4 className="font-semibold text-gray-700">
+                <FiChevronDown className="text-indigo-600 text-lg" />
+                <h4 className="font-semibold text-gray-800 text-base">
                   Popular Searches
                 </h4>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-3">
                 {suggestions.map((suggestion, index) => (
                   <button
                     key={index}
                     onClick={() => handleSuggestionClick(suggestion)}
                     className="
-                      bg-white border border-gray-200 
-                      hover:bg-gray-50 rounded-md p-2 text-left 
-                      transition-all duration-200 transform hover:scale-105 
-                      text-sm
+                      bg-gray-50 border border-gray-200
+                      hover:bg-indigo-50 hover:border-indigo-300
+                      rounded-lg p-2.5 text-left
+                      transition-all duration-200 hover:scale-102
+                      text-sm font-medium text-gray-700
                     "
                   >
-                    <span className="text-gray-600">{suggestion}</span>
+                    {suggestion}
                   </button>
                 ))}
               </div>
@@ -406,20 +397,28 @@ const SearchModal = () => {
           )}
 
           {errorMessage && (
-            <div className="bg-red-50 text-red-700 p-3 rounded-lg flex items-center gap-3 animate-fade-in">
-              <BiError className="text-red-500 flex-shrink-0 text-xl" />
-              <span className="font-medium text-sm">{errorMessage}</span>
+            <div className="bg-red-50 text-red-700 p-4 rounded-xl flex items-center gap-3 shadow-sm animate-in fade-in duration-300">
+              <BiError className="text-red-600 text-xl flex-shrink-0" />
+              <span className="font-medium text-sm leading-relaxed">{errorMessage}</span>
             </div>
           )}
-          
+
           {successMessage && (
-            <div className="bg-green-50 text-green-700 p-3 rounded-lg flex items-center gap-3 animate-fade-in">
-              <FaCheck className="text-green-500 flex-shrink-0 text-xl" />
-              <span className="font-medium text-sm">{successMessage}</span>
+            <div className="bg-green-50 text-green-700 p-4 rounded-xl flex items-center gap-3 shadow-sm animate-in fade-in duration-300">
+              <FaCheck className="text-green-600 text-xl flex-shrink-0" />
+              <span className="font-medium text-sm leading-relaxed">{successMessage}</span>
             </div>
           )}
         </div>
       }
+      className="max-w-lg mx-auto rounded-2xl shadow-xl bg-white"
+      actionButtonClassName="
+        bg-indigo-600 hover:bg-indigo-700
+        text-white font-medium
+        rounded-xl px-6 py-3
+        transition-all duration-300
+        group hover:shadow-lg
+      "
     />
   );
 };
