@@ -3,14 +3,15 @@ import prisma from '@/app/libs/prismadb';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const locationValue = searchParams.get('locationValue'); // 👈 fix here
+  const locationValue = searchParams.get('locationValue');
   const category = searchParams.get('category');
 
-  if (!locationValue || typeof locationValue !== 'string' || locationValue.length < 2 || locationValue.length > 200) {
+  // ✅ Softer validation: allow empty searches, just return no listings
+  if (!locationValue || typeof locationValue !== 'string') {
     return NextResponse.json({
-      success: false,
-      message: 'Please provide a valid location between 2 and 200 characters'
-    }, { status: 400 });
+      success: true,
+      listings: []
+    });
   }
 
   try {
