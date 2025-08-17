@@ -1,0 +1,267 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CUSTOMER
+  PROVIDER
+  ADMIN
+}
+
+enum ListingStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ReservationStatus {
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  PENDING
+}
+
+enum NotificationType {
+  BOOKING
+  SYSTEM
+}
+
+model User {
+  id                String     @id @default(cuid())
+  email             String     @unique
+  name              String
+  contactPhone      String?    @unique
+  hashedPassword    String?
+  role              UserRole?
+  isOtpVerified     Boolean    @default(false)
+  isFaceVerified    Boolean    @default(false)
+  verified          Boolean    @default(false)
+  trustScore        Float?
+  selfieImage       String?
+  idImage           String?
+  faceConfidence    Float?
+  status            String     @default("ACTIVE") // ACTIVE, PENDING_REVIEW, REJECTED, BANNED
+  requiresApproval  Boolean    @default(false)
+  idName            String?
+  idNumber          String?
+  personalIdNumber  String?
+  idDOB             DateTime?
+  idExpiryDate      DateTime?
+  idIssueDate       DateTime?
+  idIssuer          String?
+  idType            String?
+  nationality       String?
+  gender            String?
+  placeOfIssue      String?
+  rawText           String?
+  businessVerified  Boolean?   @default(false)
+  emailVerified     DateTime?
+  image             String?
+  resetToken        String?
+  resetTokenExpiry  DateTime?
+   category   ServiceCategory? 
+  favouriteIds      String[]   @default([])
+  accounts          Account[]
+  listings          Listing[]
+  reservations      Reservation[]
+  notifications     Notification[]
+  reviews           Review[]
+  sentMessages      Message[]  @relation("SentMessages")
+  receivedMessages  Message[]  @relation("ReceivedMessages")
+
+  businessVerification BusinessVerification? @relation("UserToBusinessVerification")
+
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+}
+enum ServiceCategory {
+  APARTMENTS
+  CARS
+  EVENT_CENTERS
+  HOTEL_ROOMS
+  TOUR_SERVICES
+  EVENT_TICKETS
+  RESTAURANTS
+  APPOINTMENTS
+}
+
+
+model BusinessVerification {
+  id                  String   @id @default(uuid())
+  userId              String   @unique
+  tinNumber           String
+  registrationNumber  String
+  tinCertificateUrl   String?
+  incorporationCertUrl String?
+  vatCertificateUrl   String?
+  ssnitCertUrl        String?
+  businessAddress     String?
+  businessName        String?
+  businessType        String?
+  verified            Boolean  @default(false)
+  verificationNotes   String?
+  submittedAt         DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  allowedCategories   ServiceCategory[]
+  user                User     @relation("UserToBusinessVerification", fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model OTPVerification {
+  id          String   @id @default(uuid())
+  phoneNumber String
+  code        String
+  verified    Boolean  @default(false)
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([phoneNumber])
+}
+
+model Account {
+  id                 String   @id @default(uuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+
+  refresh_token      String?
+  access_token       String?
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?
+  session_state      String?
+
+  selfieImage        String?
+  idImage            String?
+  faceConfidence     Float?
+  isFaceVerified     Boolean  @default(false)
+
+  idName             String?
+  idNumber           String?
+  personalIdNumber   String?
+  idIssueDate        DateTime?
+  idDOB              DateTime?
+  idExpiryDate       DateTime?
+  idIssuer           String?
+
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviews            Review[]
+
+  @@unique([provider, providerAccountId])
+}
+
+model Listing {
+  id               String         @id @default(uuid())
+  title            String
+  description      String
+  imageSrc         String[]
+  createdAt        DateTime       @default(now())
+  category         String
+  userId           String
+  price            Int
+  email            String?
+  contactPhone     String?
+  address          String?
+  status           ListingStatus  @default(PENDING)
+  suggestedPrice   Float?
+  bedrooms         Int?
+  bathrooms        Int?
+  furnished        Boolean?
+  floor            Int?
+
+  make             String?
+  model            String?
+  year             Int?
+  seats            Int?
+  fuelType         String?
+
+  capacity         Int?
+  rooms            Int?
+  hasStage         Boolean?
+  parkingAvailable Boolean?
+
+  cuisineType       String?
+  seatingCapacity   Int?
+  openingHours      String?
+  deliveryAvailable Boolean?
+  menuHighlights    String?
+
+  serviceType       String?
+  availableDates    String?
+  duration          Int?
+  requiresBooking   Boolean?
+  serviceProvider   String?
+
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reservations     Reservation[]
+  reviews          Review[]
+}
+
+model Reservation {
+  id               String             @id @default(uuid())
+  userId           String
+  listingId        String
+  startDate        DateTime
+  endDate          DateTime
+  totalPrice       Int
+  createdAt        DateTime           @default(now())
+  email            String?
+  contactPhone     String?
+  fraudRisk        Float?
+  status           ReservationStatus  @default(PENDING)
+  cancellationRisk Float?
+
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing          Listing            @relation(fields: [listingId], references: [id], onDelete: Cascade)
+}
+
+model Review {
+  id          String     @id @default(uuid())
+  userId      String
+  listingId   String
+  accountId   String?
+
+  rating      Int
+  comment     String
+  createdAt   DateTime   @default(now())
+
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing     Listing    @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  account     Account?   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, listingId])
+}
+
+model Notification {
+  id             String            @id @default(uuid())
+  userId         String?
+  message        String
+  type           NotificationType
+  read           Boolean           @default(false)
+  adminOnly      Boolean           @default(false)
+  createdAt      DateTime          @default(now())
+  email          String?
+  contactPhone   String?
+
+  user           User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Message {
+  id           String     @id @default(uuid())
+  senderId     String
+  receiverId   String
+  content      String
+  createdAt    DateTime   @default(now())
+  read         Boolean    @default(false)
+
+  sender       User       @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver     User       @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([senderId, receiverId])
+}
