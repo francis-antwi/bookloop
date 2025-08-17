@@ -43,7 +43,7 @@ export default async function SearchPage({
 }) {
   const location = decodeURIComponent(params.locationValue.replace(/-/g, " "));
   const listings = await getListings({
-    locationValue: params.locationValue,
+    locationValue: params.location,
     category: searchParams.category
   });
 
