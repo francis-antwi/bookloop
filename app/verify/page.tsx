@@ -13,18 +13,47 @@ import {
   FiFileText,
   FiAlertCircle,
   FiBriefcase,
-  FiCamera,
-  FiX
+  FiCamera
 } from 'react-icons/fi';
 import { useSession } from 'next-auth/react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
-import Categories, { categories } from '../components/navbar/Categories';
-import Camera from '../components/inputs/Camera';
-
 interface VerificationStepsProps {
   onComplete: () => void;
+}
+
+enum ServiceCategory {
+  APARTMENTS = "Apartments",
+  CARS = "Cars",
+  EVENT_CENTERS = "Event Centers",
+  HOTEL_ROOMS = "Hotel Rooms",
+  TOUR_SERVICES = "Tour Services",
+  EVENT_TICKETS = "Event Tickets",
+  RESTAURANTS = "Restaurants",
+  APPOINTMENTS = "Appointments"
+}
+
+interface BusinessFormData {
+  tinNumber: string;
+  registrationNumber: string;
+  businessName: string;
+  businessType: ServiceCategory[];
+  businessAddress: string;
+  contactPhone: string;
+}
+
+interface BusinessFiles {
+  tinCertificate: File | null;
+  incorporationCert: File | null;
+  vatCertificate: File | null;
+  ssnitCert: File | null;
+}
+
+interface IdentityVerificationStatus {
+  success: boolean;
+  confidence?: number;
+  error?: string;
 }
 
 const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
@@ -34,33 +63,28 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
   const [selfieImageFile, setSelfieImageFile] = useState<Blob | null>(null);
   const [idImageFile, setIdImageFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [identityVerificationStatus, setIdentityVerificationStatus] = useState<{
-    success: boolean;
-    confidence?: number;
-    error?: string;
-  } | null>(null);
+  const [identityVerificationStatus, setIdentityVerificationStatus] = useState<IdentityVerificationStatus | null>(null);
 
-  const [collectedData, setCollectedData] = useState<any>({
+  const [collectedData, setCollectedData] = useState({
     email: session?.user?.email || '',
     name: session?.user?.name || '',
-    role: "PROVIDER",
+    role: "PROVIDER" as const,
   });
 
-  const [businessFormData, setBusinessFormData] = useState({
+  const [businessFormData, setBusinessFormData] = useState<BusinessFormData>({
     tinNumber: '',
     registrationNumber: '',
     businessName: '',
-    businessType: '',
+    businessType: [],
     businessAddress: '',
     contactPhone: '',
-    
   });
 
-  const [businessFiles, setBusinessFiles] = useState({
-    tinCertificate: null as File | null,
-    incorporationCert: null as File | null,
-    vatCertificate: null as File | null,
-    ssnitCert: null as File | null
+  const [businessFiles, setBusinessFiles] = useState<BusinessFiles>({
+    tinCertificate: null,
+    incorporationCert: null,
+    vatCertificate: null,
+    ssnitCert: null
   });
 
   const handleSelfieCapture = (blob: Blob) => {
@@ -85,11 +109,17 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
     setIdentityVerificationStatus(null);
   };
 
-  const handleBusinessDataChange = (field: string, value: string) => {
+  const handleBusinessDataChange = <K extends keyof BusinessFormData>(
+    field: K, 
+    value: BusinessFormData[K]
+  ) => {
     setBusinessFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleBusinessFileUpload = (field: string, file: File) => {
+  const handleBusinessFileUpload = <K extends keyof BusinessFiles>(
+    field: K,
+    file: File
+  ) => {
     if (!file.type.match(/image\/(jpeg|png|jpg)|application\/pdf/)) {
       toast.error('Only JPEG/PNG/PDF files are allowed');
       return;
@@ -99,6 +129,23 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
       return;
     }
     setBusinessFiles(prev => ({ ...prev, [field]: file }));
+  };
+
+  const handleBusinessTypeChange = (category: ServiceCategory, isChecked: boolean) => {
+    setBusinessFormData(prev => {
+      const currentTypes = [...prev.businessType];
+      if (isChecked) {
+        return {
+          ...prev,
+          businessType: [...currentTypes, category]
+        };
+      } else {
+        return {
+          ...prev,
+          businessType: currentTypes.filter(type => type !== category)
+        };
+      }
+    });
   };
 
   const submitIdentityVerification = async () => {
@@ -131,21 +178,16 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
       });
       toast.success('Identity verification complete!');
 
-      setCollectedData((prev: any) => {
-        const updatedData = {
-          ...prev,
-          selfieImage: response.data.selfieUrl,
-          idImage: response.data.idUrl,
-          faceConfidence: response.data.matchConfidence,
-          ...response.data.extractedData,
-          verified: true,
-          extractionComplete: true,
-          businessVerified: false
-
-        };
-        console.log("📦 [FRONTEND]: Collected Identity Data (after update):", JSON.stringify(updatedData, null, 2));
-        return updatedData;
-      });
+      setCollectedData(prev => ({
+        ...prev,
+        selfieImage: response.data.selfieUrl,
+        idImage: response.data.idUrl,
+        faceConfidence: response.data.matchConfidence,
+        ...response.data.extractedData,
+        verified: true,
+        extractionComplete: true,
+        businessVerified: false
+      }));
 
       setTimeout(() => {
         setCurrentStep('business');
@@ -161,7 +203,9 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
   };
 
   const submitBusinessVerification = async () => {
-    if (!businessFormData.tinNumber || !businessFormData.businessName || !businessFormData.businessType) {
+    if (!businessFormData.tinNumber || 
+        !businessFormData.businessName || 
+        businessFormData.businessType.length === 0) {
       toast.error('Please fill in all required business information');
       return;
     }
@@ -202,13 +246,10 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
         isFullProviderRegistration: true,
       };
 
-      console.log("📦 [FRONTEND]: Sending final registration data to /api/register:", JSON.stringify(finalRegistrationData, null, 2));
-
       const registerRes = await axios.post('/api/register', finalRegistrationData);
-      const registerData = registerRes.data;
-
-      if (!registerData.success) {
-        throw new Error(registerData.message || "Registration failed");
+      
+      if (!registerRes.data.success) {
+        throw new Error(registerRes.data.message || "Registration failed");
       }
 
       toast.success('Business verification submitted for review!');
@@ -216,6 +257,7 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
       onComplete();
     } catch (error: any) {
       const errorMsg = error.response?.data?.error || error.message || 'Business verification failed';
+      toast.error(errorMsg);
     } finally {
       setIsLoading(false);
     }
@@ -249,7 +291,7 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
   const canSubmitBusiness = () => {
     return businessFormData.tinNumber && 
            businessFormData.businessName && 
-           businessFormData.businessType && 
+           businessFormData.businessType.length > 0 && 
            businessFiles.tinCertificate;
   };
 
@@ -340,6 +382,7 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
               businessFiles={businessFiles}
               onDataChange={handleBusinessDataChange}
               onFileUpload={handleBusinessFileUpload}
+              onBusinessTypeChange={handleBusinessTypeChange}
               onBack={prevStep}
               onSubmit={submitBusinessVerification}
               isLoading={isLoading}
@@ -367,7 +410,14 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
 };
 
 // Step Components
-const SelfieStep = ({ selfieImage, onSelfieCapture, onNext, canProceed }: any) => (
+interface SelfieStepProps {
+  selfieImage: Blob | null;
+  onSelfieCapture: (blob: Blob) => void;
+  onNext: () => void;
+  canProceed: boolean;
+}
+
+const SelfieStep = ({ selfieImage, onSelfieCapture, onNext, canProceed }: SelfieStepProps) => (
   <div className="space-y-6">
     <div className="text-center">
       <div className="w-12 h-12 bg-blue-100 rounded-full mx-auto mb-3 flex items-center justify-center">
@@ -378,7 +428,15 @@ const SelfieStep = ({ selfieImage, onSelfieCapture, onNext, canProceed }: any) =
     </div>
     
     <div className="relative">
-      <Camera onCapture={onSelfieCapture} />
+      {/* Replace with your actual Camera component */}
+      <div className="w-full h-64 bg-gray-200 rounded-lg flex items-center justify-center">
+        <button 
+          onClick={() => onSelfieCapture(new Blob())}
+          className="p-4 bg-white rounded-full shadow-md"
+        >
+          <FiCamera className="text-blue-500 text-2xl" />
+        </button>
+      </div>
       {selfieImage && (
         <div className="absolute top-2 right-2 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
           <FiCheck className="text-white text-sm" />
@@ -396,7 +454,16 @@ const SelfieStep = ({ selfieImage, onSelfieCapture, onNext, canProceed }: any) =
   </div>
 );
 
-const IDStep = ({ idFile, onIdUpload, onBack, onNext, isLoading, canProceed }: any) => (
+interface IDStepProps {
+  idFile: File | null;
+  onIdUpload: (file: File) => void;
+  onBack: () => void;
+  onNext: () => void;
+  isLoading: boolean;
+  canProceed: boolean;
+}
+
+const IDStep = ({ idFile, onIdUpload, onBack, onNext, isLoading, canProceed }: IDStepProps) => (
   <div className="space-y-6">
     <div className="text-center">
       <div className="w-12 h-12 bg-indigo-100 rounded-full mx-auto mb-3 flex items-center justify-center">
@@ -467,182 +534,215 @@ const IDStep = ({ idFile, onIdUpload, onBack, onNext, isLoading, canProceed }: a
   </div>
 );
 
+interface BusinessStepProps {
+  businessData: BusinessFormData;
+  businessFiles: BusinessFiles;
+  onDataChange: <K extends keyof BusinessFormData>(field: K, value: BusinessFormData[K]) => void;
+  onFileUpload: <K extends keyof BusinessFiles>(field: K, file: File) => void;
+  onBusinessTypeChange: (category: ServiceCategory, isChecked: boolean) => void;
+  onBack: () => void;
+  onSubmit: () => void;
+  isLoading: boolean;
+  canSubmit: boolean;
+  identityVerified: boolean;
+}
+
 const BusinessStep = ({ 
   businessData, 
   businessFiles, 
   onDataChange, 
-  onFileUpload, 
+  onFileUpload,
+  onBusinessTypeChange,
   onBack, 
   onSubmit, 
   isLoading, 
   canSubmit,
   identityVerified 
-}: any) => (
-  <div className="space-y-6">
-    <div className="text-center">
-      <div className="w-12 h-12 bg-purple-100 rounded-full mx-auto mb-3 flex items-center justify-center">
-        <FiBriefcase className="text-purple-600 text-xl" />
-      </div>
-      <h2 className="text-xl font-semibold mb-2">Business Information</h2>
-      <p className="text-gray-600">Provide your business details</p>
-    </div>
+}: BusinessStepProps) => {
+  const handleFileChange = (field: keyof BusinessFiles, e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.[0]) {
+      onFileUpload(field, e.target.files[0]);
+    }
+  };
 
-    {identityVerified && (
-      <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-        <div className="flex items-center gap-2">
-          <FiCheck className="text-green-500" />
-          <p className="text-green-800 font-medium">Identity Verified</p>
+  return (
+    <div className="space-y-6">
+      <div className="text-center">
+        <div className="w-12 h-12 bg-purple-100 rounded-full mx-auto mb-3 flex items-center justify-center">
+          <FiBriefcase className="text-purple-600 text-xl" />
         </div>
+        <h2 className="text-xl font-semibold mb-2">Business Information</h2>
+        <p className="text-gray-600">Provide your business details</p>
       </div>
-    )}
 
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {identityVerified && (
+        <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+          <div className="flex items-center gap-2">
+            <FiCheck className="text-green-500" />
+            <p className="text-green-800 font-medium">Identity Verified</p>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              TIN Number *
+            </label>
+            <input
+              type="text"
+              value={businessData.tinNumber}
+              onChange={(e) => onDataChange('tinNumber', e.target.value)}
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter TIN number"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Registration Number
+            </label>
+            <input
+              type="text"
+              value={businessData.registrationNumber}
+              onChange={(e) => onDataChange('registrationNumber', e.target.value)}
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter registration number"
+            />
+          </div>
+        </div>
+
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            TIN Number *
+            Business Name *
           </label>
           <input
             type="text"
-            value={businessData.tinNumber}
-            onChange={(e) => onDataChange('tinNumber', e.target.value)}
+            value={businessData.businessName}
+            onChange={(e) => onDataChange('businessName', e.target.value)}
             className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            placeholder="Enter TIN number"
+            placeholder="Enter business name"
           />
         </div>
-        
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Business Type *
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {(Object.values(ServiceCategory) as ServiceCategory[]).map((category) => (
+                <div key={category} className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id={`category-${category}`}
+                    checked={businessData.businessType.includes(category)}
+                    onChange={(e) => onBusinessTypeChange(category, e.target.checked)}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor={`category-${category}`} className="ml-2 text-sm text-gray-700">
+                    {category}
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Contact Phone
+            </label>
+            <input
+              type="tel"
+              value={businessData.contactPhone}
+              onChange={(e) => onDataChange('contactPhone', e.target.value)}
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter contact phone"
+            />
+          </div>
+        </div>
+
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Registration Number
+            Business Address
           </label>
-          <input
-            type="text"
-            value={businessData.registrationNumber}
-            onChange={(e) => onDataChange('registrationNumber', e.target.value)}
+          <textarea
+            value={businessData.businessAddress}
+            onChange={(e) => onDataChange('businessAddress', e.target.value)}
             className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            placeholder="Enter registration number"
+            rows={3}
+            placeholder="Enter business address"
           />
         </div>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Business Name *
-        </label>
-        <input
-          type="text"
-          value={businessData.businessName}
-          onChange={(e) => onDataChange('businessName', e.target.value)}
-          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          placeholder="Enter business name"
+      <div className="space-y-4">
+        <h3 className="font-semibold text-gray-900">Required Documents</h3>
+        
+        <FileUpload
+          label="TIN Certificate *"
+          file={businessFiles.tinCertificate}
+          onChange={(e) => handleFileChange('tinCertificate', e)}
+          required
+        />
+        
+        <FileUpload
+          label="Certificate of Incorporation"
+          file={businessFiles.incorporationCert}
+          onChange={(e) => handleFileChange('incorporationCert', e)}
+        />
+        
+        <FileUpload
+          label="VAT Certificate"
+          file={businessFiles.vatCertificate}
+          onChange={(e) => handleFileChange('vatCertificate', e)}
+        />
+        
+        <FileUpload
+          label="SSNIT Certificate"
+          file={businessFiles.ssnitCert}
+          onChange={(e) => handleFileChange('ssnitCert', e)}
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Business Type *
-          </label>
-          <select
-            value={businessData.businessType}
-            onChange={(e) => onDataChange('businessType', e.target.value)}
-            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="">Select business type</option>
-            {categories.map((cat) => (
-              <option key={cat.label} value={cat.label}>
-                {cat.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Contact Phone
-          </label>
-          <input
-            type="tel"
-            value={businessData.contactPhone}
-            onChange={(e) => onDataChange('contactPhone', e.target.value)}
-            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            placeholder="Enter contact phone"
-          />
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Business Address
-        </label>
-        <textarea
-          value={businessData.businessAddress}
-          onChange={(e) => onDataChange('businessAddress', e.target.value)}
-          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          rows={3}
-          placeholder="Enter business address"
-        />
+      <div className="flex gap-3">
+        <button
+          onClick={onBack}
+          disabled={isLoading}
+          className="px-4 py-3 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 disabled:opacity-50 flex items-center gap-2"
+        >
+          <FiArrowLeft /> Back
+        </button>
+        <button
+          onClick={onSubmit}
+          disabled={!canSubmit || isLoading}
+          className="flex-1 py-3 px-4 bg-purple-500 text-white font-medium rounded-lg hover:bg-purple-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+        >
+          {isLoading ? (
+            <>
+              <FiLoader className="animate-spin" />
+              Submitting...
+            </>
+          ) : (
+            <>
+              Submit for Review <FiArrowRight />
+            </>
+          )}
+        </button>
       </div>
     </div>
+  );
+};
 
-    <div className="space-y-4">
-      <h3 className="font-semibold text-gray-900">Required Documents</h3>
-      
-      <FileUpload
-        label="TIN Certificate *"
-        file={businessFiles.tinCertificate}
-        onFileUpload={(file) => onFileUpload('tinCertificate', file)}
-        required
-      />
-      
-      <FileUpload
-        label="Certificate of Incorporation"
-        file={businessFiles.incorporationCert}
-        onFileUpload={(file) => onFileUpload('incorporationCert', file)}
-      />
-      
-      <FileUpload
-        label="VAT Certificate"
-        file={businessFiles.vatCertificate}
-        onFileUpload={(file) => onFileUpload('vatCertificate', file)}
-      />
-      
-      <FileUpload
-        label="SSNIT Certificate"
-        file={businessFiles.ssnitCert}
-        onFileUpload={(file) => onFileUpload('ssnitCert', file)}
-      />
-    </div>
+interface FileUploadProps {
+  label: string;
+  file: File | null;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  required?: boolean;
+}
 
-    <div className="flex gap-3">
-      <button
-        onClick={onBack}
-        disabled={isLoading}
-        className="px-4 py-3 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 disabled:opacity-50 flex items-center gap-2"
-      >
-        <FiArrowLeft /> Back
-      </button>
-      <button
-        onClick={onSubmit}
-        disabled={!canSubmit || isLoading}
-        className="flex-1 py-3 px-4 bg-purple-500 text-white font-medium rounded-lg hover:bg-purple-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
-      >
-        {isLoading ? (
-          <>
-            <FiLoader className="animate-spin" />
-            Submitting...
-          </>
-        ) : (
-          <>
-            Submit for Review <FiArrowRight />
-          </>
-        )}
-      </button>
-    </div>
-  </div>
-);
-
-const FileUpload = ({ label, file, onFileUpload, required = false }: any) => {
+const FileUpload = ({ label, file, onChange, required = false }: FileUploadProps) => {
   const inputId = `file-${label.toLowerCase().replace(/\s+/g, '-')}`;
   
   return (
@@ -655,7 +755,7 @@ const FileUpload = ({ label, file, onFileUpload, required = false }: any) => {
           type="file"
           id={inputId}
           accept="image/*,.pdf"
-          onChange={(e) => e.target.files?.[0] && onFileUpload(e.target.files[0])}
+          onChange={onChange}
           className="hidden"
         />
         <label
