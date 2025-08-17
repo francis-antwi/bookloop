@@ -7,15 +7,11 @@ interface SearchParams {
 }
 
 async function getListings(params: SearchParams) {
-  const baseUrl = process.env.NEXTAUTH_URL;
-  if (!baseUrl) {
-    console.error("NEXTAUTH_URL is not configured");
-    return [];
-  }
+  const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
 
   try {
     const query = new URLSearchParams({
-      address: decodeURIComponent(params.locationValue.replace(/-/g, " ")),
+      locationValue: decodeURIComponent(params.locationValue.replace(/-/g, " ")), // 👈 fix here
       ...(params.category && { category: params.category })
     }).toString();
 
@@ -36,6 +32,7 @@ async function getListings(params: SearchParams) {
     return [];
   }
 }
+
 
 export default async function SearchPage({
   params,

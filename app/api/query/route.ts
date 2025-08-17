@@ -3,11 +3,10 @@ import prisma from '@/app/libs/prismadb';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const address = searchParams.get('address');
+  const locationValue = searchParams.get('locationValue'); // 👈 fix here
   const category = searchParams.get('category');
 
-  // Validate input
-  if (!address || typeof address !== 'string' || address.length < 2 || address.length > 200) {
+  if (!locationValue || typeof locationValue !== 'string' || locationValue.length < 2 || locationValue.length > 200) {
     return NextResponse.json({
       success: false,
       message: 'Please provide a valid location between 2 and 200 characters'
@@ -15,32 +14,28 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Simple normalization - be careful with complex regex that might fail
-    const searchQuery = address.toLowerCase().trim();
+    const searchQuery = locationValue.toLowerCase().trim();
 
-    // Build the where clause safely
     const where: any = {
       status: 'APPROVED',
       OR: [
-        { address: { contains: searchQuery, mode: 'insensitive' } },
+        { locationValue: { contains: searchQuery, mode: 'insensitive' } },
         { title: { contains: searchQuery, mode: 'insensitive' } },
         { description: { contains: searchQuery, mode: 'insensitive' } }
       ]
     };
 
-    // Add category filter if provided
     if (category && typeof category === 'string') {
       where.category = category;
     }
 
-    // Get listings with error handling
     const listings = await prisma.listing.findMany({
       where,
       select: {
         id: true,
         title: true,
         description: true,
-        address: true,
+        locationValue: true,
         category: true,
         imageSrc: true,
         price: true,
@@ -59,11 +54,9 @@ export async function GET(request: NextRequest) {
       take: 20
     });
 
-    // Transform data safely
     const safeListings = listings.map(listing => ({
       ...listing,
       createdAt: listing.createdAt.toISOString(),
-      // Handle possible null/undefined imageSrc
       imageSrc: Array.isArray(listing.imageSrc) ? listing.imageSrc : [],
       user: listing.user || null
     }));
