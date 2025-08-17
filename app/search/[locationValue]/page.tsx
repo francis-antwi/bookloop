@@ -3,16 +3,17 @@ import { SafeListing } from "@/app/types";
 import { notFound } from "next/navigation";
 
 async function getListings(locationValue: string): Promise<SafeListing[]> {
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_BASE_URL ?? ""}/api/query?address=${locationValue}`,
-    {
-      cache: "no-store",
-    }
-  );
+  const res = await fetch(`/api/query?address=${locationValue}`, {
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    return [];
+  }
 
   const data = await res.json();
 
-  if (!data.success || data.listings.length === 0) {
+  if (!data.success || !Array.isArray(data.listings) || data.listings.length === 0) {
     return [];
   }
 
