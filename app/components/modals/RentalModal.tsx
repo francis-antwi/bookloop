@@ -203,7 +203,7 @@ const RentModal = () => {
 
   const fetchUserBusinessInfo = async () => {
     try {
-      const response = await axios.get('/api/user/me');
+      const response = await axios.get('api/user/business-info');
       const userData = response.data;
       setUserBusinessInfo(userData);
 
