@@ -102,7 +102,7 @@ model BusinessVerification {
   ssnitCertUrl        String?
   businessAddress     String?
   businessName        String?
-  businessType        String?
+  businessType        ServiceCategory[]
   verified            Boolean  @default(false)
   verificationNotes   String?
   submittedAt         DateTime @default(now())
