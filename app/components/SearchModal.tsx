@@ -15,6 +15,11 @@ import { useForm } from 'react-hook-form';
 import useSearchModal from '../hooks/useSearchModal';
 import axios from 'axios';
 import qs from 'query-string';
+import { Loader } from '@googlemaps/js-api-loader';
+import Modal from './modals/Modal';
+import Input from './inputs/Input';
+
+// Icons
 import { FaMagic } from "react-icons/fa";
 import {
   FaLocationDot,
@@ -25,9 +30,6 @@ import {
   FaLightbulb
 } from 'react-icons/fa6';
 import { IoIosArrowForward } from 'react-icons/io';
-import { Loader } from '@googlemaps/js-api-loader';
-import Modal from './modals/Modal';
-import Input from './inputs/Input';
 
 // Add proper type definitions
 declare global {
@@ -57,15 +59,16 @@ interface ApiResponse {
 }
 
 const SearchModal = () => {
+  // Hooks and Refs
   const searchModal = useSearchModal();
   const router = useRouter();
   const params = useSearchParams();
   const autocompleteRef = useRef<any>(null);
   const scriptsLoadedRef = useRef(false);
 
+  // State Management
   const [isLoading, setIsLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [showMicAnim, setShowMicAnim] = useState(false);
   const [voiceLevel, setVoiceLevel] = useState(0);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -75,6 +78,7 @@ const SearchModal = () => {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
+  // Form Handling
   const {
     register,
     handleSubmit,
@@ -85,7 +89,7 @@ const SearchModal = () => {
   } = useForm();
   const locationValue = watch('location');
 
-  // Voice visualization effect
+  // Effects
   useEffect(() => {
     let animationFrame: number;
     if (isListening) {
@@ -102,7 +106,6 @@ const SearchModal = () => {
     };
   }, [isListening]);
 
-  // Load external scripts with better error handling
   useEffect(() => {
     if (scriptsLoadedRef.current) return;
 
@@ -131,9 +134,8 @@ const SearchModal = () => {
     loadScripts();
   }, []);
 
-  // Initialize Google Places Autocomplete with better error handling
   useEffect(() => {
-    if (!scriptsLoaded || !window.google || !window.google.maps || !window.google.maps.places) return;
+    if (!scriptsLoaded || !window.google?.maps?.places) return;
 
     const input = document.getElementById('location') as HTMLInputElement;
     if (input && !autocompleteRef.current) {
@@ -144,7 +146,7 @@ const SearchModal = () => {
         
         autocompleteRef.current.addListener('place_changed', () => {
           const place = autocompleteRef.current.getPlace();
-          if (place && place.formatted_address) {
+          if (place?.formatted_address) {
             setValue('location', place.formatted_address);
             setShowSparkles(true);
             setTimeout(() => setShowSparkles(false), 2000);
@@ -156,6 +158,7 @@ const SearchModal = () => {
     }
   }, [scriptsLoaded, setValue]);
 
+  // Event Handlers
   const handleClose = useCallback(() => {
     searchModal.onClose();
     setErrorMessage('');
@@ -188,10 +191,7 @@ const SearchModal = () => {
     recognition.maxAlternatives = 1;
 
     setIsListening(true);
-    setShowMicAnim(true);
     setErrorMessage('');
-
-    const micTimer = setTimeout(() => setShowMicAnim(false), 8000);
 
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript;
@@ -199,19 +199,16 @@ const SearchModal = () => {
       setShowSparkles(true);
       setTimeout(() => setShowSparkles(false), 2000);
       setIsListening(false);
-      clearTimeout(micTimer);
     };
 
     recognition.onerror = (event: any) => {
       console.error('Speech recognition error:', event.error);
       setErrorMessage('🎤 Oops! I didn\'t hear that clearly. Give it another try!');
       setIsListening(false);
-      clearTimeout(micTimer);
     };
 
     recognition.onend = () => {
       setIsListening(false);
-      clearTimeout(micTimer);
     };
 
     try {
@@ -220,7 +217,6 @@ const SearchModal = () => {
       console.error('Error starting recognition:', error);
       setErrorMessage('Voice input isn\'t working right now. Try typing instead!');
       setIsListening(false);
-      clearTimeout(micTimer);
     }
   }, [setValue]);
 
@@ -276,12 +272,13 @@ const SearchModal = () => {
     [params, router, handleClose]
   );
 
+  // Memoized Values
   const actionLabel = useMemo(() => {
     if (isLoading) return '✨ Finding Magic...';
     return '🚀 Find My Adventure!';
   }, [isLoading]);
 
-  // Sparkle component
+  // Components
   const Sparkles = () => (
     <div className="absolute inset-0 pointer-events-none overflow-hidden">
       {[...Array(8)].map((_, i) => (
@@ -301,7 +298,6 @@ const SearchModal = () => {
     </div>
   );
 
-  // Voice visualizer
   const VoiceVisualizer = () => (
     <div className="flex items-center justify-center gap-1 h-12">
       {[...Array(5)].map((_, i) => (
@@ -331,7 +327,7 @@ const SearchModal = () => {
         <div className="flex items-center gap-2 relative">
           <FaMagic className="text-purple-500 animate-spin" />
           <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent font-bold">
-            Find your desired listing
+            Find your perfect destination
           </span>
           {showSparkles && <Sparkles />}
         </div>
@@ -345,7 +341,7 @@ const SearchModal = () => {
       }
       disabled={isLoading}
       body={
-        <div className="flex flex-col gap-8 relative">
+        <div className="flex flex-col gap-6 relative">
           {showSparkles && <Sparkles />}
           
           <div className={`space-y-6 transition-all duration-500 ${pulseAnimation ? 'scale-105' : ''}`}>
@@ -354,7 +350,9 @@ const SearchModal = () => {
               <h3 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                 🌎 Where to Next?
               </h3>
-              <p className="text-gray-600 animate-pulse">Find your listing location!</p>
+              <p className="text-gray-600 dark:text-gray-300 animate-pulse">
+                Discover amazing places to stay
+              </p>
             </div>
             
             {/* Input Section */}
@@ -362,10 +360,11 @@ const SearchModal = () => {
               <Input
                 id="location"
                 label=""
-                placeholder="✈️ Type a magical place... Kumasi, Accra, Takoradi..."
+                placeholder="✈️ Enter a city or location... Kumasi, Accra, Takoradi..."
                 register={register}
                 errors={errors}
                 required
+                className="pr-10"
               />
               {locationValue && (
                 <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
@@ -381,15 +380,20 @@ const SearchModal = () => {
                 type="button"
                 onClick={handleVoiceInput}
                 disabled={isListening}
-                className={`group flex items-center gap-3 px-6 py-3 rounded-xl transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl ${
-                  isListening 
-                    ? 'bg-gradient-to-r from-red-500 to-pink-500 text-white animate-pulse scale-110' 
-                    : 'bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white'
-                }`}
+                className={`
+                  group flex items-center gap-3 px-6 py-3 rounded-xl 
+                  transition-all duration-300 transform hover:scale-105 
+                  shadow-lg hover:shadow-xl
+                  ${
+                    isListening 
+                      ? 'bg-gradient-to-r from-red-500 to-pink-500 text-white animate-pulse scale-110' 
+                      : 'bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white'
+                  }
+                `}
               >
                 <FaMicrophone className={isListening ? 'animate-bounce' : 'group-hover:animate-pulse'} />
                 <span className="font-semibold">
-                  {isListening ? 'Listening...' : 'Voice Input'}
+                  {isListening ? 'Listening...' : 'Voice Search'}
                 </span>
               </button>
             </div>
@@ -398,7 +402,9 @@ const SearchModal = () => {
             {isListening && (
               <div className="flex flex-col items-center space-y-4 p-6 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border-2 border-blue-200 animate-pulse">
                 <VoiceVisualizer />
-                <p className="text-blue-700 font-semibold animate-bounce">🎤 I'm listening for your location...</p>
+                <p className="text-blue-700 font-semibold animate-bounce">
+                  🎤 I'm listening for your location...
+                </p>
               </div>
             )}
 
@@ -407,14 +413,21 @@ const SearchModal = () => {
               <div className="bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-yellow-200 rounded-xl p-6 animate-fade-in">
                 <div className="flex items-center gap-2 mb-4">
                   <FaLightbulb className="text-yellow-500 animate-bounce" />
-                  <h4 className="font-bold text-yellow-700">💡 How about these amazing places?</h4>
+                  <h4 className="font-bold text-yellow-700">
+                    💡 Popular destinations you might like
+                  </h4>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   {suggestions.map((suggestion, index) => (
                     <button
                       key={index}
                       onClick={() => handleSuggestionClick(suggestion)}
-                      className="bg-white hover:bg-yellow-100 border border-yellow-300 hover:border-yellow-400 rounded-lg p-3 text-left transition-all duration-200 transform hover:scale-105 hover:shadow-md group"
+                      className="
+                        bg-white hover:bg-yellow-100 border border-yellow-300 
+                        hover:border-yellow-400 rounded-lg p-3 text-left 
+                        transition-all duration-200 transform hover:scale-105 
+                        hover:shadow-md group
+                      "
                     >
                       <span className="font-semibold text-gray-700 group-hover:text-yellow-700">
                         🏖️ {suggestion}
@@ -426,7 +439,7 @@ const SearchModal = () => {
             )}
           </div>
 
-          {/* Error/Success Messages */}
+          {/* Status Messages */}
           {errorMessage && (
             <div className="bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-200 text-red-700 p-4 rounded-xl flex items-center gap-3 animate-shake">
               <FaExclamation className="text-red-500 flex-shrink-0 animate-bounce text-xl" />
