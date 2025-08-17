@@ -31,17 +31,6 @@ enum NotificationType {
   SYSTEM
 }
 
-enum ServiceCategory {
-  APARTMENTS
-  CARS
-  EVENT_CENTERS
-  HOTEL_ROOMS
-  TOUR_SERVICES
-  EVENT_TICKETS
-  RESTAURANTS
-  APPOINTMENTS
-}
-
 model User {
   id                String     @id @default(cuid())
   email             String     @unique
@@ -49,15 +38,33 @@ model User {
   contactPhone      String?    @unique
   hashedPassword    String?
   role              UserRole?
+  isOtpVerified     Boolean    @default(false)
+  isFaceVerified    Boolean    @default(false)
+  verified          Boolean    @default(false)
+  trustScore        Float?
+  selfieImage       String?
+  idImage           String?
+  faceConfidence    Float?
+  status            String     @default("ACTIVE") // ACTIVE, PENDING_REVIEW, REJECTED, BANNED
+  requiresApproval  Boolean    @default(false)
+  idName            String?
+  idNumber          String?
+  personalIdNumber  String?
+  idDOB             DateTime?
+  idExpiryDate      DateTime?
+  idIssueDate       DateTime?
+  idIssuer          String?
+  idType            String?
+  nationality       String?
+  gender            String?
+  placeOfIssue      String?
+  rawText           String?
   businessVerified  Boolean?   @default(false)
   emailVerified     DateTime?
   image             String?
   resetToken        String?
   resetTokenExpiry  DateTime?
-
-  // ✅ multiple service categories allowed
-  categories        ServiceCategory[]
-
+   category   ServiceCategory? 
   favouriteIds      String[]   @default([])
   accounts          Account[]
   listings          Listing[]
@@ -72,28 +79,36 @@ model User {
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 }
+enum ServiceCategory {
+  APARTMENTS
+  CARS
+  EVENT_CENTERS
+  HOTEL_ROOMS
+  TOUR_SERVICES
+  EVENT_TICKETS
+  RESTAURANTS
+  APPOINTMENTS
+}
+
 
 model BusinessVerification {
-  id                   String           @id @default(uuid())
-  userId               String           @unique
-  tinNumber            String
-  registrationNumber   String
-  tinCertificateUrl    String?
+  id                  String   @id @default(uuid())
+  userId              String   @unique
+  tinNumber           String
+  registrationNumber  String
+  tinCertificateUrl   String?
   incorporationCertUrl String?
-  vatCertificateUrl    String?
-  ssnitCertUrl         String?
-  businessAddress      String?
-  businessName         String?
-
-  // ✅ multiple categories allowed
-  categories           ServiceCategory[]
-
-  verified             Boolean          @default(false)
-  verificationNotes    String?
-  submittedAt          DateTime         @default(now())
-  updatedAt            DateTime         @updatedAt
-
-  user                 User @relation("UserToBusinessVerification", fields: [userId], references: [id], onDelete: Cascade)
+  vatCertificateUrl   String?
+  ssnitCertUrl        String?
+  businessAddress     String?
+  businessName        String?
+  businessType        String?
+  verified            Boolean  @default(false)
+  verificationNotes   String?
+  submittedAt         DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  allowedCategories   ServiceCategory[]
+  user                User     @relation("UserToBusinessVerification", fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model OTPVerification {
@@ -147,7 +162,7 @@ model Listing {
   description      String
   imageSrc         String[]
   createdAt        DateTime       @default(now())
-  category         ServiceCategory?
+  category         String
   userId           String
   price            Int
   email            String?
