@@ -20,19 +20,17 @@ import Modal from './modals/Modal';
 import Input from './inputs/Input';
 
 // Icons
-import { 
-  FiSearch, 
-  FiMic, 
-  FiMicOff, 
-  FiMapPin, 
-  FiX, 
-  FiLoader,
-  FiTrendingUp,
-  FiAlertCircle
-} from 'react-icons/fi';
-import { HiSparkles } from 'react-icons/hi';
+import {
+  FaLocationDot,
+  FaCheck,
+  FaExclamationCircle,
+  FaSearch,
+} from 'react-icons/fa';
+import { FaMicrophone, FaCompass } from 'react-icons/fa6';
+import { FiChevronRight, FiChevronDown } from 'react-icons/fi';
+import { BiError } from 'react-icons/bi';
 
-// Type definitions
+// Add proper type definitions
 declare global {
   interface Window {
     google: any;
@@ -41,6 +39,7 @@ declare global {
   }
 }
 
+// Type definitions to match the API response
 interface ApiResponse {
   success: boolean;
   data?: {
@@ -56,6 +55,7 @@ interface ApiResponse {
   normalizedQuery?: string;
   matchType?: string;
   details?: string;
+  listings?: any[];
 }
 
 const SearchModal = () => {
@@ -65,7 +65,6 @@ const SearchModal = () => {
   const params = useSearchParams();
   const autocompleteRef = useRef<any>(null);
   const scriptsLoadedRef = useRef(false);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   // State Management
   const [isLoading, setIsLoading] = useState(false);
@@ -74,11 +73,8 @@ const SearchModal = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [scriptsLoaded, setScriptsLoaded] = useState(false);
-  const [suggestions, setSuggestions] = useState<string[]>([
-    'Kumasi', 'Accra', 'Takoradi', 'Cape Coast', 'Tamale', 'Ho'
-  ]);
-  const [showSuggestions, setShowSuggestions] = useState(true);
-  const [inputFocused, setInputFocused] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   // Form Handling
   const {
@@ -91,7 +87,7 @@ const SearchModal = () => {
   } = useForm();
   const locationValue = watch('location');
 
-  // Voice visualization effect
+  // Effects
   useEffect(() => {
     let animationFrame: number;
     if (isListening) {
@@ -108,7 +104,6 @@ const SearchModal = () => {
     };
   }, [isListening]);
 
-  // Load Google Maps scripts
   useEffect(() => {
     if (scriptsLoadedRef.current) return;
 
@@ -137,7 +132,6 @@ const SearchModal = () => {
     loadScripts();
   }, []);
 
-  // Initialize Google Places Autocomplete
   useEffect(() => {
     if (!scriptsLoaded || !window.google?.maps?.places) return;
 
@@ -152,7 +146,6 @@ const SearchModal = () => {
           const place = autocompleteRef.current.getPlace();
           if (place?.formatted_address) {
             setValue('location', place.formatted_address);
-            setShowSuggestions(false);
           }
         });
       } catch (error) {
@@ -161,42 +154,26 @@ const SearchModal = () => {
     }
   }, [scriptsLoaded, setValue]);
 
-  // Auto-focus input when modal opens
-  useEffect(() => {
-    if (searchModal.isOpen && inputRef.current) {
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 100);
-    }
-  }, [searchModal.isOpen]);
-
   // Event Handlers
   const handleClose = useCallback(() => {
     searchModal.onClose();
     setErrorMessage('');
     setSuccessMessage('');
     setIsListening(false);
-    setShowSuggestions(true);
-    setInputFocused(false);
+    setShowSuggestions(false);
+    setSuggestions([]);
     reset();
   }, [searchModal, reset]);
 
   const handleSuggestionClick = useCallback((suggestion: string) => {
     setValue('location', suggestion);
     setShowSuggestions(false);
-    inputRef.current?.focus();
-  }, [setValue]);
-
-  const clearInput = useCallback(() => {
-    setValue('location', '');
-    setShowSuggestions(true);
-    inputRef.current?.focus();
   }, [setValue]);
 
   const handleVoiceInput = useCallback(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      setErrorMessage('Voice input is not supported in your browser');
+      setErrorMessage('Your browser does not support voice input. Please try typing instead.');
       return;
     }
 
@@ -211,13 +188,12 @@ const SearchModal = () => {
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript;
       setValue('location', transcript);
-      setShowSuggestions(false);
       setIsListening(false);
     };
 
     recognition.onerror = (event: any) => {
       console.error('Speech recognition error:', event.error);
-      setErrorMessage('Could not recognize speech. Please try again.');
+      setErrorMessage('I couldn\'t hear that. Please try again.');
       setIsListening(false);
     };
 
@@ -229,21 +205,22 @@ const SearchModal = () => {
       recognition.start();
     } catch (error) {
       console.error('Error starting recognition:', error);
-      setErrorMessage('Voice input failed to start');
+      setErrorMessage('Voice input is not available right now. Please try typing instead.');
       setIsListening(false);
     }
   }, [setValue]);
 
   const onSubmit = useCallback(
     async (data: any) => {
-      if (!data.location?.trim()) {
-        setErrorMessage('Please enter a destination');
+      if (!data.location) {
+        setErrorMessage('Please enter a location to begin your search.');
         return;
       }
 
       setIsLoading(true);
       setErrorMessage('');
       setSuccessMessage('');
+      setShowSuggestions(false);
 
       try {
         const response = await axios.get<ApiResponse>('/api/query', {
@@ -267,16 +244,16 @@ const SearchModal = () => {
           router.push(`/search/${normalizedLocation}`);
           handleClose();
         } else {
-          setErrorMessage(`No results found for "${data.location}". Try a different location.`);
+          setErrorMessage(`No listings found for "${data.location}". Try a different location or check your spelling.`);
         }
       } catch (error: any) {
         console.error('Search error:', error);
 
         if (error.response?.status === 400) {
           const errorData = error.response.data;
-          setErrorMessage(errorData.details || 'Invalid search query');
+          setErrorMessage(`Error: ${errorData.details || 'Invalid input'}`);
         } else {
-          setErrorMessage('Search failed. Please try again.');
+          setErrorMessage('An unexpected error occurred. Please try again.');
         }
       } finally {
         setIsLoading(false);
@@ -285,17 +262,23 @@ const SearchModal = () => {
     [params, router, handleClose]
   );
 
-  // Voice Visualizer Component
+  // Memoized Values
+  const actionLabel = useMemo(() => {
+    if (isLoading) return 'Searching...';
+    return 'Start your Adventure';
+  }, [isLoading]);
+
+  // Components
   const VoiceVisualizer = () => (
-    <div className="flex items-center justify-center gap-1 h-8">
+    <div className="flex items-center justify-center gap-1 h-6">
       {[...Array(5)].map((_, i) => (
         <div
           key={i}
-          className="bg-blue-500 rounded-full transition-all duration-100"
+          className="bg-gold-500 rounded-full transition-all duration-75"
           style={{
-            width: '3px',
-            height: `${Math.min(32, Math.max(4, voiceLevel * Math.random() * 0.6 + 8))}px`,
-            animationDelay: `${i * 50}ms`
+            width: '4px',
+            height: `${Math.min(24, Math.max(4, voiceLevel * Math.random() * 0.8))}px`,
+            animationDelay: `${i * 100}ms`
           }}
         />
       ))}
@@ -311,123 +294,97 @@ const SearchModal = () => {
       isOpen={searchModal.isOpen}
       onClose={handleClose}
       onSubmit={handleSubmit(onSubmit)}
-      title=""
-      actionLabel=""
+      title={
+        <div className="flex items-center gap-2">
+          <FaCompass className="text-gold-500" />
+          <span className="text-gray-800 dark:text-gray-200 font-medium tracking-wide">
+            Find Your Destination
+          </span>
+        </div>
+      }
+      actionLabel={
+        <div className="flex items-center gap-2">
+          {isLoading ? (
+            <div className="animate-spin">
+              <FaSearch />
+            </div>
+          ) : (
+            <FaCompass className="text-lg" />
+          )}
+          <span>{actionLabel}</span>
+          {!isLoading && (
+            <FiChevronRight className="transition-transform duration-300 transform group-hover:translate-x-1" />
+          )}
+        </div>
+      }
       disabled={isLoading}
       body={
-        <div className="w-full max-w-lg mx-auto">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <div className="flex items-center justify-center mb-3">
-              <div className="relative">
-                <FiMapPin className="w-8 h-8 text-blue-500" />
-                <HiSparkles className="w-4 h-4 text-yellow-500 absolute -top-1 -right-1 animate-pulse" />
-              </div>
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-              Where would you like to go?
-            </h2>
-            <p className="text-gray-600 dark:text-gray-400">
-              Search for cities and destinations
+        <div className="flex flex-col gap-6 font-inter">
+          <div className="space-y-2 text-center">
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              Where will your journey take you?
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Search for cities, towns, or neighborhoods to find your next stay.
             </p>
           </div>
-
-          {/* Search Input */}
-          <div className="relative mb-6">
-            <div className={`relative transition-all duration-200 ${
-              inputFocused ? 'transform scale-105' : ''
-            }`}>
-              <div className="absolute left-4 top-1/2 transform -translate-y-1/2 z-10">
-                <FiSearch className="w-5 h-5 text-gray-400" />
+          
+          <div className="relative">
+            <Input
+              id="location"
+              label="Location"
+              placeholder="e.g., Kumasi, Accra, Takoradi..."
+              register={register}
+              errors={errors}
+              required
+            />
+            {locationValue && (
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400">
+                <FaLocationDot />
               </div>
-              
-              <input
-                ref={inputRef}
-                id="location"
-                {...register('location', { required: 'Please enter a destination' })}
-                placeholder="Enter a city or destination..."
-                className={`
-                  w-full pl-12 pr-20 py-4 text-lg
-                  border-2 rounded-xl transition-all duration-200
-                  bg-white dark:bg-gray-800
-                  text-gray-900 dark:text-white
-                  placeholder-gray-500 dark:placeholder-gray-400
-                  ${inputFocused || locationValue 
-                    ? 'border-blue-500 shadow-lg shadow-blue-500/20' 
-                    : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
-                  }
-                  ${errors.location ? 'border-red-500' : ''}
-                  focus:outline-none focus:border-blue-500 focus:shadow-lg focus:shadow-blue-500/20
-                `}
-                onFocus={() => setInputFocused(true)}
-                onBlur={() => setInputFocused(false)}
-                onChange={(e) => {
-                  setValue('location', e.target.value);
-                  setShowSuggestions(e.target.value.length === 0);
-                  setErrorMessage('');
-                }}
-              />
-
-              <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-2">
-                {locationValue && (
-                  <button
-                    type="button"
-                    onClick={clearInput}
-                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                  >
-                    <FiX className="w-4 h-4 text-gray-400" />
-                  </button>
-                )}
-                
-                <button
-                  type="button"
-                  onClick={handleVoiceInput}
-                  disabled={isListening}
-                  className={`
-                    p-2 rounded-lg transition-all duration-200
-                    ${isListening 
-                      ? 'bg-red-500 text-white animate-pulse' 
-                      : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400'
-                    }
-                  `}
-                >
-                  {isListening ? (
-                    <FiMicOff className="w-4 h-4" />
-                  ) : (
-                    <FiMic className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {errors.location && (
-              <p className="text-red-500 text-sm mt-2 flex items-center gap-2">
-                <FiAlertCircle className="w-4 h-4" />
-                {errors.location.message}
-              </p>
             )}
           </div>
-
-          {/* Voice Listening State */}
+          
+          <div className="flex justify-center">
+            <button
+              type="button"
+              onClick={handleVoiceInput}
+              disabled={isListening}
+              className={`
+                group flex items-center gap-2 px-4 py-2 rounded-lg 
+                transition-all duration-300 transform hover:scale-105
+                shadow-sm hover:shadow-md
+                text-sm font-medium
+                ${
+                  isListening 
+                    ? 'bg-red-600 text-white' 
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }
+              `}
+            >
+              <FaMicrophone className={isListening ? 'animate-pulse' : ''} />
+              <span>
+                {isListening ? 'Listening...' : 'Voice Search'}
+              </span>
+            </button>
+          </div>
+          
           {isListening && (
-            <div className="mb-6 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
-              <div className="flex flex-col items-center space-y-4">
-                <VoiceVisualizer />
-                <p className="text-blue-700 dark:text-blue-300 font-medium">
-                  Listening... Speak your destination
-                </p>
-              </div>
+            <div className="flex flex-col items-center space-y-2 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
+              <VoiceVisualizer />
+              <p className="text-gray-600 dark:text-gray-400 text-sm">
+                Listening for your location...
+              </p>
             </div>
           )}
 
-          {/* Popular Suggestions */}
-          {showSuggestions && !locationValue && (
-            <div className="mb-6">
+          {showSuggestions && suggestions.length > 0 && (
+            <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-3">
-                <FiTrendingUp className="w-4 h-4 text-gray-500" />
-                <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">
-                  Popular destinations
-                </span>
+                <FiChevronDown className="text-gold-500" />
+                <h4 className="font-semibold text-gray-700 dark:text-gray-300">
+                  Popular Searches
+                </h4>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {suggestions.map((suggestion, index) => (
@@ -435,66 +392,32 @@ const SearchModal = () => {
                     key={index}
                     onClick={() => handleSuggestionClick(suggestion)}
                     className="
-                      p-3 text-left rounded-lg border border-gray-200 dark:border-gray-600
-                      hover:border-blue-300 dark:hover:border-blue-500
-                      hover:bg-blue-50 dark:hover:bg-blue-900/20
-                      transition-all duration-200 transform hover:scale-105
-                      bg-white dark:bg-gray-800
-                      text-gray-700 dark:text-gray-300
+                      bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 
+                      hover:bg-gray-50 dark:hover:bg-gray-600 rounded-md p-2 text-left 
+                      transition-all duration-200 transform hover:scale-105 
+                      text-sm
                     "
                   >
-                    <span className="text-sm font-medium">{suggestion}</span>
+                    <span className="text-gray-600 dark:text-gray-400">{suggestion}</span>
                   </button>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Error Message */}
           {errorMessage && (
-            <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-              <div className="flex items-start gap-3">
-                <FiAlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-                <p className="text-red-700 dark:text-red-300 text-sm">{errorMessage}</p>
-              </div>
+            <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 p-3 rounded-lg flex items-center gap-3 animate-fade-in">
+              <BiError className="text-red-500 flex-shrink-0 text-xl" />
+              <span className="font-medium text-sm">{errorMessage}</span>
             </div>
           )}
-
-          {/* Success Message */}
+          
           {successMessage && (
-            <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-              <p className="text-green-700 dark:text-green-300 text-sm">{successMessage}</p>
+            <div className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 p-3 rounded-lg flex items-center gap-3 animate-fade-in">
+              <FaCheck className="text-green-500 flex-shrink-0 text-xl" />
+              <span className="font-medium text-sm">{successMessage}</span>
             </div>
           )}
-
-          {/* Search Button */}
-          <button
-            type="submit"
-            disabled={isLoading || !locationValue?.trim()}
-            onClick={handleSubmit(onSubmit)}
-            className={`
-              w-full py-4 px-6 rounded-xl font-semibold text-lg
-              transition-all duration-200 transform
-              ${isLoading || !locationValue?.trim()
-                ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
-                : 'bg-blue-500 hover:bg-blue-600 text-white hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl'
-              }
-            `}
-          >
-            <div className="flex items-center justify-center gap-2">
-              {isLoading ? (
-                <>
-                  <FiLoader className="w-5 h-5 animate-spin" />
-                  Searching...
-                </>
-              ) : (
-                <>
-                  <FiSearch className="w-5 h-5" />
-                  Search Destinations
-                </>
-              )}
-            </div>
-          </button>
         </div>
       }
     />
