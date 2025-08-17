@@ -8,33 +8,31 @@ import { sendNotification } from "../utils/notification";
 export async function GET() {
   try {
     const listings = await prisma.listing.findMany({
-      orderBy: { createdAt: "desc" },
+      orderBy: {
+        createdAt: "desc",
+      },
     });
     return NextResponse.json(listings, { status: 200 });
   } catch (error) {
     console.error("Error fetching listings:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch listings" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to fetch listings" }, { status: 500 });
   }
 }
 
 // POST: Create a new listing
 export async function POST(request: Request) {
   try {
+
+
     const currentUser = await getCurrentUser();
     if (!currentUser) {
+   
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    // Fetch user with business verification details (including allowed categories)
-    const userWithBusiness = await prisma.user.findUnique({
-      where: { id: currentUser.id },
-      include: { businessVerification: true },
-    });
-
+ 
     const body = await request.json();
+
+
     const {
       title,
       description,
@@ -74,7 +72,6 @@ export async function POST(request: Request) {
       serviceProvider,
     } = body;
 
-    // Required fields validation
     if (
       !title ||
       !description ||
@@ -85,28 +82,13 @@ export async function POST(request: Request) {
       !email ||
       !address
     ) {
+ 
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
       );
     }
 
-    // Business category validation using DB-stored allowed categories
-    if (userWithBusiness?.businessVerified && userWithBusiness?.businessVerification) {
-      const allowedCategories = userWithBusiness.businessVerification.allowedCategories || [];
-
-      if (allowedCategories.length > 0 && !allowedCategories.includes(category.toLowerCase())) {
-        return NextResponse.json(
-          {
-            error: `You can only create listings in: ${allowedCategories.join(", ")}. 
-            Your selected category '${category}' is not allowed.`,
-          },
-          { status: 403 }
-        );
-      }
-    }
-
-    // Prepare listing data
     const data: any = {
       title,
       description,
@@ -117,10 +99,10 @@ export async function POST(request: Request) {
       contactPhone,
       email,
       address,
-      status: "PENDING",
+      status: "PENDING", // Set initial status to PENDING
     };
 
-    // Add optional category-specific fields
+    // Add category-specific fields
     if (bedrooms !== undefined) data.bedrooms = parseInt(bedrooms, 10);
     if (bathrooms !== undefined) data.bathrooms = parseInt(bathrooms, 10);
     if (floor !== undefined) data.floor = parseInt(floor, 10);
@@ -135,37 +117,44 @@ export async function POST(request: Request) {
     if (capacity !== undefined) data.capacity = parseInt(capacity, 10);
     if (rooms !== undefined) data.rooms = parseInt(rooms, 10);
     if (hasStage !== undefined) data.hasStage = Boolean(hasStage);
-    if (parkingAvailable !== undefined) data.parkingAvailable = Boolean(parkingAvailable);
+    if (parkingAvailable !== undefined)
+      data.parkingAvailable = Boolean(parkingAvailable);
 
     if (cuisineType !== undefined) data.cuisineType = cuisineType;
-    if (seatingCapacity !== undefined) data.seatingCapacity = parseInt(seatingCapacity, 10);
+    if (seatingCapacity !== undefined)
+      data.seatingCapacity = parseInt(seatingCapacity, 10);
     if (openingHours !== undefined) data.openingHours = openingHours;
-    if (deliveryAvailable !== undefined) data.deliveryAvailable = Boolean(deliveryAvailable);
+    if (deliveryAvailable !== undefined)
+      data.deliveryAvailable = Boolean(deliveryAvailable);
     if (menuHighlights !== undefined) data.menuHighlights = menuHighlights;
 
     if (serviceType !== undefined) data.serviceType = serviceType;
     if (availableDates !== undefined) data.availableDates = availableDates;
     if (duration !== undefined) data.duration = parseInt(duration, 10);
-    if (requiresBooking !== undefined) data.requiresBooking = Boolean(requiresBooking);
+    if (requiresBooking !== undefined)
+      data.requiresBooking = Boolean(requiresBooking);
     if (serviceProvider !== undefined) data.serviceProvider = serviceProvider;
 
-    // Create listing
+
     const listing = await prisma.listing.create({ data });
 
-    // Notify listing owner
-    if (currentUser.role !== "ADMIN") {
-      await sendNotification(
-        currentUser.id,
-        `Your listing "${listing.title}" has been submitted for admin review.`,
-        "SYSTEM"
-      );
-    }
+    console.log("Listing created with ID:", listing.id);
 
-    // Notify admins
+ if (currentUser.role !== "ADMIN") {
+  await sendNotification(
+    currentUser.id,
+    `Your listing "${listing.title}" has been submitted for admin review.`,
+    "SYSTEM"
+  );
+}
+
+    console.log("Notification sent to listing owner");
+
     const admins = await prisma.user.findMany({
       where: { role: "ADMIN" },
       select: { id: true },
     });
+    console.log("Admin users found:", admins.length);
 
     await Promise.all(
       admins.map((admin) =>
@@ -175,6 +164,7 @@ export async function POST(request: Request) {
         )
       )
     );
+    console.log("Notifications sent to admins");
 
     return NextResponse.json(listing, { status: 201 });
   } catch (error) {
@@ -182,6 +172,9 @@ export async function POST(request: Request) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }
