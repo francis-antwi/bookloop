@@ -64,7 +64,7 @@ model User {
   image             String?
   resetToken        String?
   resetTokenExpiry  DateTime?
-   category   ServiceCategory? 
+   category         String? 
   favouriteIds      String[]   @default([])
   accounts          Account[]
   listings          Listing[]
