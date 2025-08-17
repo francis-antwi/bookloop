@@ -1,19 +1,21 @@
 // File: app/api/user/business-info/route.ts
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import prisma from '@/app/libs/prismadb';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const { userId } = auth();
+    // Get the server session
+    const session = await getServerSession(authOptions);
 
-    if (!userId) {
+    if (!session?.user?.id) {
       return new NextResponse('Unauthorized', { status: 401 });
     }
 
     // Get user with business verification info
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: session.user.id },
       include: {
         businessVerification: {
           select: {
@@ -32,10 +34,10 @@ export async function GET() {
 
     // Determine allowed categories based on verification status
     let allowedCategories: string[] = [];
-    let businessVerified = false;
+    let businessVerified = user.businessVerified || false;
 
     if (user.businessVerification) {
-      businessVerified = user.businessVerification.verified;
+      businessVerified = user.businessVerification.verified || businessVerified;
       allowedCategories = businessVerified 
         ? user.businessVerification.allowedCategories 
         : [];
