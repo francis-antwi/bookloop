@@ -1,79 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/app/libs/prismadb';
 
-const CACHE_TTL = 10 * 60 * 1000; // 10 minutes cache
-const locationCache = new Map<string, { data: any; timestamp: number }>();
-
-function normalizeAddress(address: string): string {
-  return address
-    .toLowerCase()
-    .trim()
-    .replace(/[^\w\s,]/g, '')
-    .replace(/\s+/g, ' ');
-}
-
-function getCachedResult(key: string) {
-  const cached = locationCache.get(key);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return cached.data;
-  }
-  locationCache.delete(key);
-  return null;
-}
-
-function setCachedResult(key: string, data: any) {
-  if (locationCache.size >= 100) {
-    const firstKey = locationCache.keys().next().value;
-    locationCache.delete(firstKey);
-  }
-  locationCache.set(key, { data, timestamp: Date.now() });
-}
-
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const address = searchParams.get('address');
   const category = searchParams.get('category');
 
-  if (!address || address.length < 2 || address.length > 200) {
+  // Validate input
+  if (!address || typeof address !== 'string' || address.length < 2 || address.length > 200) {
     return NextResponse.json({
       success: false,
-      message: 'Please provide a location between 2 and 200 characters'
+      message: 'Please provide a valid location between 2 and 200 characters'
     }, { status: 400 });
   }
 
   try {
-    const normalizedAddress = normalizeAddress(address);
-    const cacheKey = `search:${normalizedAddress}:${category || 'all'}`;
-    
-    const cached = getCachedResult(cacheKey);
-    if (cached) {
-      return NextResponse.json({
-        success: true,
-        listings: cached,
-        cached: true
-      });
-    }
+    // Simple normalization - be careful with complex regex that might fail
+    const searchQuery = address.toLowerCase().trim();
 
-    const whereClause: any = {
-      AND: [
-        { address: { not: null } },
-        { 
-          OR: [
-            { address: { contains: normalizedAddress, mode: 'insensitive' } },
-            { title: { contains: normalizedAddress, mode: 'insensitive' } },
-            { description: { contains: normalizedAddress, mode: 'insensitive' } }
-          ]
-        },
-        { status: 'APPROVED' } // Only show approved listings
+    // Build the where clause safely
+    const where: any = {
+      status: 'APPROVED',
+      OR: [
+        { address: { contains: searchQuery, mode: 'insensitive' } },
+        { title: { contains: searchQuery, mode: 'insensitive' } },
+        { description: { contains: searchQuery, mode: 'insensitive' } }
       ]
     };
 
-    if (category) {
-      whereClause.AND.push({ category });
+    // Add category filter if provided
+    if (category && typeof category === 'string') {
+      where.category = category;
     }
 
+    // Get listings with error handling
     const listings = await prisma.listing.findMany({
-      where: whereClause,
+      where,
       select: {
         id: true,
         title: true,
@@ -82,7 +44,6 @@ export async function GET(request: NextRequest) {
         category: true,
         imageSrc: true,
         price: true,
-        availableDates: true,
         userId: true,
         createdAt: true,
         user: {
@@ -98,25 +59,25 @@ export async function GET(request: NextRequest) {
       take: 20
     });
 
-    const responseData = listings.map(listing => ({
+    // Transform data safely
+    const safeListings = listings.map(listing => ({
       ...listing,
       createdAt: listing.createdAt.toISOString(),
-      availableDates: listing.availableDates ? JSON.parse(listing.availableDates) : [],
-      user: listing.user
+      // Handle possible null/undefined imageSrc
+      imageSrc: Array.isArray(listing.imageSrc) ? listing.imageSrc : [],
+      user: listing.user || null
     }));
-
-    setCachedResult(cacheKey, responseData);
 
     return NextResponse.json({
       success: true,
-      listings: responseData
+      listings: safeListings
     });
 
   } catch (error) {
-    console.error('Search error:', error);
+    console.error('Database query failed:', error);
     return NextResponse.json({
       success: false,
-      message: 'Internal server error'
+      message: 'Failed to search listings'
     }, { status: 500 });
   }
 }

@@ -1,5 +1,4 @@
 import ListingCard from "@/app/components/listings/ListingCard";
-import { SafeListing, SafeUser } from "@/app/types";
 import { notFound } from "next/navigation";
 
 interface SearchParams {
@@ -7,39 +6,33 @@ interface SearchParams {
   category?: string;
 }
 
-async function getListings(params: SearchParams): Promise<SafeListing[]> {
-  if (!process.env.NEXTAUTH_URL) {
-    console.error("NEXTAUTH_URL is not defined");
+async function getListings(params: SearchParams) {
+  const baseUrl = process.env.NEXTAUTH_URL;
+  if (!baseUrl) {
+    console.error("NEXTAUTH_URL is not configured");
     return [];
   }
 
   try {
-    const { locationValue, category } = params;
     const query = new URLSearchParams({
-      address: locationValue,
-      ...(category && { category })
+      address: decodeURIComponent(params.locationValue.replace(/-/g, " ")),
+      ...(params.category && { category: params.category })
     }).toString();
 
-    const res = await fetch(
-      `${process.env.NEXTAUTH_URL}/api/query?${query}`,
-      { next: { revalidate: 60 } } // Cache for 60 seconds
-    );
+    const response = await fetch(`${baseUrl}/api/query?${query}`, {
+      next: { revalidate: 60 }
+    });
 
-    if (!res.ok) {
-      console.error('Fetch failed with status:', res.status);
+    if (!response.ok) {
+      console.error(`API request failed with status ${response.status}`);
       return [];
     }
 
-    const { success, listings } = await res.json();
-    
-    if (!success || !Array.isArray(listings)) {
-      console.error('Invalid response format');
-      return [];
-    }
+    const data = await response.json();
+    return data.success ? data.listings : [];
 
-    return listings;
   } catch (error) {
-    console.error('Fetch error:', error);
+    console.error('Failed to fetch listings:', error);
     return [];
   }
 }
@@ -51,28 +44,32 @@ export default async function SearchPage({
   params: { locationValue: string };
   searchParams: { category?: string };
 }) {
-  const decodedLocation = decodeURIComponent(params.locationValue.replace(/-/g, " "));
+  const location = decodeURIComponent(params.locationValue.replace(/-/g, " "));
   const listings = await getListings({
-    locationValue: decodedLocation,
+    locationValue: params.locationValue,
     category: searchParams.category
   });
 
-  console.log('Search results:', { 
-    location: decodedLocation,
+  console.log('Search results for:', location, {
     category: searchParams.category,
-    count: listings.length 
+    found: listings.length
   });
 
   if (listings.length === 0) {
     return (
       <div className="container mx-auto px-4 py-6">
         <h1 className="text-3xl font-bold mb-6">
-          No listings found in "{decodedLocation}"
-          {searchParams.category && ` (Category: ${searchParams.category})`}
+          No listings found in "{location}"
+          {searchParams.category && ` (${searchParams.category})`}
         </h1>
-        <p className="text-gray-600">
-          Try adjusting your search filters or check back later for new listings.
-        </p>
+        <div className="text-gray-600 space-y-2">
+          <p>Try these suggestions:</p>
+          <ul className="list-disc pl-5">
+            <li>Check your spelling</li>
+            <li>Try more general terms</li>
+            <li>Search in nearby locations</li>
+          </ul>
+        </div>
       </div>
     );
   }
@@ -80,11 +77,11 @@ export default async function SearchPage({
   return (
     <div className="container mx-auto px-4 py-6">
       <h1 className="text-3xl font-bold mb-6">
-        {listings.length} listings in "{decodedLocation}"
-        {searchParams.category && ` (Category: ${searchParams.category})`}
+        {listings.length} {listings.length === 1 ? 'listing' : 'listings'} in "{location}"
+        {searchParams.category && ` (${searchParams.category})`}
       </h1>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-        {listings.map((listing) => (
+        {listings.map((listing: any) => (
           <ListingCard
             key={listing.id}
             data={listing}
