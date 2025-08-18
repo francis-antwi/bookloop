@@ -1,7 +1,6 @@
 import prisma from '@/app/libs/prismadb';
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth/next';
-
 import { UserRole } from '@prisma/client';
 import authOptions from '@/app/auth/authOptions';
 
@@ -10,11 +9,16 @@ export default async function handler(
   res: NextApiResponse
 ) {
   try {
-    // Check if user is authenticated and is an admin
+    // Check authentication
     const session = await getServerSession(req, res, authOptions);
     
-    if (!session || session.user?.role !== UserRole.ADMIN) {
-      return res.status(401).json({ error: 'Unauthorized' });
+    if (!session) {
+      return res.status(401).json({ error: 'Unauthorized - No session found' });
+    }
+
+    // Check admin authorization
+    if (session.user?.role !== UserRole.ADMIN) {
+      return res.status(403).json({ error: 'Forbidden - Admin access required' });
     }
 
     const { id } = req.query;
@@ -23,10 +27,31 @@ export default async function handler(
       return res.status(400).json({ error: 'Invalid user ID' });
     }
 
+    // Common select fields (remove lastLogin if it doesn't exist in your schema)
+    const userSelectFields = {
+      id: true,
+      name: true,
+      email: true,
+      contactPhone: true,
+      role: true,
+      status: true,
+      verified: true,
+      businessVerified: true,
+      category: true,
+      createdAt: true,
+      updatedAt: true,
+      // Remove if not in your schema: lastLogin: true,
+    };
+
     // Handle PATCH request - update user
     if (req.method === 'PATCH') {
       const { status, role, verified } = req.body;
       
+      // Validate request body
+      if (!req.body || typeof req.body !== 'object') {
+        return res.status(400).json({ error: 'Invalid request body' });
+      }
+
       // Check if user exists
       const existingUser = await prisma.user.findUnique({
         where: { id }
@@ -55,20 +80,7 @@ export default async function handler(
       const updatedUser = await prisma.user.update({
         where: { id },
         data: updateData,
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          contactPhone: true,
-          role: true,
-          status: true,
-          verified: true,
-          businessVerified: true,
-          category: true,
-          createdAt: true,
-          updatedAt: true,
-          lastLogin: true,
-        }
+        select: userSelectFields
       });
       
       return res.status(200).json(updatedUser);
@@ -79,18 +91,7 @@ export default async function handler(
       const user = await prisma.user.findUnique({
         where: { id },
         select: {
-          id: true,
-          name: true,
-          email: true,
-          contactPhone: true,
-          role: true,
-          status: true,
-          verified: true,
-          businessVerified: true,
-          category: true,
-          createdAt: true,
-          updatedAt: true,
-          lastLogin: true,
+          ...userSelectFields,
           // Include related data if needed
           listings: {
             select: {
@@ -98,7 +99,11 @@ export default async function handler(
               title: true,
               status: true,
               createdAt: true,
-            }
+            },
+            orderBy: {
+              createdAt: 'desc'
+            },
+            take: 5 // Limit the number of listings returned
           },
           reservations: {
             select: {
@@ -106,7 +111,11 @@ export default async function handler(
               status: true,
               totalPrice: true,
               createdAt: true,
-            }
+            },
+            orderBy: {
+              createdAt: 'desc'
+            },
+            take: 5 // Limit the number of reservations returned
           },
           businessVerification: true,
         }
@@ -125,6 +134,9 @@ export default async function handler(
     
   } catch (error) {
     console.error('Error in user API:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ 
+      error: 'Internal server error',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 }
