@@ -15,9 +15,10 @@ export async function GET(request: NextRequest) {
     // Check if user is authenticated and is an admin
     const session = await getServerSession(authOptions);
     console.log('🔑 Session:', session ? 'Found' : 'Not found');
+    console.log('🔍 Full session object:', JSON.stringify(session, null, 2));
     console.log('👤 User role:', session?.user?.role);
     
-    if (!session || session.user?.role !== UserRole.ADMIN) {
+    if (!session || (session.user?.role !== UserRole.ADMIN && session.role !== 'ADMIN')) {
       console.log('❌ Unauthorized access attempt');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
