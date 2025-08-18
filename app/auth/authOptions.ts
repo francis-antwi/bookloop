@@ -5,17 +5,19 @@ import bcrypt from "bcrypt";
 import prisma from "@/app/libs/prismadb";
 import { UserRole } from "@prisma/client";
 
+// Default role for new users
+const DEFAULT_USER_ROLE = UserRole.USER;
+
 export const authOptions: AuthOptions = {
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
-
     CredentialsProvider({
       name: "credentials",
       credentials: {
-        email:    { label: "Email", type: "text" },
+        email: { label: "Email", type: "text" },
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
@@ -26,35 +28,45 @@ export const authOptions: AuthOptions = {
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
         });
+
         if (!user || !user.hashedPassword) {
           throw new Error("INVALID_CREDENTIALS");
         }
 
-        const isValid = await bcrypt.compare(credentials.password, user.hashedPassword);
+        const isValid = await bcrypt.compare(
+          credentials.password,
+          user.hashedPassword
+        );
         if (!isValid) throw new Error("INVALID_CREDENTIALS");
 
-       // 🟡 Temporarily allow provider login for verification flow
-if (
-  user.role === UserRole.PROVIDER &&
-  (!user.verified || user.requiresApproval || !user.isFaceVerified)
-) {
-  console.warn("🟡 PROVIDER not fully verified. Allowing login for verification flow.");
-}
+        // Temporary provider login exception
+        if (
+          user.role === UserRole.PROVIDER &&
+          (!user.verified || user.requiresApproval || !user.isFaceVerified)
+        ) {
+          console.warn("🟡 PROVIDER not fully verified - allowing login");
+        }
 
-
-        if (!user.role) throw new Error("MISSING_ROLE");
+        // Ensure user has a role
+        const userRole = user.role || DEFAULT_USER_ROLE;
+        if (!user.role) {
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { role: DEFAULT_USER_ROLE },
+          });
+        }
 
         return {
-          id:               user.id,
-          name:             user.name,
-          email:            user.email,
-          image:            user.image,
-          role:             user.role,
-          isOtpVerified:    user.isOtpVerified   ?? false,
-          isFaceVerified:   user.isFaceVerified  ?? false,
-          verified:         user.verified        ?? false,
-          requiresApproval: user.requiresApproval?? false,
-          businessVerified: user.businessVerified?? false,
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          role: userRole,
+          isOtpVerified: user.isOtpVerified ?? false,
+          isFaceVerified: user.isFaceVerified ?? false,
+          verified: user.verified ?? false,
+          requiresApproval: user.requiresApproval ?? false,
+          businessVerified: user.businessVerified ?? false,
         };
       },
     }),
@@ -68,90 +80,88 @@ if (
 
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60,
-    updateAge: 24 * 60 * 60,
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+    updateAge: 24 * 60 * 60, // 24 hours
   },
-
-  jwt: {
-    maxAge: 30 * 24 * 60 * 60,
-  },
-
-  secret: process.env.NEXTAUTH_SECRET,
-  debug: process.env.NODE_ENV === "development",
-  trustHost: true,
 
   callbacks: {
     async signIn({ user, account }) {
       if (account?.provider === "google" && user.email) {
-        const db = await prisma.user.findUnique({ where: { email: user.email } });
+        const existingUser = await prisma.user.findUnique({
+          where: { email: user.email },
+          select: { id: true, role: true },
+        });
 
-        // // ✅ Optionally enforce provider gatekeeping via Google
-        // if (
-        //   db?.role === UserRole.PROVIDER &&
-        //   (!db.verified || db.requiresApproval || !db.isFaceVerified)
-        // ) {
-        //   console.warn("🛑 PROVIDER not approved – Google login blocked.");
-        //   return false;
-        // }
-
-        if (!db) {
+        if (!existingUser) {
           await prisma.user.create({
             data: {
               email: user.email,
               name: user.name ?? "",
               image: user.image ?? null,
-              role: null,
+              role: DEFAULT_USER_ROLE,
               verified: false,
               isFaceVerified: false,
               requiresApproval: false,
               businessVerified: false,
             },
           });
+        } else if (!existingUser.role) {
+          await prisma.user.update({
+            where: { id: existingUser.id },
+            data: { role: DEFAULT_USER_ROLE },
+          });
         }
       }
-
       return true;
     },
 
     async jwt({ token, user, trigger, session }) {
+      // Handle role updates
       if (trigger === "update" && session?.role) {
         token.role = session.role;
         await prisma.user.update({
           where: { email: token.email! },
           data: { role: session.role },
         });
-
-        if (session.role === UserRole.PROVIDER) {
-          token.isFaceVerified = false;
-          token.verified = false;
-          token.requiresApproval = true;
-        }
       }
 
-      const email = user?.email ?? (token.email as string | undefined);
-      if (email) {
-        const db = await prisma.user.findUnique({
-          where: { email },
+      // Initial sign-in
+      if (user) {
+        token = {
+          ...token,
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          role: user.role,
+          isOtpVerified: user.isOtpVerified,
+          isFaceVerified: user.isFaceVerified,
+          verified: user.verified,
+          requiresApproval: user.requiresApproval,
+          businessVerified: user.businessVerified,
+        };
+      }
+
+      // Always refresh critical fields from database
+      if (token.email) {
+        const dbUser = await prisma.user.findUnique({
+          where: { email: token.email },
           select: {
-            id: true, name: true, email: true, image: true, role: true,
-            isOtpVerified: true, isFaceVerified: true,
-            verified: true, requiresApproval: true,
+            role: true,
+            verified: true,
+            isFaceVerified: true,
+            requiresApproval: true,
             businessVerified: true,
           },
         });
 
-        if (db) Object.assign(token, {
-          id: db.id,
-          name: db.name,
-          email: db.email,
-          image: db.image,
-          role: db.role,
-          isOtpVerified: db.isOtpVerified,
-          isFaceVerified: db.isFaceVerified,
-          verified: db.verified,
-          requiresApproval: db.requiresApproval,
-          businessVerified: db.businessVerified,
-        });
+        if (dbUser) {
+          token.role = dbUser.role;
+          token.verified = dbUser.verified;
+          token.isFaceVerified = dbUser.isFaceVerified;
+          token.requiresApproval = dbUser.requiresApproval;
+          token.businessVerified = dbUser.businessVerified;
+        }
       }
 
       return token;
@@ -160,26 +170,31 @@ if (
     async session({ session, token }) {
       if (session.user) {
         session.user = {
+          ...session.user,
           id: token.id as string,
-          name: token.name ?? null,
-          email: token.email ?? null,
-          image: token.image ?? null,
-          role: token.role as UserRole | null,
-          isOtpVerified:    token.isOtpVerified   ?? false,
-          isFaceVerified:   token.isFaceVerified  ?? false,
-          verified:         token.verified        ?? false,
-          requiresApproval: token.requiresApproval?? false,
-          businessVerified: token.businessVerified?? false, // ✅ ADDED
+          name: token.name as string,
+          email: token.email as string,
+          image: token.image as string | null,
+          role: token.role as UserRole,
+          isOtpVerified: token.isOtpVerified as boolean,
+          isFaceVerified: token.isFaceVerified as boolean,
+          verified: token.verified as boolean,
+          requiresApproval: token.requiresApproval as boolean,
+          businessVerified: token.businessVerified as boolean,
         };
       }
-
       return session;
     },
   },
 
   events: {
     async signIn({ user, account }) {
-      console.log("✅ Signed in:", user.email, "via", account?.provider);
+      console.log(
+        `✅ ${user.role || "NO_ROLE"} signed in:`,
+        user.email,
+        "via",
+        account?.provider
+      );
     },
     async signOut({ token }) {
       console.log("👋 Signed out:", token?.email);
@@ -192,11 +207,14 @@ if (
           verified: session.user?.verified,
           requiresApproval: session.user?.requiresApproval,
           businessVerified: session.user?.businessVerified,
-          expires: session.expires,
         });
       }
     },
   },
+
+  secret: process.env.NEXTAUTH_SECRET,
+  debug: process.env.NODE_ENV === "development",
+  trustHost: true,
 };
 
 export default NextAuth(authOptions);
