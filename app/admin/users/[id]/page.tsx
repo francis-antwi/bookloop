@@ -18,7 +18,7 @@ interface UserData {
   status: string;
   verified: boolean;
   businessVerified: boolean;
-  category: ServiceCategory | null;
+  categories: ServiceCategory[];
   createdAt: Date;
   updatedAt: Date;
   isOtpVerified: boolean;
@@ -235,10 +235,16 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
               <FiCheckCircle className="mr-2 text-gray-500" />
               <span>Face {user.isFaceVerified ? 'Verified' : 'Not Verified'}</span>
             </div>
-            {user.category && (
+            {user.categories && user.categories.length > 0 && (
               <div className="flex items-center">
                 <FiUser className="mr-2 text-gray-500" />
-                <span className="capitalize">{user.category.toLowerCase().replace('_', ' ')}</span>
+                <div className="flex flex-wrap gap-1">
+                  {user.categories.map(category => (
+                    <span key={category} className="badge badge-sm badge-outline">
+                      {category?.toLowerCase().replace('_', ' ') || 'Unknown'}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -320,9 +326,9 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
                         key={category}
                         type="button"
                         onClick={() => handleCategoryToggle(category)}
-                        className={`badge ${formData.categories.includes(category) 
-                          ? 'badge-primary' 
-                          : 'badge-outline'} cursor-pointer hover:scale-105 transition-transform`}
+                        className={`btn btn-sm ${formData.categories.includes(category) 
+                          ? 'btn-primary' 
+                          : 'btn-outline'} hover:scale-105 transition-transform`}
                       >
                         {category?.toLowerCase().replace('_', ' ') || 'Unknown'}
                       </button>
@@ -370,10 +376,18 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
                   <p className="capitalize">{user.role?.toLowerCase() || 'Unknown'}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">Category</p>
-                  <p className="capitalize">
-                    {user.category ? user.category.toLowerCase().replace('_', ' ') : 'None'}
-                  </p>
+                  <p className="text-sm text-gray-500">Categories</p>
+                  <div className="flex flex-wrap gap-1">
+                    {user.categories && user.categories.length > 0 ? (
+                      user.categories.map(category => (
+                        <span key={category} className="badge badge-primary">
+                          {category?.toLowerCase().replace('_', ' ') || 'Unknown'}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-gray-500">None</span>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Email Verified</p>
@@ -433,10 +447,11 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
                     {Object.values(ServiceCategory).map(category => (
                       <button
                         key={category}
+                        type="button"
                         onClick={() => handleBusinessToggle(category)}
-                        className={`badge ${businessForm.allowedCategories.includes(category) 
-                          ? 'badge-primary' 
-                          : 'badge-outline'}`}
+                        className={`btn btn-sm ${businessForm.allowedCategories.includes(category) 
+                          ? 'btn-primary' 
+                          : 'btn-outline'} hover:scale-105 transition-transform`}
                       >
                         {category?.toLowerCase().replace('_', ' ') || 'Unknown'}
                       </button>
