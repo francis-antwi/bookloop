@@ -58,7 +58,7 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
     role: UserRole.CUSTOMER,
     verified: false,
     businessVerified: false,
-    category: null as ServiceCategory | null,
+    categories: [] as ServiceCategory[],
   });
   const [businessForm, setBusinessForm] = useState({
     verified: false,
@@ -77,7 +77,7 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
           role: data.role || UserRole.CUSTOMER,
           verified: data.verified || false,
           businessVerified: data.businessVerified || false,
-          category: data.category || null,
+          categories: data.categories || [],
         });
         if (data.businessVerification) {
           setBusinessForm({
@@ -104,6 +104,19 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
     }));
+  };
+
+  const handleCategoryToggle = (category: ServiceCategory) => {
+    setFormData(prev => {
+      const newCategories = prev.categories.includes(category)
+        ? prev.categories.filter(c => c !== category)
+        : [...prev.categories, category];
+      
+      return {
+        ...prev,
+        categories: newCategories,
+      };
+    });
   };
 
   const handleBusinessToggle = (category: ServiceCategory) => {
@@ -299,21 +312,25 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
 
                 <div className="form-control">
                   <label className="label">
-                    <span className="label-text">Category</span>
+                    <span className="label-text">Categories</span>
                   </label>
-                  <select
-                    name="category"
-                    value={formData.category || ''}
-                    onChange={handleInputChange}
-                    className="select select-bordered w-full"
-                  >
-                    <option value="">None</option>
+                  <div className="flex flex-wrap gap-2">
                     {Object.values(ServiceCategory).map(category => (
-                      <option key={category} value={category}>
-                        {category.toLowerCase().replace('_', ' ')}
-                      </option>
+                      <button
+                        key={category}
+                        type="button"
+                        onClick={() => handleCategoryToggle(category)}
+                        className={`badge ${formData.categories.includes(category) 
+                          ? 'badge-primary' 
+                          : 'badge-outline'} cursor-pointer hover:scale-105 transition-transform`}
+                      >
+                        {category?.toLowerCase().replace('_', ' ') || 'Unknown'}
+                      </button>
                     ))}
-                  </select>
+                  </div>
+                  {formData.categories.length === 0 && (
+                    <p className="text-sm text-gray-500 mt-1">No categories selected</p>
+                  )}
                 </div>
 
                 <div className="form-control">
