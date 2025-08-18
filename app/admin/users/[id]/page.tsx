@@ -18,7 +18,7 @@ interface UserData {
   status: string;
   verified: boolean;
   businessVerified: boolean;
-  categories: ServiceCategory[]; // Changed from category to categories
+  category: ServiceCategory | null;
   createdAt: Date;
   updatedAt: Date;
   isOtpVerified: boolean;
@@ -58,7 +58,7 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
     role: UserRole.CUSTOMER,
     verified: false,
     businessVerified: false,
-    categories: [] as ServiceCategory[], // Changed to array
+    category: null as ServiceCategory | null,
   });
   const [businessForm, setBusinessForm] = useState({
     verified: false,
@@ -77,7 +77,7 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
           role: data.role || UserRole.CUSTOMER,
           verified: data.verified || false,
           businessVerified: data.businessVerified || false,
-          categories: data.categories || [], // Changed to array
+          category: data.category || null,
         });
         if (data.businessVerification) {
           setBusinessForm({
@@ -104,19 +104,6 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
     }));
-  };
-
-  const handleCategoryToggle = (category: ServiceCategory) => {
-    setFormData(prev => {
-      const newCategories = prev.categories.includes(category)
-        ? prev.categories.filter(c => c !== category)
-        : [...prev.categories, category];
-      
-      return {
-        ...prev,
-        categories: newCategories,
-      };
-    });
   };
 
   const handleBusinessToggle = (category: ServiceCategory) => {
@@ -235,13 +222,10 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
               <FiCheckCircle className="mr-2 text-gray-500" />
               <span>Face {user.isFaceVerified ? 'Verified' : 'Not Verified'}</span>
             </div>
-            {user.categories && user.categories.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {user.categories.map(category => (
-                  <span key={category} className="badge badge-primary">
-                    {category.toLowerCase().replace('_', ' ')}
-                  </span>
-                ))}
+            {user.category && (
+              <div className="flex items-center">
+                <FiUser className="mr-2 text-gray-500" />
+                <span className="capitalize">{user.category.toLowerCase().replace('_', ' ')}</span>
               </div>
             )}
           </div>
@@ -315,22 +299,21 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
 
                 <div className="form-control">
                   <label className="label">
-                    <span className="label-text">Categories</span>
+                    <span className="label-text">Category</span>
                   </label>
-                  <div className="flex flex-wrap gap-2">
+                  <select
+                    name="category"
+                    value={formData.category || ''}
+                    onChange={handleInputChange}
+                    className="select select-bordered w-full"
+                  >
+                    <option value="">None</option>
                     {Object.values(ServiceCategory).map(category => (
-                      <button
-                        key={category}
-                        type="button"
-                        onClick={() => handleCategoryToggle(category)}
-                        className={`badge ${formData.categories.includes(category) 
-                          ? 'badge-primary' 
-                          : 'badge-outline'}`}
-                      >
+                      <option key={category} value={category}>
                         {category.toLowerCase().replace('_', ' ')}
-                      </button>
+                      </option>
                     ))}
-                  </div>
+                  </select>
                 </div>
 
                 <div className="form-control">
@@ -370,18 +353,10 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
                   <p className="capitalize">{user.role?.toLowerCase() || 'Unknown'}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">Categories</p>
-                  <div className="flex flex-wrap gap-1">
-                    {user.categories && user.categories.length > 0 ? (
-                      user.categories.map(category => (
-                        <span key={category} className="badge badge-primary">
-                          {category.toLowerCase().replace('_', ' ')}
-                        </span>
-                      ))
-                    ) : (
-                      <p>None</p>
-                    )}
-                  </div>
+                  <p className="text-sm text-gray-500">Category</p>
+                  <p className="capitalize">
+                    {user.category ? user.category.toLowerCase().replace('_', ' ') : 'None'}
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Email Verified</p>
