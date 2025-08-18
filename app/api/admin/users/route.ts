@@ -1,4 +1,3 @@
-// app/api/admin/users/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import prisma from '@/app/libs/prismadb';
@@ -31,18 +30,13 @@ export async function GET(request: NextRequest) {
 
     // Extract query parameters
     const { searchParams } = new URL(request.url);
-    const role = searchParams.get('role');
     const status = searchParams.get('status');
     const search = searchParams.get('search');
 
-    console.log('🔍 Query params:', { role, status, search });
+    console.log('🔍 Query params:', { status, search });
 
     // Build where clause for filtering
     const where: any = {};
-    
-    if (role && role !== 'all') {
-      where.role = role;
-    }
     
     if (status && status !== 'all') {
       where.status = status;
@@ -73,8 +67,6 @@ export async function GET(request: NextRequest) {
         category: true,
         createdAt: true,
         updatedAt: true,
-        // Removed non-existent lastLogin field
-        // Add other fields that exist in your model if needed
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -110,7 +102,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id, status, role, verified } = body;
+    const { id, status, verified } = body;
     
     if (!id) {
       return NextResponse.json(
@@ -138,10 +130,6 @@ export async function PATCH(request: NextRequest) {
       updateData.status = status;
     }
     
-    if (role !== undefined) {
-      updateData.role = role;
-    }
-    
     if (verified !== undefined) {
       updateData.verified = verified;
     }
@@ -162,7 +150,6 @@ export async function PATCH(request: NextRequest) {
         category: true,
         createdAt: true,
         updatedAt: true,
-        // Removed non-existent lastLogin field
       }
     });
     
