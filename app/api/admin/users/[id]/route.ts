@@ -2,8 +2,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import prisma from '@/app/libs/prismadb';
-import { UserRole } from '@prisma/client';
 import authOptions from '@/app/auth/authOptions';
+
+const ADMIN_EMAILS = [
+  'sheamusticals@gmail.com',
+  // Add other admin emails as needed
+];
 
 export async function GET(
   request: NextRequest,
@@ -22,8 +26,15 @@ export async function GET(
       );
     }
 
-    // Check admin authorization
-    if (session.user?.role !== UserRole.ADMIN) {
+    // Debug logging for email comparison
+    console.log('Admin emails:', ADMIN_EMAILS);
+    console.log('Session email:', session.user.email);
+
+    // Check admin authorization using email list (case insensitive)
+    const normalizedAdminEmails = ADMIN_EMAILS.map(email => email.toLowerCase().trim());
+    const userEmail = session.user.email.toLowerCase().trim();
+    
+    if (!normalizedAdminEmails.includes(userEmail)) {
       console.log(`❌ Forbidden - User ${session.user.email} is not admin`);
       return NextResponse.json(
         { error: 'Forbidden' }, 
@@ -48,7 +59,6 @@ export async function GET(
         name: true,
         email: true,
         contactPhone: true,
-        role: true,
         status: true,
         verified: true,
         businessVerified: true,
@@ -106,14 +116,19 @@ export async function PATCH(
     // Check authentication
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
+      console.log('❌ Unauthorized - No session found');
       return NextResponse.json(
         { error: 'Unauthorized' }, 
         { status: 401 }
       );
     }
 
-    // Check admin authorization
-    if (session.user?.role !== UserRole.ADMIN) {
+    // Check admin authorization using email list (case insensitive)
+    const normalizedAdminEmails = ADMIN_EMAILS.map(email => email.toLowerCase().trim());
+    const userEmail = session.user.email.toLowerCase().trim();
+    
+    if (!normalizedAdminEmails.includes(userEmail)) {
+      console.log(`❌ Forbidden - User ${session.user.email} is not admin`);
       return NextResponse.json(
         { error: 'Forbidden' }, 
         { status: 403 }
@@ -122,6 +137,7 @@ export async function PATCH(
 
     // Validate user ID
     if (!params.id || typeof params.id !== 'string') {
+      console.log('❌ Invalid user ID format');
       return NextResponse.json(
         { error: 'Invalid user ID' }, 
         { status: 400 }
@@ -129,7 +145,7 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { status, role, verified } = body;
+    const { status, verified } = body;
     
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
@@ -137,6 +153,7 @@ export async function PATCH(
     });
     
     if (!existingUser) {
+      console.log(`❌ User not found with ID: ${params.id}`);
       return NextResponse.json(
         { error: 'User not found' }, 
         { status: 404 }
@@ -146,9 +163,15 @@ export async function PATCH(
     // Build update data
     const updateData: any = {};
     
-    if (status !== undefined) updateData.status = status;
-    if (role !== undefined) updateData.role = role;
-    if (verified !== undefined) updateData.verified = verified;
+    if (status !== undefined) {
+      console.log(`🔄 Updating status to: ${status}`);
+      updateData.status = status;
+    }
+    
+    if (verified !== undefined) {
+      console.log(`🔄 Updating verified to: ${verified}`);
+      updateData.verified = verified;
+    }
     
     // Update user
     const updatedUser = await prisma.user.update({
@@ -159,7 +182,6 @@ export async function PATCH(
         name: true,
         email: true,
         contactPhone: true,
-        role: true,
         status: true,
         verified: true,
         businessVerified: true,
@@ -171,7 +193,6 @@ export async function PATCH(
     
     console.log(`✅ Updated user: ${updatedUser.email}`);
     return NextResponse.json(updatedUser);
-    
     
   } catch (error) {
     console.error('💥 Error updating user:', error);
