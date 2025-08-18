@@ -1,9 +1,9 @@
-// pages/api/admin/users/[id].ts
+import prisma from '@/app/libs/prismadb';
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/pages/api/auth/[...nextauth]';
-import prisma from '@/lib/prisma';
+
 import { UserRole } from '@prisma/client';
+import authOptions from '@/app/auth/authOptions';
 
 export default async function handler(
   req: NextApiRequest,

@@ -1,9 +1,10 @@
 // pages/api/admin/users/index.ts
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/pages/api/auth/[...nextauth]';
-import prisma from '@/lib/prisma';
+
+import prisma from '@/app/libs/prismadb';
 import { UserRole } from '@prisma/client';
+import authOptions from '@/app/auth/authOptions';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
