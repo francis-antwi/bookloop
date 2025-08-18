@@ -132,7 +132,7 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
 
       // Update business verification if exists
       if (user?.businessVerification) {
-        const businessResponse = await fetch(`/api/admin/business-verification/${user.businessVerification.id}`, {
+        const businessResponse = await fetch(`/api/admin/business-info/${user.businessVerification.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
