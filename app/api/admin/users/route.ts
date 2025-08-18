@@ -1,10 +1,14 @@
 // app/api/admin/users/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-
 import prisma from '@/app/libs/prismadb';
-import { UserRole } from '@prisma/client';
 import authOptions from '@/app/auth/authOptions';
+
+// Configure your admin emails here
+const ADMIN_EMAILS = [
+  'sheamusticals@gmail.com',
+  // Add other admin emails as needed
+];
 
 // Handle GET request - fetch users
 export async function GET(request: NextRequest) {
@@ -12,15 +16,19 @@ export async function GET(request: NextRequest) {
   console.log('📍 URL:', request.url);
 
   try {
-    // Check if user is authenticated and is an admin
+    // Check authentication
     const session = await getServerSession(authOptions);
     console.log('🔑 Session:', session ? 'Found' : 'Not found');
-    console.log('🔍 Full session object:', JSON.stringify(session, null, 2));
-    console.log('👤 User role:', session?.user?.role);
     
-    if (!session || (session.user?.role !== UserRole.ADMIN && session.role !== 'ADMIN')) {
-      console.log('❌ Unauthorized access attempt');
+    if (!session?.user?.email) {
+      console.log('❌ No authenticated session found');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Check admin authorization
+    if (!ADMIN_EMAILS.includes(session.user.email)) {
+      console.log(`❌ Unauthorized admin access attempt by: ${session.user.email}`);
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Extract query parameters
@@ -35,11 +43,11 @@ export async function GET(request: NextRequest) {
     const where: any = {};
     
     if (role && role !== 'all') {
-      where.role = role as UserRole;
+      where.role = role;
     }
     
     if (status && status !== 'all') {
-      where.status = status as string;
+      where.status = status;
     }
     
     if (search && typeof search === 'string') {
@@ -89,12 +97,18 @@ export async function PATCH(request: NextRequest) {
   console.log('✏️ Processing PATCH request');
 
   try {
-    // Check if user is authenticated and is an admin
+    // Check authentication
     const session = await getServerSession(authOptions);
     
-    if (!session || session.user?.role !== UserRole.ADMIN) {
-      console.log('❌ Unauthorized access attempt');
+    if (!session?.user?.email) {
+      console.log('❌ No authenticated session found');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Check admin authorization
+    if (!ADMIN_EMAILS.includes(session.user.email)) {
+      console.log(`❌ Unauthorized admin update attempt by: ${session.user.email}`);
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const body = await request.json();
