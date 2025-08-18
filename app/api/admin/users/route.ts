@@ -4,13 +4,11 @@ import { getServerSession } from 'next-auth/next';
 import prisma from '@/app/libs/prismadb';
 import authOptions from '@/app/auth/authOptions';
 
-// Configure your admin emails here
 const ADMIN_EMAILS = [
   'sheamusticals@gmail.com',
   // Add other admin emails as needed
 ];
 
-// Handle GET request - fetch users
 export async function GET(request: NextRequest) {
   console.log('🔍 API Handler called - GET');
   console.log('📍 URL:', request.url);
@@ -60,7 +58,7 @@ export async function GET(request: NextRequest) {
     
     console.log('🔍 Query filters:', where);
     
-    // Fetch users with filters
+    // Fetch users with filters - using only fields that exist in your model
     const users = await prisma.user.findMany({
       where,
       select: {
@@ -75,7 +73,8 @@ export async function GET(request: NextRequest) {
         category: true,
         createdAt: true,
         updatedAt: true,
-        lastLogin: true,
+        // Removed non-existent lastLogin field
+        // Add other fields that exist in your model if needed
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -92,7 +91,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Handle PATCH request - update user
 export async function PATCH(request: NextRequest) {
   console.log('✏️ Processing PATCH request');
 
@@ -148,7 +146,7 @@ export async function PATCH(request: NextRequest) {
       updateData.verified = verified;
     }
     
-    // Update user
+    // Update user - only selecting fields that exist in your model
     const updatedUser = await prisma.user.update({
       where: { id },
       data: updateData,
@@ -164,7 +162,7 @@ export async function PATCH(request: NextRequest) {
         category: true,
         createdAt: true,
         updatedAt: true,
-        lastLogin: true,
+        // Removed non-existent lastLogin field
       }
     });
     
