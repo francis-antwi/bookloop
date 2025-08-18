@@ -1,7 +1,7 @@
 'use client';
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Listing, Reservation } from "@prisma/client";
+import { Listing, Reservation, UserRole } from "@prisma/client";
 import React, { useState, useEffect } from 'react';
 import {
   Bell,
@@ -30,7 +30,10 @@ import {
   ChevronRight,
   Plus,
   Download,
-  MoreVertical
+  MoreVertical,
+  Shield,
+  User as UserIcon,
+  UserX
 } from 'lucide-react';
 
 type Notification = {
@@ -71,6 +74,21 @@ type Provider = {
   phone: string;
   submittedAt: string;
   status: "PENDING" | "APPROVED" | "REJECTED";
+};
+
+type User = {
+  id: string;
+  name: string;
+  email: string;
+  contactPhone?: string | null;
+  role: UserRole;
+  status: string;
+  verified: boolean;
+  businessVerified?: boolean | null;
+  category?: string;
+  createdAt: string;
+  updatedAt: string;
+  lastLogin?: string | null;
 };
 
 const ActionButton = ({
@@ -176,38 +194,127 @@ const AdminDashboard = () => {
   const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
   const [activeTab, setActiveTab] = useState<string>('dashboard');
-  const [userRole, setUserRole] = useState<string>('admin');
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [listings, setListings] = useState<ListingType[]>([]);
-  const [reservations, setReservations] = useState<SimplifiedReservation[]>([]);
-  const [providers, setProviders] = useState<Provider[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  
+  // State for all data
   const [loading, setLoading] = useState({
     listings: true,
     reservations: true,
     notifications: true,
-    providers: true
+    providers: true,
+    users: true
   });
-  const [error, setError] = useState<{
-    listings: string | null;
-    reservations: string | null;
-    notifications: string | null;
-    providers: string | null;
-  }>({
+  
+  const [error, setError] = useState({
     listings: null,
     reservations: null,
     notifications: null,
-    providers: null
+    providers: null,
+    users: null
   });
+  
+  const [data, setData] = useState({
+    listings: [] as ListingType[],
+    reservations: [] as SimplifiedReservation[],
+    notifications: [] as Notification[],
+    providers: [] as Provider[],
+    users: [] as User[]
+  });
+  
   const [filter, setFilter] = useState<'all' | 'unread'>('unread');
+  const [userFilters, setUserFilters] = useState({
+    role: 'all',
+    status: 'all',
+    search: ''
+  });
 
-  useEffect(() => {
-    if (sessionStatus === "loading") return;
-    const role = session?.user?.role;
-    if (!session || role !== "ADMIN") {
-      router.push("/");
+  // Add user management functions
+  const handleUserStatusChange = async (userId: string, status: string) => {
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      
+      if (!res.ok) throw new Error('Failed to update user status');
+      
+      setData(prev => ({
+        ...prev,
+        users: prev.users.map(user => 
+          user.id === userId ? { ...user, status } : user
+        )
+      }));
+    } catch (error) {
+      console.error('Error updating user status:', error);
     }
-  }, [sessionStatus, session, router]);
+  };
+
+  const handleRoleChange = async (userId: string, role: UserRole) => {
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+      });
+      
+      if (!res.ok) throw new Error('Failed to update user role');
+      
+      setData(prev => ({
+        ...prev,
+        users: prev.users.map(user => 
+          user.id === userId ? { ...user, role } : user
+        )
+      }));
+    } catch (error) {
+      console.error('Error updating user role:', error);
+    }
+  };
+
+  const handleVerificationToggle = async (userId: string, verified: boolean) => {
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ verified }),
+      });
+      
+      if (!res.ok) throw new Error('Failed to update verification status');
+      
+      setData(prev => ({
+        ...prev,
+        users: prev.users.map(user => 
+          user.id === userId ? { ...user, verified } : user
+        )
+      }));
+    } catch (error) {
+      console.error('Error updating verification status:', error);
+    }
+  };
+
+  // Add fetchUsers function
+  const fetchUsers = async () => {
+    try {
+      setLoading(prev => ({ ...prev, users: true }));
+      setError(prev => ({ ...prev, users: null }));
+      
+      const query = new URLSearchParams();
+      if (userFilters.role !== 'all') query.append('role', userFilters.role);
+      if (userFilters.status !== 'all') query.append('status', userFilters.status);
+      if (userFilters.search) query.append('search', userFilters.search);
+      
+      const res = await fetch(`/api/admin/users?${query.toString()}`);
+      if (!res.ok) throw new Error('Failed to fetch users');
+      
+      const users = await res.json();
+      setData(prev => ({ ...prev, users }));
+    } catch (err) {
+      console.error('Failed to load users:', err);
+      setError(prev => ({ ...prev, users: err instanceof Error ? err.message : 'Failed to load users' }));
+    } finally {
+      setLoading(prev => ({ ...prev, users: false }));
+    }
+  };
 
   // Fetch listings
   useEffect(() => {
@@ -220,8 +327,8 @@ const AdminDashboard = () => {
         if (!res.ok) {
           throw new Error(`API error: ${res.status} ${res.statusText}`);
         }
-        const data = await res.json();
-        setListings(data);
+        const listings = await res.json();
+        setData(prev => ({ ...prev, listings }));
       } catch (err) {
         console.error('Failed to load listings:', err);
         setError(prev => ({ ...prev, listings: err instanceof Error ? err.message : 'Failed to load listings' }));
@@ -244,8 +351,8 @@ const AdminDashboard = () => {
         if (!res.ok) {
           throw new Error(`API error: ${res.status} ${res.statusText}`);
         }
-        const data = await res.json();
-        setReservations(data);
+        const reservations = await res.json();
+        setData(prev => ({ ...prev, reservations }));
       } catch (err) {
         console.error('Failed to load reservations:', err);
         setError(prev => ({ ...prev, reservations: err instanceof Error ? err.message : 'Failed to load reservations' }));
@@ -268,8 +375,8 @@ const AdminDashboard = () => {
         if (!res.ok) {
           throw new Error(`API error: ${res.status} ${res.statusText}`);
         }
-        const data = await res.json();
-        setNotifications(data);
+        const notifications = await res.json();
+        setData(prev => ({ ...prev, notifications }));
       } catch (err) {
         console.error('Failed to load notifications:', err);
         setError(prev => ({ ...prev, notifications: err instanceof Error ? err.message : 'Failed to load notifications' }));
@@ -281,25 +388,22 @@ const AdminDashboard = () => {
     fetchNotifications();
   }, []);
 
+  // Fetch providers
   useEffect(() => {
     const controller = new AbortController();
-
     const fetchProviders = async () => {
       try {
         setLoading(prev => ({ ...prev, providers: true }));
         setError(prev => ({ ...prev, providers: null }));
-
         const res = await fetch("/api/admin/providers", {
           credentials: "include",
           signal: controller.signal,
         });
-
         if (!res.ok) {
           throw new Error(`API error: ${res.status} ${res.statusText}`);
         }
-
-        const data = await res.json();
-        setProviders(data);
+        const providers = await res.json();
+        setData(prev => ({ ...prev, providers }));
       } catch (err) {
         if (err.name === "AbortError") return;
         console.error("Failed to load providers:", err);
@@ -311,12 +415,52 @@ const AdminDashboard = () => {
         setLoading(prev => ({ ...prev, providers: false }));
       }
     };
-
     fetchProviders();
-
     return () => controller.abort();
   }, []);
 
+  // Initial data loading
+  useEffect(() => {
+    if (sessionStatus === "loading") return;
+    const role = session?.user?.role;
+    if (!session || role !== "ADMIN") {
+      router.push("/");
+    } else {
+      fetchUsers();
+    }
+  }, [sessionStatus, session, router]);
+
+  // Filtered notifications
+  const filteredNotifications = data.notifications.filter(n => 
+    filter === 'all' ? true : !n.read
+  );
+
+  // Filtered users
+  const filteredUsers = data.users.filter(user => {
+    const matchesSearch = 
+      user.name.toLowerCase().includes(userFilters.search.toLowerCase()) ||
+      user.email.toLowerCase().includes(userFilters.search.toLowerCase()) ||
+      (user.contactPhone && user.contactPhone.toLowerCase().includes(userFilters.search.toLowerCase()));
+    
+    const matchesStatus = userFilters.status === 'all' ? true : user.status === userFilters.status;
+    const matchesRole = userFilters.role === 'all' ? true : user.role === userFilters.role;
+    
+    return matchesSearch && matchesStatus && matchesRole;
+  });
+
+  // Stats calculation
+  const stats = {
+    totalListings: data.listings.length,
+    pendingListings: data.listings.filter(l => l.status === 'PENDING').length,
+    totalReservations: data.reservations.length,
+    pendingReservations: data.reservations.filter(r => r.status === 'PENDING').length,
+    totalRevenue: data.reservations.reduce((sum, r) => sum + (r.totalPrice || 0), 0),
+    pendingProviders: data.providers.filter(p => p.status === 'PENDING').length,
+    totalUsers: data.users.length,
+    activeUsers: data.users.filter(u => u.status === 'ACTIVE').length,
+  };
+
+  // Reservation actions
   const handleReservationAction = async (
     reservationId: string,
     status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED'
@@ -331,18 +475,20 @@ const AdminDashboard = () => {
       });
       if (!res.ok) throw new Error('Failed to update reservation');
    
-      setReservations(prev => 
-        prev.map(reservation => 
+      setData(prev => ({
+        ...prev,
+        reservations: prev.reservations.map(reservation => 
           reservation.id === reservationId 
             ? { ...reservation, status } 
             : reservation
         )
-      );
+      }));
     } catch (err) {
       console.error(err);
     }
   };
 
+  // Listing actions
   const handleListingAction = async (id: string, action: string) => {
     try {
       const res = await fetch(`/api/listings/${id}/status`, {
@@ -355,62 +501,62 @@ const AdminDashboard = () => {
         throw new Error(data.error || 'Failed to update listing');
       }
       const updated = await res.json();
-      setListings(prev =>
-        prev.map(listing =>
+      setData(prev => ({
+        ...prev,
+        listings: prev.listings.map(listing =>
           listing.id === id ? { ...listing, status: updated.status } : listing
         )
-      );
+      }));
     } catch (error) {
       console.error('Error updating listing:', error);
       alert('Failed to update listing status.');
     }
   };
 
+  // Provider approval
   const handleProviderApproval = async (
-  id: string,
-  decision: 'APPROVED' | 'REJECTED'
-) => {
-  try {
-    const res = await fetch(`/api/admin/providers/${id}/status`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        businessVerified: decision === 'APPROVED', // ✅ backend expects a boolean
-        notes: decision === 'REJECTED' ? 'Your business was not eligible.' : undefined,
-      }),
-    });
-
-    if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error || 'Failed to update provider');
+    id: string,
+    decision: 'APPROVED' | 'REJECTED'
+  ) => {
+    try {
+      const res = await fetch(`/api/admin/providers/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          businessVerified: decision === 'APPROVED',
+          notes: decision === 'REJECTED' ? 'Your business was not eligible.' : undefined,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to update provider');
+      }
+      const updated = await res.json();
+      setData(prev => ({
+        ...prev,
+        providers: prev.providers.map(provider =>
+          provider.id === id
+            ? {
+                ...provider,
+                status: updated.businessVerified ? 'APPROVED' : 'REJECTED',
+              }
+            : provider
+        )
+      }));
+    } catch (error) {
+      console.error('Error updating provider:', error);
+      alert('Failed to update provider status.');
     }
+  };
 
-    const updated = await res.json();
-
-    setProviders(prev =>
-      prev.map(provider =>
-        provider.id === id
-          ? {
-              ...provider,
-              // ✅ Use updated boolean to reflect status
-              status: updated.businessVerified ? 'APPROVED' : 'REJECTED',
-            }
-          : provider
-      )
-    );
-  } catch (error) {
-    console.error('Error updating provider:', error);
-    alert('Failed to update provider status.');
-  }
-};
-
-
+  // Notification actions
   const markNotificationRead = (id: string) => {
-    setNotifications(prev =>
-      prev.map(notif =>
+    setData(prev => ({
+      ...prev,
+      notifications: prev.notifications.map(notif =>
         notif.id === id ? { ...notif, read: true } : notif
       )
-    );
+    }));
   };
 
   const deleteNotification = async (id: string, e: React.MouseEvent) => {
@@ -422,7 +568,10 @@ const AdminDashboard = () => {
       if (!res.ok) {
         throw new Error(`API error: ${res.status} ${res.statusText}`);
       }
-      setNotifications(prev => prev.filter(notif => notif.id !== id));
+      setData(prev => ({
+        ...prev,
+        notifications: prev.notifications.filter(notif => notif.id !== id)
+      }));
     } catch (err) {
       console.error('Failed to delete notification:', err);
     }
@@ -436,25 +585,16 @@ const AdminDashboard = () => {
       if (!res.ok) {
         throw new Error(`API error: ${res.status} ${res.statusText}`);
       }
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      setData(prev => ({
+        ...prev,
+        notifications: prev.notifications.map(n => ({ ...n, read: true }))
+      }));
     } catch (err) {
       console.error('Failed to mark all notifications as read:', err);
     }
   };
 
-  const filteredNotifications = notifications.filter(n => 
-    filter === 'all' ? true : !n.read
-  );
-
-  const stats = {
-    totalListings: listings.length,
-    pendingListings: listings.filter(l => l.status === 'PENDING').length,
-    totalReservations: reservations.length,
-    pendingReservations: reservations.filter(r => r.status === 'PENDING').length,
-    totalRevenue: reservations.reduce((sum, r) => sum + (r.totalPrice || 0), 0),
-    pendingProviders: providers.filter(p => p.status === 'PENDING').length,
-  };
-
+  // Dashboard Content
   const DashboardContent = () => (
     <div className="space-y-8">
       {/* Stats Grid */}
@@ -481,14 +621,13 @@ const AdminDashboard = () => {
           changeType="positive"
         />
         <StatsCard
-          title="Pending Providers"
-          value={stats.pendingProviders}
+          title="Users"
+          value={stats.totalUsers}
           icon={Users}
-          change="Needs review"
+          change={`${stats.activeUsers} active`}
           changeType="neutral"
         />
       </div>
-
       {/* Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
@@ -508,8 +647,8 @@ const AdminDashboard = () => {
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                 <p className="ml-2 text-gray-600">Loading reservations...</p>
               </div>
-            ) : reservations.length > 0 ? (
-              reservations.slice(0, 5).map(reservation => (
+            ) : data.reservations.length > 0 ? (
+              data.reservations.slice(0, 5).map(reservation => (
                 <div key={reservation.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
                   <div className="flex-1">
                     <p className="font-medium text-gray-900">{reservation.listing}</p>
@@ -528,36 +667,54 @@ const AdminDashboard = () => {
             )}
           </div>
         </div>
-
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900">Recent Notifications</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Recent Users</h3>
             <ActionButton
               variant="secondary"
               size="sm"
-              onClick={() => setActiveTab('notifications')}
+              onClick={() => setActiveTab('users')}
             >
               View All
             </ActionButton>
           </div>
           <div className="space-y-4">
-            {loading.notifications ? (
+            {loading.users ? (
               <div className="flex items-center justify-center p-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                <p className="ml-2 text-gray-600">Loading notifications...</p>
+                <p className="ml-2 text-gray-600">Loading users...</p>
               </div>
-            ) : notifications.length > 0 ? (
-              notifications.slice(0, 5).map(notification => (
-                <div key={notification.id} className={`p-4 rounded-lg transition-colors ${
-                  notification.read ? 'bg-gray-50' : 'bg-blue-50 border-l-4 border-blue-500'
-                }`}>
-                  <p className="font-medium text-gray-900">{notification.message}</p>
-                  <p className="text-sm text-gray-500 mt-1">{notification.time}</p>
+            ) : filteredUsers.length > 0 ? (
+              filteredUsers.slice(0, 5).map(user => (
+                <div key={user.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                      <span className="text-white font-medium text-sm">
+                        {user.name.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900">{user.name}</p>
+                      <p className="text-sm text-gray-500">{user.email}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="flex items-center gap-1">
+                      {user.role === UserRole.ADMIN ? (
+                        <Shield size={16} className="text-purple-500" />
+                      ) : user.role === UserRole.PROVIDER ? (
+                        <UserCheck size={16} className="text-blue-500" />
+                      ) : (
+                        <UserIcon size={16} className="text-gray-500" />
+                      )}
+                      <span className="text-sm text-gray-500">{user.role}</span>
+                    </div>
+                  </div>
                 </div>
               ))
             ) : (
               <div className="text-center p-8 text-gray-500">
-                No notifications found
+                No users found
               </div>
             )}
           </div>
@@ -566,6 +723,191 @@ const AdminDashboard = () => {
     </div>
   );
 
+  // Users Content
+  const UsersContent = () => (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">User Management</h2>
+          <p className="text-gray-600 mt-1">Manage and review user accounts</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search users..."
+              value={userFilters.search}
+              onChange={(e) => setUserFilters({...userFilters, search: e.target.value})}
+              className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+            />
+          </div>
+          <select
+            value={userFilters.role}
+            onChange={(e) => setUserFilters({...userFilters, role: e.target.value})}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+          >
+            <option value="all">All Roles</option>
+            <option value={UserRole.CUSTOMER}>Customers</option>
+            <option value={UserRole.PROVIDER}>Providers</option>
+            <option value={UserRole.ADMIN}>Admins</option>
+          </select>
+          <select
+            value={userFilters.status}
+            onChange={(e) => setUserFilters({...userFilters, status: e.target.value})}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+          >
+            <option value="all">All Status</option>
+            <option value="ACTIVE">Active</option>
+            <option value="PENDING_REVIEW">Pending Review</option>
+            <option value="BANNED">Banned</option>
+          </select>
+        </div>
+      </div>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="text-left py-4 px-6 font-semibold text-gray-900">User</th>
+                <th className="text-left py-4 px-6 font-semibold text-gray-900">Contact</th>
+                <th className="text-left py-4 px-6 font-semibold text-gray-900">Role</th>
+                <th className="text-left py-4 px-6 font-semibold text-gray-900">Status</th>
+                <th className="text-left py-4 px-6 font-semibold text-gray-900">Verified</th>
+                <th className="text-right py-4 px-6 font-semibold text-gray-900">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {loading.users ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center">
+                    <div className="flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                      <p className="ml-2 text-gray-600">Loading users...</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : error.users ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center">
+                    <div className="flex items-center justify-center text-red-600">
+                      <AlertCircle size={20} className="mr-2" />
+                      <p>{error.users}</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredUsers.length > 0 ? (
+                filteredUsers.map(user => (
+                  <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="py-4 px-6">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                          <span className="text-white font-medium text-sm">
+                            {user.name.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">{user.name}</p>
+                          <p className="text-sm text-gray-500">{user.email}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6 text-gray-700">
+                      {user.contactPhone || 'N/A'}
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="flex items-center gap-1">
+                        {user.role === UserRole.ADMIN ? (
+                          <Shield size={16} className="text-purple-500" />
+                        ) : user.role === UserRole.PROVIDER ? (
+                          <UserCheck size={16} className="text-blue-500" />
+                        ) : (
+                          <UserIcon size={16} className="text-gray-500" />
+                        )}
+                        <span>{user.role}</span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6">
+                      {user.status === 'ACTIVE' ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          <CheckCircle2 size={12} />
+                          Active
+                        </span>
+                      ) : user.status === 'PENDING_REVIEW' ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                          <Clock size={12} />
+                          Pending Review
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                          <UserX size={12} />
+                          Banned
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-4 px-6">
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={user.verified}
+                          onChange={(e) => handleVerificationToggle(user.id, e.target.checked)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="flex items-center gap-2 justify-end">
+                        <ActionButton
+                          variant="secondary"
+                          onClick={() => router.push(`/admin/users/${user.id}`)}
+                        >
+                          <Eye size={14} className="mr-1" />
+                          View
+                        </ActionButton>
+                        {user.status !== 'ACTIVE' && (
+                          <ActionButton
+                            variant="success"
+                            onClick={() => handleUserStatusChange(user.id, 'ACTIVE')}
+                          >
+                            Activate
+                          </ActionButton>
+                        )}
+                        {user.status !== 'BANNED' && (
+                          <ActionButton
+                            variant="danger"
+                            onClick={() => handleUserStatusChange(user.id, 'BANNED')}
+                          >
+                            Ban
+                          </ActionButton>
+                        )}
+                        {user.role !== UserRole.ADMIN && (
+                          <ActionButton
+                            variant="primary"
+                            onClick={() => handleRoleChange(user.id, UserRole.ADMIN)}
+                          >
+                            Make Admin
+                          </ActionButton>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-gray-500">
+                    No users found matching your criteria
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Listings Content
   const ListingsContent = () => (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -588,7 +930,6 @@ const AdminDashboard = () => {
           </ActionButton>
         </div>
       </div>
-
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -621,8 +962,8 @@ const AdminDashboard = () => {
                     </div>
                   </td>
                 </tr>
-              ) : listings.length > 0 ? (
-                listings.map(listing => (
+              ) : data.listings.length > 0 ? (
+                data.listings.map(listing => (
                   <tr key={listing.id} className="hover:bg-gray-50 transition-colors">
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-3">
@@ -691,6 +1032,7 @@ const AdminDashboard = () => {
     </div>
   );
 
+  // Reservations Content
   const ReservationsContent = () => (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -724,8 +1066,8 @@ const AdminDashboard = () => {
             <AlertCircle size={20} className="mr-2" />
             <p>{error.reservations}</p>
           </div>
-        ) : reservations.length > 0 ? (
-          reservations.map(reservation => (
+        ) : data.reservations.length > 0 ? (
+          data.reservations.map(reservation => (
             <div key={reservation.id} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">
@@ -735,7 +1077,6 @@ const AdminDashboard = () => {
                 </div>
                 <StatusBadge status={reservation.status} type="reservation" />
               </div>
-
               <div className="flex items-center justify-between mb-4">
                 <span className="text-2xl font-bold text-gray-900">₵{reservation.totalPrice}</span>
                 <div className="flex items-center gap-1 text-gray-500">
@@ -743,7 +1084,6 @@ const AdminDashboard = () => {
                   <span className="text-sm">Payment</span>
                 </div>
               </div>
-
               <div className="flex gap-2">
                 {reservation.status === 'PENDING' && (
                   <>
@@ -771,7 +1111,7 @@ const AdminDashboard = () => {
                     size="md"
                     onClick={() => handleReservationAction(reservation.id, 'COMPLETED')}
                   >
-                 <CheckCircle2 size={14} className="mr-1" />
+                    <CheckCircle2 size={14} className="mr-1" />
                     Complete
                   </ActionButton>
                 )}
@@ -795,6 +1135,7 @@ const AdminDashboard = () => {
     </div>
   );
 
+  // Providers Content
   const ProvidersContent = () => (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -815,7 +1156,6 @@ const AdminDashboard = () => {
           </ActionButton>
         </div>
       </div>
-
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -848,8 +1188,8 @@ const AdminDashboard = () => {
                     </div>
                   </td>
                 </tr>
-              ) : providers.length > 0 ? (
-                providers.map(provider => (
+              ) : data.providers.length > 0 ? (
+                data.providers.map(provider => (
                   <tr key={provider.id} className="hover:bg-gray-50 transition-colors">
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-3">
@@ -918,6 +1258,7 @@ const AdminDashboard = () => {
     </div>
   );
 
+  // Notifications Content
   const NotificationsContent = () => (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -940,7 +1281,6 @@ const AdminDashboard = () => {
           </ActionButton>
         </div>
       </div>
-
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="space-y-0">
           {loading.notifications ? (
@@ -1002,6 +1342,7 @@ const AdminDashboard = () => {
     </div>
   );
 
+  // Settings Content
   const SettingsContent = () => (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -1010,7 +1351,6 @@ const AdminDashboard = () => {
           <p className="text-gray-600 mt-1">Manage system settings and preferences</p>
         </div>
       </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">System Settings</h3>
@@ -1037,7 +1377,6 @@ const AdminDashboard = () => {
             </div>
           </div>
         </div>
-
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Platform Settings</h3>
           <div className="space-y-4">
@@ -1070,19 +1409,24 @@ const AdminDashboard = () => {
     </div>
   );
 
+  // Sidebar items with Users tab
   const sidebarItems = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+    { id: 'users', label: 'Users', icon: Users },
     { id: 'listings', label: 'Listings', icon: Home },
     { id: 'reservations', label: 'Reservations', icon: Calendar },
-    { id: 'providers', label: 'Providers', icon: Users },
+    { id: 'providers', label: 'Providers', icon: UserCheck },
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
+  // Render content based on active tab
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
         return <DashboardContent />;
+      case 'users':
+        return <UsersContent />;
       case 'listings':
         return <ListingsContent />;
       case 'reservations':
@@ -1115,7 +1459,6 @@ const AdminDashboard = () => {
           onClick={() => setSidebarOpen(false)}
         />
       )}
-
       {/* Sidebar */}
       <div className={`fixed left-0 top-0 h-full w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out z-50 ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
@@ -1148,9 +1491,9 @@ const AdminDashboard = () => {
                 >
                   <item.icon size={20} />
                   <span className="font-medium">{item.label}</span>
-                  {item.id === 'notifications' && notifications.filter(n => !n.read).length > 0 && (
+                  {item.id === 'notifications' && data.notifications.filter(n => !n.read).length > 0 && (
                     <span className="ml-auto bg-red-500 text-white text-xs px-2 py-1 rounded-full">
-                      {notifications.filter(n => !n.read).length}
+                      {data.notifications.filter(n => !n.read).length}
                     </span>
                   )}
                 </button>
@@ -1159,7 +1502,6 @@ const AdminDashboard = () => {
           </ul>
         </nav>
       </div>
-
       {/* Main content */}
       <div className="lg:ml-64">
         {/* Header */}
@@ -1184,9 +1526,9 @@ const AdminDashboard = () => {
             <div className="flex items-center gap-4">
               <div className="relative">
                 <Bell size={20} className="text-gray-600" />
-                {notifications.filter(n => !n.read).length > 0 && (
+                {data.notifications.filter(n => !n.read).length > 0 && (
                   <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">
-                    {notifications.filter(n => !n.read).length}
+                    {data.notifications.filter(n => !n.read).length}
                   </span>
                 )}
               </div>
@@ -1198,7 +1540,6 @@ const AdminDashboard = () => {
             </div>
           </div>
         </header>
-
         {/* Page content */}
         <main className="p-6">
           {renderContent()}
