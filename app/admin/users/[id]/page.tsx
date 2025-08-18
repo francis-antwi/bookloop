@@ -73,15 +73,15 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
         const data = await response.json();
         setUser(data);
         setFormData({
-          status: data.status,
-          role: data.role,
-          verified: data.verified,
-          businessVerified: data.businessVerified,
-          category: data.category,
+          status: data.status || '',
+          role: data.role || UserRole.CUSTOMER,
+          verified: data.verified || false,
+          businessVerified: data.businessVerified || false,
+          category: data.category || null,
         });
         if (data.businessVerification) {
           setBusinessForm({
-            verified: data.businessVerification.verified,
+            verified: data.businessVerification.verified || false,
             allowedCategories: data.businessVerification.allowedCategories || [],
           });
         }
@@ -188,17 +188,17 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
           <div className="flex flex-col items-center mb-6">
             <div className="avatar placeholder mb-4">
               <div className="bg-neutral text-neutral-content rounded-full w-24 h-24">
-                <span className="text-3xl">{user.name.charAt(0).toUpperCase()}</span>
+                <span className="text-3xl">{user.name?.charAt(0).toUpperCase() || 'U'}</span>
               </div>
             </div>
-            <h2 className="text-xl font-bold">{user.name}</h2>
+            <h2 className="text-xl font-bold">{user.name || 'Unknown User'}</h2>
             <p className="text-sm text-gray-500">User ID: {user.id}</p>
           </div>
 
           <div className="space-y-4">
             <div className="flex items-center">
               <FiMail className="mr-2 text-gray-500" />
-              <span>{user.email}</span>
+              <span>{user.email || 'No email'}</span>
             </div>
             {user.contactPhone && (
               <div className="flex items-center">
@@ -208,7 +208,7 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
             )}
             <div className="flex items-center">
               <FiShield className="mr-2 text-gray-500" />
-              <span className="capitalize">{user.role.toLowerCase()}</span>
+              <span className="capitalize">{user.role?.toLowerCase() || 'No role'}</span>
             </div>
             <div className="flex items-center">
               <FiCheckCircle className="mr-2 text-gray-500" />
@@ -346,11 +346,11 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
               <div className="space-y-4">
                 <div>
                   <p className="text-sm text-gray-500">Status</p>
-                  <p className="capitalize">{user.status.toLowerCase()}</p>
+                  <p className="capitalize">{user.status?.toLowerCase() || 'Unknown'}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Role</p>
-                  <p className="capitalize">{user.role.toLowerCase()}</p>
+                  <p className="capitalize">{user.role?.toLowerCase() || 'Unknown'}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Category</p>
@@ -384,11 +384,11 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">TIN Number</p>
-                  <p>{user.businessVerification.tinNumber}</p>
+                  <p>{user.businessVerification.tinNumber || 'Not provided'}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Registration Number</p>
-                  <p>{user.businessVerification.registrationNumber}</p>
+                  <p>{user.businessVerification.registrationNumber || 'Not provided'}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Verification Status</p>
@@ -401,11 +401,11 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
               <div className="mb-6">
                 <h3 className="font-medium mb-2">Business Types</h3>
                 <div className="flex flex-wrap gap-2">
-                  {user.businessVerification.businessType.map(type => (
+                  {user.businessVerification.businessType?.map(type => (
                     <span key={type} className="badge badge-primary">
-                      {type.toLowerCase().replace('_', ' ')}
+                      {type?.toLowerCase().replace('_', ' ') || 'Unknown'}
                     </span>
-                  ))}
+                  )) || <span className="text-gray-500">No business types</span>}
                 </div>
               </div>
 
@@ -421,7 +421,7 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
                           ? 'badge-primary' 
                           : 'badge-outline'}`}
                       >
-                        {category.toLowerCase().replace('_', ' ')}
+                        {category?.toLowerCase().replace('_', ' ') || 'Unknown'}
                       </button>
                     ))}
                   </div>
@@ -456,9 +456,9 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
                   <div className="space-y-2">
                     {user.listings.map(listing => (
                       <div key={listing.id} className="p-3 border rounded-lg">
-                        <p className="font-medium">{listing.title}</p>
+                        <p className="font-medium">{listing.title || 'Untitled'}</p>
                         <div className="flex justify-between text-sm text-gray-500">
-                          <span className="capitalize">{listing.status.toLowerCase()}</span>
+                          <span className="capitalize">{listing.status?.toLowerCase() || 'Unknown'}</span>
                           <span>{new Date(listing.createdAt).toLocaleDateString()}</span>
                         </div>
                       </div>
@@ -476,9 +476,9 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
                     {user.reservations.map(reservation => (
                       <div key={reservation.id} className="p-3 border rounded-lg">
                         <div className="flex justify-between">
-                          <span className="font-medium">${reservation.totalPrice.toFixed(2)}</span>
+                          <span className="font-medium">${reservation.totalPrice?.toFixed(2) || '0.00'}</span>
                           <span className="text-sm capitalize">
-                            {reservation.status.toLowerCase()}
+                            {reservation.status?.toLowerCase() || 'Unknown'}
                           </span>
                         </div>
                         <div className="text-sm text-gray-500">
