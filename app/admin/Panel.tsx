@@ -293,29 +293,50 @@ const AdminDashboard = () => {
   };
 
   // Add fetchUsers function
-  const fetchUsers = async () => {
-    try {
-      setLoading(prev => ({ ...prev, users: true }));
-      setError(prev => ({ ...prev, users: null }));
-      
-      const query = new URLSearchParams();
-      if (userFilters.role !== 'all') query.append('role', userFilters.role);
-      if (userFilters.status !== 'all') query.append('status', userFilters.status);
-      if (userFilters.search) query.append('search', userFilters.search);
-      
-      const res = await fetch(`/api/admin/users?${query.toString()}`);
-      if (!res.ok) throw new Error('Failed to fetch users');
-      
-      const users = await res.json();
-      setData(prev => ({ ...prev, users }));
-    } catch (err) {
-      console.error('Failed to load users:', err);
-      setError(prev => ({ ...prev, users: err instanceof Error ? err.message : 'Failed to load users' }));
-    } finally {
-      setLoading(prev => ({ ...prev, users: false }));
-    }
-  };
+const fetchUsers = async () => {
+  try {
+    setLoading(prev => ({ ...prev, users: true }));
+    setError(prev => ({ ...prev, users: null }));
+    
+    // Build query parameters
+    const params = new URLSearchParams();
+    if (userFilters.role !== 'all') params.append('role', userFilters.role);
+    if (userFilters.status !== 'all') params.append('status', userFilters.status);
+    if (userFilters.search) params.append('search', userFilters.search);
 
+    // Add headers and credentials
+    const res = await fetch(`/api/admin/users?${params.toString()}`, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include', // Important for session cookies
+    });
+
+    // Check for errors
+    if (!res.ok) {
+      let errorMessage = 'Failed to fetch users';
+      try {
+        const errorData = await res.json();
+        errorMessage = errorData.error || errorData.message || errorMessage;
+      } catch (e) {
+        console.error('Failed to parse error response', e);
+      }
+      throw new Error(`${errorMessage} (Status: ${res.status})`);
+    }
+
+    // Parse successful response
+    const users = await res.json();
+    setData(prev => ({ ...prev, users }));
+  } catch (err) {
+    console.error('Failed to load users:', err);
+    setError(prev => ({ 
+      ...prev, 
+      users: err instanceof Error ? err.message : 'Failed to load users' 
+    }));
+  } finally {
+    setLoading(prev => ({ ...prev, users: false }));
+  }
+};
   // Fetch listings
   useEffect(() => {
     const fetchListings = async () => {
