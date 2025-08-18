@@ -18,7 +18,7 @@ interface UserData {
   status: string;
   verified: boolean;
   businessVerified: boolean;
-  categories: ServiceCategory[];
+  categories: ServiceCategory[]; // Changed from category to categories
   createdAt: Date;
   updatedAt: Date;
   isOtpVerified: boolean;
@@ -58,7 +58,7 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
     role: UserRole.CUSTOMER,
     verified: false,
     businessVerified: false,
-    categories: [] as ServiceCategory[],
+    categories: [] as ServiceCategory[], // Changed to array
   });
   const [businessForm, setBusinessForm] = useState({
     verified: false,
@@ -77,7 +77,7 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
           role: data.role || UserRole.CUSTOMER,
           verified: data.verified || false,
           businessVerified: data.businessVerified || false,
-          categories: data.categories || [],
+          categories: data.categories || [], // Changed to array
         });
         if (data.businessVerification) {
           setBusinessForm({
@@ -236,15 +236,12 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
               <span>Face {user.isFaceVerified ? 'Verified' : 'Not Verified'}</span>
             </div>
             {user.categories && user.categories.length > 0 && (
-              <div className="flex items-center">
-                <FiUser className="mr-2 text-gray-500" />
-                <div className="flex flex-wrap gap-1">
-                  {user.categories.map(category => (
-                    <span key={category} className="badge badge-sm badge-outline">
-                      {category?.toLowerCase().replace('_', ' ') || 'Unknown'}
-                    </span>
-                  ))}
-                </div>
+              <div className="flex flex-wrap gap-1">
+                {user.categories.map(category => (
+                  <span key={category} className="badge badge-primary">
+                    {category.toLowerCase().replace('_', ' ')}
+                  </span>
+                ))}
               </div>
             )}
           </div>
@@ -326,17 +323,14 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
                         key={category}
                         type="button"
                         onClick={() => handleCategoryToggle(category)}
-                        className={`btn btn-sm ${formData.categories.includes(category) 
-                          ? 'btn-primary' 
-                          : 'btn-outline'} hover:scale-105 transition-transform`}
+                        className={`badge ${formData.categories.includes(category) 
+                          ? 'badge-primary' 
+                          : 'badge-outline'}`}
                       >
-                        {category?.toLowerCase().replace('_', ' ') || 'Unknown'}
+                        {category.toLowerCase().replace('_', ' ')}
                       </button>
                     ))}
                   </div>
-                  {formData.categories.length === 0 && (
-                    <p className="text-sm text-gray-500 mt-1">No categories selected</p>
-                  )}
                 </div>
 
                 <div className="form-control">
@@ -381,11 +375,11 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
                     {user.categories && user.categories.length > 0 ? (
                       user.categories.map(category => (
                         <span key={category} className="badge badge-primary">
-                          {category?.toLowerCase().replace('_', ' ') || 'Unknown'}
+                          {category.toLowerCase().replace('_', ' ')}
                         </span>
                       ))
                     ) : (
-                      <span className="text-gray-500">None</span>
+                      <p>None</p>
                     )}
                   </div>
                 </div>
@@ -447,11 +441,10 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
                     {Object.values(ServiceCategory).map(category => (
                       <button
                         key={category}
-                        type="button"
                         onClick={() => handleBusinessToggle(category)}
-                        className={`btn btn-sm ${businessForm.allowedCategories.includes(category) 
-                          ? 'btn-primary' 
-                          : 'btn-outline'} hover:scale-105 transition-transform`}
+                        className={`badge ${businessForm.allowedCategories.includes(category) 
+                          ? 'badge-primary' 
+                          : 'badge-outline'}`}
                       >
                         {category?.toLowerCase().replace('_', ' ') || 'Unknown'}
                       </button>
