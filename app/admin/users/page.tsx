@@ -1,23 +1,39 @@
 'use client';
 
-import { UserRole } from '@prisma/client';
+import { UserRole, ServiceCategory } from '@prisma/client';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
-import { FiArrowLeft, FiSave, FiUser, FiMail, FiPhone, FiCheckCircle, FiShield } from 'react-icons/fi';
+import { 
+  FiArrowLeft, FiSave, FiUser, FiMail, FiPhone, 
+  FiCheckCircle, FiShield, FiBriefcase, FiFileText 
+} from 'react-icons/fi';
 
-interface UserDetails {
+interface UserData {
   id: string;
-  name: string | null;
+  name: string;
   email: string;
   contactPhone: string | null;
   role: UserRole;
   status: string;
   verified: boolean;
   businessVerified: boolean;
-  category: string | null;
+  category: ServiceCategory | null;
   createdAt: Date;
   updatedAt: Date;
+  isOtpVerified: boolean;
+  isFaceVerified: boolean;
+  trustScore: number | null;
+  requiresApproval: boolean;
+  businessVerification?: {
+    id: string;
+    tinNumber: string;
+    registrationNumber: string;
+    businessName: string;
+    businessType: ServiceCategory[];
+    allowedCategories: ServiceCategory[];
+    verified: boolean;
+  };
   listings?: Array<{
     id: string;
     title: string;
@@ -32,31 +48,43 @@ interface UserDetails {
   }>;
 }
 
-export default function UserDetailPage({ params }: { params: { id: string } }) {
+export default function AdminUserDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
-  const [user, setUser] = useState<UserDetails | null>(null);
+  const [user, setUser] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState({
     status: '',
-    role: UserRole.USER,
+    role: UserRole.CUSTOMER,
     verified: false,
+    businessVerified: false,
+    category: null as ServiceCategory | null,
+  });
+  const [businessForm, setBusinessForm] = useState({
+    verified: false,
+    allowedCategories: [] as ServiceCategory[],
   });
 
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const response = await fetch(`/api/users/${params.id}`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch user');
-        }
+        const response = await fetch(`/api/admin/users/${params.id}`);
+        if (!response.ok) throw new Error('Failed to fetch user');
         const data = await response.json();
         setUser(data);
         setFormData({
           status: data.status,
           role: data.role,
           verified: data.verified,
+          businessVerified: data.businessVerified,
+          category: data.category,
         });
+        if (data.businessVerification) {
+          setBusinessForm({
+            verified: data.businessVerification.verified,
+            allowedCategories: data.businessVerification.allowedCategories || [],
+          });
+        }
       } catch (error) {
         toast.error('Failed to load user data');
         console.error(error);
@@ -78,21 +106,45 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
     }));
   };
 
+  const handleBusinessToggle = (category: ServiceCategory) => {
+    setBusinessForm(prev => {
+      const newCategories = prev.allowedCategories.includes(category)
+        ? prev.allowedCategories.filter(c => c !== category)
+        : [...prev.allowedCategories, category];
+      
+      return {
+        ...prev,
+        allowedCategories: newCategories,
+      };
+    });
+  };
+
   const handleSave = async () => {
     try {
-      const response = await fetch(`/api/users/${params.id}`, {
+      // Update user basic info
+      const userResponse = await fetch(`/api/admin/users/${params.id}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to update user');
+      if (!userResponse.ok) throw new Error('Failed to update user');
+
+      // Update business verification if exists
+      if (user?.businessVerification) {
+        const businessResponse = await fetch(`/api/admin/business-verification/${user.businessVerification.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            verified: businessForm.verified,
+            allowedCategories: businessForm.allowedCategories,
+          }),
+        });
+
+        if (!businessResponse.ok) throw new Error('Failed to update business verification');
       }
 
-      const updatedUser = await response.json();
+      const updatedUser = await userResponse.json();
       setUser(updatedUser);
       setEditing(false);
       toast.success('User updated successfully');
@@ -114,10 +166,7 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
     return (
       <div className="flex flex-col items-center justify-center h-screen">
         <h1 className="text-2xl font-bold mb-4">User Not Found</h1>
-        <button
-          onClick={() => router.back()}
-          className="btn btn-primary"
-        >
+        <button onClick={() => router.back()} className="btn btn-primary">
           <FiArrowLeft className="mr-2" /> Go Back
         </button>
       </div>
@@ -127,13 +176,10 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex items-center mb-6">
-        <button
-          onClick={() => router.back()}
-          className="btn btn-ghost mr-4"
-        >
+        <button onClick={() => router.back()} className="btn btn-ghost mr-4">
           <FiArrowLeft size={20} />
         </button>
-        <h1 className="text-3xl font-bold">User Details</h1>
+        <h1 className="text-3xl font-bold">User Management</h1>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -142,12 +188,10 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
           <div className="flex flex-col items-center mb-6">
             <div className="avatar placeholder mb-4">
               <div className="bg-neutral text-neutral-content rounded-full w-24 h-24">
-                <span className="text-3xl">
-                  {user.name?.charAt(0).toUpperCase() || user.email.charAt(0).toUpperCase()}
-                </span>
+                <span className="text-3xl">{user.name.charAt(0).toUpperCase()}</span>
               </div>
             </div>
-            <h2 className="text-xl font-bold">{user.name || 'No name provided'}</h2>
+            <h2 className="text-xl font-bold">{user.name}</h2>
             <p className="text-sm text-gray-500">User ID: {user.id}</p>
           </div>
 
@@ -168,14 +212,20 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
             </div>
             <div className="flex items-center">
               <FiCheckCircle className="mr-2 text-gray-500" />
-              <span className="capitalize">
-                {user.verified ? 'Verified' : 'Not Verified'}
-              </span>
+              <span>Email {user.verified ? 'Verified' : 'Not Verified'}</span>
+            </div>
+            <div className="flex items-center">
+              <FiCheckCircle className="mr-2 text-gray-500" />
+              <span>OTP {user.isOtpVerified ? 'Verified' : 'Not Verified'}</span>
+            </div>
+            <div className="flex items-center">
+              <FiCheckCircle className="mr-2 text-gray-500" />
+              <span>Face {user.isFaceVerified ? 'Verified' : 'Not Verified'}</span>
             </div>
             {user.category && (
               <div className="flex items-center">
                 <FiUser className="mr-2 text-gray-500" />
-                <span className="capitalize">{user.category}</span>
+                <span className="capitalize">{user.category.toLowerCase().replace('_', ' ')}</span>
               </div>
             )}
           </div>
@@ -192,6 +242,7 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
 
         {/* Edit Section */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Account Status Card */}
           <div className="bg-base-100 rounded-lg shadow p-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold">Account Status</h2>
@@ -224,8 +275,9 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                     className="select select-bordered w-full"
                   >
                     <option value="ACTIVE">Active</option>
-                    <option value="INACTIVE">Inactive</option>
-                    <option value="SUSPENDED">Suspended</option>
+                    <option value="PENDING_REVIEW">Pending Review</option>
+                    <option value="REJECTED">Rejected</option>
+                    <option value="BANNED">Banned</option>
                   </select>
                 </div>
 
@@ -239,9 +291,26 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                     onChange={handleInputChange}
                     className="select select-bordered w-full"
                   >
-                    {Object.values(UserRole).map(role => (
-                      <option key={role} value={role}>
-                        {role.charAt(0) + role.slice(1).toLowerCase()}
+                    <option value={UserRole.CUSTOMER}>Customer</option>
+                    <option value={UserRole.PROVIDER}>Provider</option>
+                    <option value={UserRole.ADMIN}>Admin</option>
+                  </select>
+                </div>
+
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Category</span>
+                  </label>
+                  <select
+                    name="category"
+                    value={formData.category || ''}
+                    onChange={handleInputChange}
+                    className="select select-bordered w-full"
+                  >
+                    <option value="">None</option>
+                    {Object.values(ServiceCategory).map(category => (
+                      <option key={category} value={category}>
+                        {category.toLowerCase().replace('_', ' ')}
                       </option>
                     ))}
                   </select>
@@ -249,11 +318,24 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
 
                 <div className="form-control">
                   <label className="label cursor-pointer">
-                    <span className="label-text">Verified</span>
+                    <span className="label-text">Email Verified</span>
                     <input
                       type="checkbox"
                       name="verified"
                       checked={formData.verified}
+                      onChange={handleInputChange}
+                      className="toggle toggle-primary"
+                    />
+                  </label>
+                </div>
+
+                <div className="form-control">
+                  <label className="label cursor-pointer">
+                    <span className="label-text">Business Verified</span>
+                    <input
+                      type="checkbox"
+                      name="businessVerified"
+                      checked={formData.businessVerified}
                       onChange={handleInputChange}
                       className="toggle toggle-primary"
                     />
@@ -271,7 +353,13 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                   <p className="capitalize">{user.role.toLowerCase()}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">Verified</p>
+                  <p className="text-sm text-gray-500">Category</p>
+                  <p className="capitalize">
+                    {user.category ? user.category.toLowerCase().replace('_', ' ') : 'None'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Email Verified</p>
                   <p className="capitalize">{user.verified ? 'Yes' : 'No'}</p>
                 </div>
                 <div>
@@ -282,9 +370,84 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
             )}
           </div>
 
-          {/* User Activity */}
+          {/* Business Verification Section */}
+          {user.businessVerification && (
+            <div className="bg-base-100 rounded-lg shadow p-6">
+              <h2 className="text-xl font-bold mb-4 flex items-center">
+                <FiBriefcase className="mr-2" /> Business Verification
+              </h2>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div>
+                  <p className="text-sm text-gray-500">Business Name</p>
+                  <p>{user.businessVerification.businessName || 'Not provided'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">TIN Number</p>
+                  <p>{user.businessVerification.tinNumber}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Registration Number</p>
+                  <p>{user.businessVerification.registrationNumber}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Verification Status</p>
+                  <p className="capitalize">
+                    {user.businessVerification.verified ? 'Verified' : 'Not Verified'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <h3 className="font-medium mb-2">Business Types</h3>
+                <div className="flex flex-wrap gap-2">
+                  {user.businessVerification.businessType.map(type => (
+                    <span key={type} className="badge badge-primary">
+                      {type.toLowerCase().replace('_', ' ')}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {editing && (
+                <div>
+                  <h3 className="font-medium mb-2">Allowed Service Categories</h3>
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {Object.values(ServiceCategory).map(category => (
+                      <button
+                        key={category}
+                        onClick={() => handleBusinessToggle(category)}
+                        className={`badge ${businessForm.allowedCategories.includes(category) 
+                          ? 'badge-primary' 
+                          : 'badge-outline'}`}
+                      >
+                        {category.toLowerCase().replace('_', ' ')}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="form-control">
+                    <label className="label cursor-pointer">
+                      <span className="label-text">Verify Business</span>
+                      <input
+                        type="checkbox"
+                        checked={businessForm.verified}
+                        onChange={() => setBusinessForm(prev => ({
+                          ...prev,
+                          verified: !prev.verified
+                        }))}
+                        className="toggle toggle-primary"
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* User Activity Section */}
           <div className="bg-base-100 rounded-lg shadow p-6">
-            <h2 className="text-xl font-bold mb-4">Recent Activity</h2>
+            <h2 className="text-xl font-bold mb-4">User Activity</h2>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
@@ -308,13 +471,15 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
 
               <div>
                 <h3 className="font-medium mb-2">Recent Reservations ({user.reservations?.length || 0})</h3>
-                {user.reservations && user.resations.length > 0 ? (
+                {user.reservations && user.reservations.length > 0 ? (
                   <div className="space-y-2">
                     {user.reservations.map(reservation => (
                       <div key={reservation.id} className="p-3 border rounded-lg">
                         <div className="flex justify-between">
                           <span className="font-medium">${reservation.totalPrice.toFixed(2)}</span>
-                          <span className="text-sm capitalize">{reservation.status.toLowerCase()}</span>
+                          <span className="text-sm capitalize">
+                            {reservation.status.toLowerCase()}
+                          </span>
                         </div>
                         <div className="text-sm text-gray-500">
                           {new Date(reservation.createdAt).toLocaleDateString()}

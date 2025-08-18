@@ -172,6 +172,7 @@ export async function PATCH(
     console.log(`✅ Updated user: ${updatedUser.email}`);
     return NextResponse.json(updatedUser);
     
+    
   } catch (error) {
     console.error('💥 Error updating user:', error);
     return NextResponse.json(
