@@ -369,7 +369,6 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
       toast.success('Business verification submitted for review!');
       router.push('/pending-approval');
       onComplete();
-    } catch (error: any) {
     } finally {
       setIsLoading(false);
     }
