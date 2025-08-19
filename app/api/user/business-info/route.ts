@@ -1,8 +1,9 @@
-// File: app/api/user/business-info/route.ts
+
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+
 import prisma from '@/app/libs/prismadb';
+import authOptions from '@/app/auth/authOptions';
 
 export async function GET(request: Request) {
   try {
