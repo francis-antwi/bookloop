@@ -36,11 +36,11 @@ const Home = async ({ searchParams }: HomeProps) => {
     <Client>
       <Container>
         {/* Render RecommendedListings outside the grid */}
+        <div className="mt-10"></div>
         <RecommendedListings />
         
         <div
           className="
-            pt-8 // Reduced padding since recommendations are above
             grid
             grid-cols-1
             sm:grid-cols-2
