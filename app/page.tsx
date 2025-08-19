@@ -36,9 +36,9 @@ const Home = async ({ searchParams }: HomeProps) => {
     <Client>
       <Container>
         {/* Render RecommendedListings outside the grid */}
-        <div className="mt-10">
+     
           <RecommendedListings />
-        </div>
+     
         
         <div
           className="
