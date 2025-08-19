@@ -95,12 +95,12 @@ export default function RecommendedListings({ currentUser }: RecommendedListings
 
   if (!recommendations.length) {
     return (
-      <div className="my-12">
+      <div className="mb-6">
         <h2 className="text-2xl font-semibold mb-4 text-gray-900">Recommended For You</h2>
-        <div className="text-center py-12 bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg border border-purple-200">
-          <div className="text-4xl mb-4">🎯</div>
+        <div className="text-center py-8 bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg border border-purple-200">
+          <div className="text-3xl mb-3">🎯</div>
           <p className="text-gray-700 font-medium mb-2">No recommendations available yet.</p>
-          <p className="text-sm text-gray-600 mb-6">
+          <p className="text-sm text-gray-600 mb-4">
             Make some reservations to get personalized recommendations!
           </p>
           
@@ -117,7 +117,7 @@ export default function RecommendedListings({ currentUser }: RecommendedListings
                 categoryButtons?.scrollIntoView({ behavior: 'smooth' });
               }
             }}
-            className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium text-sm"
           >
             Explore Categories
           </button>
