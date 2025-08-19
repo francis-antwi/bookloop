@@ -18,6 +18,7 @@ import {
 import { useSession } from 'next-auth/react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import Camera from '../components/inputs/Camera';
 
 interface VerificationStepsProps {
   onComplete: () => void;
@@ -428,15 +429,7 @@ const SelfieStep = ({ selfieImage, onSelfieCapture, onNext, canProceed }: Selfie
     </div>
     
     <div className="relative">
-      {/* Replace with your actual Camera component */}
-      <div className="w-full h-64 bg-gray-200 rounded-lg flex items-center justify-center">
-        <button 
-          onClick={() => onSelfieCapture(new Blob())}
-          className="p-4 bg-white rounded-full shadow-md"
-        >
-          <FiCamera className="text-blue-500 text-2xl" />
-        </button>
-      </div>
+      <Camera onCapture={onSelfieCapture} />
       {selfieImage && (
         <div className="absolute top-2 right-2 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
           <FiCheck className="text-white text-sm" />
