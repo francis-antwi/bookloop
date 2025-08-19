@@ -1,5 +1,5 @@
 import getCurrentUser from "./actions/getCurrentUser";
-import getListings, { IListingsParams } from "./actions/getListing";
+import getListings, { IListingsParams } from "./actions/getListings"; // Fixed: was "getListing"
 import Client from "./components/Client";
 import Container from "./components/Container";
 import EmptyState from "./components/EmptyState";
@@ -36,8 +36,9 @@ const Home = async ({ searchParams }: HomeProps) => {
     <Client>
       <Container>
         {/* Render RecommendedListings outside the grid */}
-        <div className="mt-50"> <RecommendedListings /></div>
-       
+        <div className="mt-10">
+          <RecommendedListings />
+        </div>
         
         <div
           className="
