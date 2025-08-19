@@ -5,26 +5,25 @@ import prisma from '@/app/libs/prismadb';
 import authOptions from '@/app/auth/authOptions';
 
 
-
 export async function GET(request: Request) {
   try {
-    console.log('Business info API called'); // Debug log
+    console.log('Business info API called');
     
-    // Get the server session with the request context
+    // Get the server session
     const session = await getServerSession(authOptions);
     
-    console.log('Session data:', session); // Debug log
+    console.log('Session data:', session);
 
-    if (!session?.user?.id) {
-      console.log('Unauthorized: No session or user ID');
+    if (!session?.user?.email) {
+      console.log('Unauthorized: No session or user email');
       return new NextResponse('Unauthorized', { status: 401 });
     }
 
-    console.log('User ID from session:', session.user.id); // Debug log
+    console.log('User email from session:', session.user.email);
 
-    // Get user with business verification info
+    // Get user with business verification info using email
     const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
+      where: { email: session.user.email },
       include: {
         businessVerification: {
           select: {
@@ -43,7 +42,7 @@ export async function GET(request: Request) {
       return new NextResponse('User not found', { status: 404 });
     }
 
-    console.log('User found:', user.email); // Debug log
+    console.log('User found:', user.email);
 
     // Determine allowed categories based on verification status
     let allowedCategories: string[] = [];
@@ -72,7 +71,7 @@ export async function GET(request: Request) {
       } : null
     };
 
-    console.log('Response data:', responseData); // Debug log
+    console.log('Response data:', responseData);
 
     return NextResponse.json(responseData);
   } catch (error) {
