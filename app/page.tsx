@@ -35,9 +35,12 @@ const Home = async ({ searchParams }: HomeProps) => {
   return (
     <Client>
       <Container>
+        {/* Render RecommendedListings outside the grid */}
+        <RecommendedListings />
+        
         <div
           className="
-            pt-24
+            pt-8 // Reduced padding since recommendations are above
             grid
             grid-cols-1
             sm:grid-cols-2
@@ -48,15 +51,13 @@ const Home = async ({ searchParams }: HomeProps) => {
             gap-9
           "
         >
-        {listings.length > 0 && <RecommendedListings />}
-
-  {listings.map((listing: SafeListing) => (
-    <ListingCard
-      key={listing.id}
-      data={listing}
-      currentUser={currentUser}
-    />
-  ))}
+          {listings.map((listing: SafeListing) => (
+            <ListingCard
+              key={listing.id}
+              data={listing}
+              currentUser={currentUser}
+            />
+          ))}
         </div>
       </Container>
     </Client>
