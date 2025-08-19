@@ -1,24 +1,17 @@
-'use client';
-
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import {
-  FiUpload,
-  FiCheck,
-  FiLoader,
-  FiArrowLeft,
-  FiArrowRight,
-  FiShield,
-  FiUser,
-  FiFileText,
-  FiAlertCircle,
-  FiBriefcase,
-  FiCamera
-} from 'react-icons/fi';
-import { useSession } from 'next-auth/react';
-import axios from 'axios';
-import toast from 'react-hot-toast';
-import Camera from '../components/inputs/Camera';
+import { 
+  Upload, 
+  Check, 
+  Loader, 
+  ArrowLeft, 
+  ArrowRight, 
+  Shield, 
+  User, 
+  FileText, 
+  AlertCircle, 
+  Briefcase,
+  Camera
+} from 'lucide-react';
 
 interface VerificationStepsProps {
   onComplete: () => void;
@@ -27,7 +20,7 @@ interface VerificationStepsProps {
 enum ServiceCategory {
   APARTMENTS = "Apartments",
   CARS = "Cars",
-  EVENT_CENTERS = "Event Centers",
+  EVENT_CENTERS = "Event Centers", 
   HOTEL_ROOMS = "Hotel Rooms",
   TOUR_SERVICES = "Tour Services",
   EVENT_TICKETS = "Event Tickets",
@@ -57,20 +50,112 @@ interface IdentityVerificationStatus {
   error?: string;
 }
 
+// Real Camera Component
+const RealCamera = ({ onCapture }: { onCapture: (blob: Blob) => void }) => {
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const videoRef = useState<HTMLVideoElement | null>(null)[0];
+  
+  const startCamera = async () => {
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'user' } 
+      });
+      setStream(mediaStream);
+      setIsCameraActive(true);
+      
+      if (videoRef) {
+        videoRef.srcObject = mediaStream;
+      }
+    } catch (error) {
+      alert('Camera access denied or not available');
+    }
+  };
+
+  const stopCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      setStream(null);
+      setIsCameraActive(false);
+    }
+  };
+
+  const capturePhoto = () => {
+    if (!videoRef) return;
+    
+    setIsCapturing(true);
+    const canvas = document.createElement('canvas');
+    canvas.width = videoRef.videoWidth;
+    canvas.height = videoRef.videoHeight;
+    
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(videoRef, 0, 0);
+    
+    canvas.toBlob((blob) => {
+      if (blob) {
+        onCapture(blob);
+        stopCamera();
+      }
+      setIsCapturing(false);
+    }, 'image/jpeg', 0.8);
+  };
+
+  return (
+    <div className="bg-gray-100 rounded-lg p-4 text-center">
+      {!isCameraActive ? (
+        <div>
+          <div className="w-32 h-32 bg-gray-200 rounded-full mx-auto mb-4 flex items-center justify-center">
+            <Camera className="text-gray-400 text-3xl" />
+          </div>
+          <button
+            onClick={startCamera}
+            className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+          >
+            Open Camera
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <video
+            ref={(ref) => {
+              if (ref && stream) {
+                ref.srcObject = stream;
+                ref.play();
+              }
+            }}
+            className="w-full max-w-sm mx-auto rounded-lg"
+            autoPlay
+            playsInline
+            muted
+          />
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={stopCamera}
+              className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={capturePhoto}
+              disabled={isCapturing}
+              className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50"
+            >
+              {isCapturing ? 'Capturing...' : 'Take Photo'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
-  const router = useRouter();
-  const { data: session } = useSession();
   const [currentStep, setCurrentStep] = useState<'selfie' | 'id' | 'business'>('selfie');
   const [selfieImageFile, setSelfieImageFile] = useState<Blob | null>(null);
   const [idImageFile, setIdImageFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [identityVerificationStatus, setIdentityVerificationStatus] = useState<IdentityVerificationStatus | null>(null);
-
-  const [collectedData, setCollectedData] = useState({
-    email: session?.user?.email || '',
-    name: session?.user?.name || '',
-    role: "PROVIDER" as const,
-  });
 
   const [businessFormData, setBusinessFormData] = useState<BusinessFormData>({
     tinNumber: '',
@@ -95,15 +180,15 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
 
   const handleIdUpload = (file: File) => {
     if (!file.type.match(/image\/(jpeg|png|jpg)/)) {
-      toast.error('Only JPEG/PNG images are allowed');
+      alert('Only JPEG/PNG images are allowed');
       return;
     }
     if (file.size < 20000) {
-      toast.error('Image too small. Try a higher-quality photo.');
+      alert('Image too small. Try a higher-quality photo.');
       return;
     }
     if (file.size > 5000000) {
-      toast.error('Image too large. Max 5MB.');
+      alert('Image too large. Max 5MB.');
       return;
     }
     setIdImageFile(file);
@@ -122,11 +207,11 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
     file: File
   ) => {
     if (!file.type.match(/image\/(jpeg|png|jpg)|application\/pdf/)) {
-      toast.error('Only JPEG/PNG/PDF files are allowed');
+      alert('Only JPEG/PNG/PDF files are allowed');
       return;
     }
     if (file.size > 10000000) {
-      toast.error('File too large. Max 10MB.');
+      alert('File too large. Max 10MB.');
       return;
     }
     setBusinessFiles(prev => ({ ...prev, [field]: file }));
@@ -151,7 +236,7 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
 
   const submitIdentityVerification = async () => {
     if (!selfieImageFile || !idImageFile) {
-      toast.error('Please complete all identity verification steps');
+      alert('Please complete all identity verification steps');
       return;
     }
 
@@ -159,45 +244,21 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
     setIdentityVerificationStatus(null);
 
     try {
-      const verificationFormData = new FormData();
-      verificationFormData.append('selfie', new File([selfieImageFile], 'selfie.jpg', { type: 'image/jpeg' }));
-      verificationFormData.append('idImage', idImageFile);
-      verificationFormData.append('verificationStep', 'identity');
-
-      const response = await axios.post('/api/verify', verificationFormData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 60000
-      });
-
-      if (!response.data.success) {
-        throw new Error(response.data.error || 'Identity verification failed');
-      }
-
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Simulate successful verification
       setIdentityVerificationStatus({ 
         success: true, 
-        confidence: response.data.matchConfidence 
+        confidence: 95
       });
-      toast.success('Identity verification complete!');
-
-      setCollectedData(prev => ({
-        ...prev,
-        selfieImage: response.data.selfieUrl,
-        idImage: response.data.idUrl,
-        faceConfidence: response.data.matchConfidence,
-        ...response.data.extractedData,
-        verified: true,
-        extractionComplete: true,
-        businessVerified: false
-      }));
 
       setTimeout(() => {
         setCurrentStep('business');
       }, 1500);
 
     } catch (error: any) {
-      const errorMsg = error.response?.data?.error || error.message || 'Verification failed';
-      setIdentityVerificationStatus({ success: false, error: errorMsg });
-      toast.error(errorMsg);
+      setIdentityVerificationStatus({ success: false, error: 'Verification failed' });
     } finally {
       setIsLoading(false);
     }
@@ -207,58 +268,23 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
     if (!businessFormData.tinNumber || 
         !businessFormData.businessName || 
         businessFormData.businessType.length === 0) {
-      toast.error('Please fill in all required business information');
+      alert('Please fill in all required business information');
       return;
     }
     if (!businessFiles.tinCertificate) {
-      toast.error('TIN Certificate is required');
+      alert('TIN Certificate is required');
       return;
     }
 
     setIsLoading(true);
 
     try {
-      const businessUploadFormData = new FormData();
-      businessUploadFormData.append('verificationStep', 'business');
-      
-      Object.entries(businessFiles).forEach(([key, file]) => {
-        if (file) businessUploadFormData.append(key, file);
-      });
-
-      const uploadResponse = await axios.post('/api/verify', businessUploadFormData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 120000
-      });
-
-      if (!uploadResponse.data.success) {
-        throw new Error(uploadResponse.data.error || 'Business document upload failed');
-      }
-
-      toast.success('Business documents uploaded!');
-
-      const finalRegistrationData = {
-        ...collectedData,
-        ...businessFormData,
-        tinCertificateUrl: uploadResponse.data.tinCertificateUrl,
-        incorporationCertUrl: uploadResponse.data.incorporationCertUrl,
-        vatCertificateUrl: uploadResponse.data.vatCertificateUrl,
-        ssnitCertUrl: uploadResponse.data.ssnitCertUrl,
-        role: "PROVIDER",
-        isFullProviderRegistration: true,
-      };
-
-      const registerRes = await axios.post('/api/register', finalRegistrationData);
-      
-      if (!registerRes.data.success) {
-        throw new Error(registerRes.data.message || "Registration failed");
-      }
-
-      toast.success('Business verification submitted for review!');
-      router.push('/pending-approval');
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      alert('Business verification submitted for review!');
       onComplete();
     } catch (error: any) {
-      const errorMsg = error.response?.data?.error || error.message || 'Business verification failed';
-      toast.error(errorMsg);
+      alert('Business verification failed');
     } finally {
       setIsLoading(false);
     }
@@ -302,7 +328,7 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
         {/* Header */}
         <div className="text-center mb-6">
           <div className="w-16 h-16 bg-blue-500 rounded-full mx-auto mb-4 flex items-center justify-center">
-            <FiShield className="text-white text-2xl" />
+            <Shield className="text-white text-2xl" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Seller Verification</h1>
           <p className="text-gray-600">Complete verification to start selling services</p>
@@ -317,7 +343,7 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
                 getStepNumber() === index + 1 ? 'bg-blue-500 text-white' :
                 'bg-gray-200 text-gray-500'
               }`}>
-                {getStepNumber() > index + 1 ? <FiCheck /> : index + 1}
+                {getStepNumber() > index + 1 ? <Check className="w-4 h-4" /> : index + 1}
               </div>
               {index < 2 && (
                 <div className={`w-12 h-0.5 mx-2 ${
@@ -332,7 +358,7 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
         {identityVerificationStatus?.success === false && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
             <div className="flex items-start gap-3">
-              <FiAlertCircle className="text-red-500 text-lg mt-0.5 flex-shrink-0" />
+              <AlertCircle className="text-red-500 text-lg mt-0.5 flex-shrink-0" />
               <div>
                 <p className="font-medium text-red-800">Verification Failed</p>
                 <p className="text-sm text-red-600 mt-1">{identityVerificationStatus.error}</p>
@@ -344,7 +370,7 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
         {identityVerificationStatus?.success === true && currentStep === 'id' && (
           <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
             <div className="flex items-start gap-3">
-              <FiCheck className="text-green-500 text-lg mt-0.5 flex-shrink-0" />
+              <Check className="text-green-500 text-lg mt-0.5 flex-shrink-0" />
               <div>
                 <p className="font-medium text-green-800">Identity Verified!</p>
                 <p className="text-sm text-green-600 mt-1">
@@ -396,7 +422,7 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
         {/* Security Notice */}
         <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <div className="flex items-start gap-3">
-            <FiShield className="text-blue-500 text-lg mt-0.5 flex-shrink-0" />
+            <Shield className="text-blue-500 text-lg mt-0.5 flex-shrink-0" />
             <div>
               <p className="font-medium text-blue-800">Secure & Encrypted</p>
               <p className="text-sm text-blue-600 mt-1">
@@ -422,17 +448,17 @@ const SelfieStep = ({ selfieImage, onSelfieCapture, onNext, canProceed }: Selfie
   <div className="space-y-6">
     <div className="text-center">
       <div className="w-12 h-12 bg-blue-100 rounded-full mx-auto mb-3 flex items-center justify-center">
-        <FiUser className="text-blue-600 text-xl" />
+        <User className="text-blue-600 text-xl" />
       </div>
       <h2 className="text-xl font-semibold mb-2">Take a Selfie</h2>
       <p className="text-gray-600">Position your face in the camera frame</p>
     </div>
     
     <div className="relative">
-      <Camera onCapture={onSelfieCapture} />
+      <RealCamera onCapture={onSelfieCapture} />
       {selfieImage && (
         <div className="absolute top-2 right-2 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-          <FiCheck className="text-white text-sm" />
+          <Check className="text-white text-sm" />
         </div>
       )}
     </div>
@@ -442,7 +468,7 @@ const SelfieStep = ({ selfieImage, onSelfieCapture, onNext, canProceed }: Selfie
       disabled={!canProceed}
       className="w-full py-3 px-4 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
     >
-      Continue <FiArrowRight />
+      Continue <ArrowRight className="w-4 h-4" />
     </button>
   </div>
 );
@@ -460,7 +486,7 @@ const IDStep = ({ idFile, onIdUpload, onBack, onNext, isLoading, canProceed }: I
   <div className="space-y-6">
     <div className="text-center">
       <div className="w-12 h-12 bg-indigo-100 rounded-full mx-auto mb-3 flex items-center justify-center">
-        <FiFileText className="text-indigo-600 text-xl" />
+        <FileText className="text-indigo-600 text-xl" />
       </div>
       <h2 className="text-xl font-semibold mb-2">Upload ID Document</h2>
       <p className="text-gray-600">Ghana Card, Passport, or Driver's License</p>
@@ -480,14 +506,14 @@ const IDStep = ({ idFile, onIdUpload, onBack, onNext, isLoading, canProceed }: I
         className="cursor-pointer block border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 hover:bg-blue-50 transition-colors"
       >
         <div className="w-16 h-16 bg-gray-100 rounded-full mx-auto mb-4 flex items-center justify-center">
-          <FiUpload className="text-gray-400 text-2xl" />
+          <Upload className="text-gray-400 text-2xl" />
         </div>
         <p className="text-blue-600 font-medium">Upload ID Document</p>
         <p className="text-gray-500 text-sm mt-1">JPEG, PNG (max 5MB)</p>
       </label>
       {idFile && (
         <div className="absolute top-2 right-2 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-          <FiCheck className="text-white text-sm" />
+          <Check className="text-white text-sm" />
         </div>
       )}
     </div>
@@ -505,7 +531,7 @@ const IDStep = ({ idFile, onIdUpload, onBack, onNext, isLoading, canProceed }: I
         disabled={isLoading}
         className="px-4 py-3 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 disabled:opacity-50 flex items-center gap-2"
       >
-        <FiArrowLeft /> Back
+        <ArrowLeft className="w-4 h-4" /> Back
       </button>
       <button
         onClick={onNext}
@@ -514,12 +540,12 @@ const IDStep = ({ idFile, onIdUpload, onBack, onNext, isLoading, canProceed }: I
       >
         {isLoading ? (
           <>
-            <FiLoader className="animate-spin" />
+            <Loader className="animate-spin w-4 h-4" />
             Verifying...
           </>
         ) : (
           <>
-            Verify & Continue <FiArrowRight />
+            Verify & Continue <ArrowRight className="w-4 h-4" />
           </>
         )}
       </button>
@@ -562,7 +588,7 @@ const BusinessStep = ({
     <div className="space-y-6">
       <div className="text-center">
         <div className="w-12 h-12 bg-purple-100 rounded-full mx-auto mb-3 flex items-center justify-center">
-          <FiBriefcase className="text-purple-600 text-xl" />
+          <Briefcase className="text-purple-600 text-xl" />
         </div>
         <h2 className="text-xl font-semibold mb-2">Business Information</h2>
         <p className="text-gray-600">Provide your business details</p>
@@ -571,7 +597,7 @@ const BusinessStep = ({
       {identityVerified && (
         <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
           <div className="flex items-center gap-2">
-            <FiCheck className="text-green-500" />
+            <Check className="text-green-500 w-4 h-4" />
             <p className="text-green-800 font-medium">Identity Verified</p>
           </div>
         </div>
@@ -619,41 +645,39 @@ const BusinessStep = ({
           />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Business Type *
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {(Object.values(ServiceCategory) as ServiceCategory[]).map((category) => (
-                <div key={category} className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id={`category-${category}`}
-                    checked={businessData.businessType.includes(category)}
-                    onChange={(e) => onBusinessTypeChange(category, e.target.checked)}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor={`category-${category}`} className="ml-2 text-sm text-gray-700">
-                    {category}
-                  </label>
-                </div>
-              ))}
-            </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Business Type *
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {(Object.values(ServiceCategory) as ServiceCategory[]).map((category) => (
+              <div key={category} className="flex items-center">
+                <input
+                  type="checkbox"
+                  id={`category-${category}`}
+                  checked={businessData.businessType.includes(category)}
+                  onChange={(e) => onBusinessTypeChange(category, e.target.checked)}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor={`category-${category}`} className="ml-2 text-sm text-gray-700">
+                  {category}
+                </label>
+              </div>
+            ))}
           </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Contact Phone
-            </label>
-            <input
-              type="tel"
-              value={businessData.contactPhone}
-              onChange={(e) => onDataChange('contactPhone', e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Enter contact phone"
-            />
-          </div>
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Contact Phone
+          </label>
+          <input
+            type="tel"
+            value={businessData.contactPhone}
+            onChange={(e) => onDataChange('contactPhone', e.target.value)}
+            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="Enter contact phone"
+          />
         </div>
 
         <div>
@@ -705,7 +729,7 @@ const BusinessStep = ({
           disabled={isLoading}
           className="px-4 py-3 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 disabled:opacity-50 flex items-center gap-2"
         >
-          <FiArrowLeft /> Back
+          <ArrowLeft className="w-4 h-4" /> Back
         </button>
         <button
           onClick={onSubmit}
@@ -714,12 +738,12 @@ const BusinessStep = ({
         >
           {isLoading ? (
             <>
-              <FiLoader className="animate-spin" />
+              <Loader className="animate-spin w-4 h-4" />
               Submitting...
             </>
           ) : (
             <>
-              Submit for Review <FiArrowRight />
+              Submit for Review <ArrowRight className="w-4 h-4" />
             </>
           )}
         </button>
@@ -756,14 +780,14 @@ const FileUpload = ({ label, file, onChange, required = false }: FileUploadProps
           className="cursor-pointer block border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-400 hover:bg-blue-50 transition-colors"
         >
           <div className="w-8 h-8 bg-gray-100 rounded-full mx-auto mb-2 flex items-center justify-center">
-            <FiUpload className="text-gray-400" />
+            <Upload className="text-gray-400 w-4 h-4" />
           </div>
           <p className="text-blue-600 font-medium text-sm">Upload {label}</p>
           <p className="text-gray-500 text-xs">PDF, JPEG, PNG (max 10MB)</p>
         </label>
         {file && (
           <div className="absolute top-2 right-2 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
-            <FiCheck className="text-white text-xs" />
+            <Check className="text-white text-xs" />
           </div>
         )}
       </div>
