@@ -2,14 +2,9 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import prisma from '@/app/libs/prismadb';
+import authOptions from '@/app/auth/authOptions';
 
-// Import authOptions - adjust this path to match your actual auth options file
-// Common locations:
-import { authOptions } from '@/app/api/auth/[...nextauth]/options';
-// or
-// import { authOptions } from '@/app/auth/authOptions';
-// or
-// import { authOptions } from '@/lib/auth';
+
 
 export async function GET(request: Request) {
   try {
