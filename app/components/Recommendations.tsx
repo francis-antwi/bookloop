@@ -63,9 +63,9 @@ export default function RecommendedListings({ currentUser }: RecommendedListings
 
   if (loading) {
     return (
-      <div className="my-10">
+      <div className="my-12">
         <h2 className="text-2xl font-semibold mb-4 text-gray-900">Recommended For You</h2>
-        <div className="flex items-center justify-center py-10 bg-gray-50 rounded-lg">
+        <div className="flex items-center justify-center py-12 bg-gray-50 rounded-lg">
           <FiLoader className="animate-spin text-2xl text-purple-600 mr-3" />
           <span className="text-gray-600">Loading personalized recommendations...</span>
         </div>
@@ -128,7 +128,7 @@ export default function RecommendedListings({ currentUser }: RecommendedListings
 
   return (
     <div className="my-12">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-semibold text-gray-900">Recommended For You</h2>
         <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
           {recommendations.length} {recommendations.length === 1 ? 'recommendation' : 'recommendations'}
