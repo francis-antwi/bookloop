@@ -72,23 +72,27 @@ const RealCamera = ({ onCapture }: { onCapture: (blob: Blob) => void }) => {
     try {
       setCameraError(null);
       const mediaStream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'user' } 
+        video: { 
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        } 
       });
       setStream(mediaStream);
       setIsCameraActive(true);
       
-      // Set the stream to the video element
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-        
-        // Wait for the video to load metadata before playing
-        videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play().catch(err => {
-            console.error("Error playing video:", err);
-            setCameraError('Failed to start camera');
-          });
-        };
-      }
+      // Wait for the next render cycle to ensure video element is available
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = mediaStream;
+          videoRef.current.onloadedmetadata = () => {
+            videoRef.current?.play().catch(err => {
+              console.error("Error playing video:", err);
+              setCameraError('Failed to start camera');
+            });
+          };
+        }
+      }, 100);
     } catch (error) {
       console.error("Camera access error:", error);
       setCameraError('Camera access denied or not available');
@@ -105,7 +109,7 @@ const RealCamera = ({ onCapture }: { onCapture: (blob: Blob) => void }) => {
   };
   
   const capturePhoto = () => {
-    if (!videoRef.current) return;
+    if (!videoRef.current || !stream) return;
     
     setIsCapturing(true);
     const canvas = document.createElement('canvas');
@@ -138,34 +142,39 @@ const RealCamera = ({ onCapture }: { onCapture: (blob: Blob) => void }) => {
           </div>
           <button
             onClick={startCamera}
-            className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+            className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
           >
             Open Camera
           </button>
         </div>
       ) : (
         <div className="space-y-4">
-          <video
-            ref={videoRef}
-            className="w-full max-w-sm mx-auto rounded-lg"
-            autoPlay
-            playsInline
-            muted
-          />
-          {cameraError && (
-            <div className="text-red-500 text-sm">{cameraError}</div>
-          )}
+          <div className="relative mx-auto max-w-sm">
+            <video
+              ref={videoRef}
+              className="w-full rounded-lg bg-black"
+              autoPlay
+              playsInline
+              muted
+              style={{ height: '240px', objectFit: 'cover' }}
+            />
+            {cameraError && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-70 text-white p-4 rounded-lg">
+                {cameraError}
+              </div>
+            )}
+          </div>
           <div className="flex gap-3 justify-center">
             <button
               onClick={stopCamera}
-              className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
+              className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={capturePhoto}
               disabled={isCapturing || !!cameraError}
-              className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50"
+              className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 transition-colors"
             >
               {isCapturing ? 'Capturing...' : 'Take Photo'}
             </button>
