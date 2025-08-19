@@ -301,68 +301,73 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
       setIsLoading(false);
     }
   };
+const submitBusinessVerification = async () => {
+  if (!businessFormData.tinNumber || 
+      !businessFormData.businessName || 
+      businessFormData.businessType.length === 0) {
+    toast.error('Please fill in all required business information');
+    return;
+  }
+  if (!businessFiles.tinCertificate) {
+    toast.error('TIN Certificate is required');
+    return;
+  }
 
-  const submitBusinessVerification = async () => {
-    if (!businessFormData.tinNumber || 
-        !businessFormData.businessName || 
-        businessFormData.businessType.length === 0) {
-      toast.error('Please fill in all required business information');
-      return;
+  setIsLoading(true);
+
+  try {
+    // Convert business types to enum format
+    const formattedBusinessTypes = businessFormData.businessType.map(type => {
+      // Convert to uppercase and replace spaces with underscores
+      return type.toUpperCase().replace(/\s+/g, '_');
+    });
+
+    const businessUploadFormData = new FormData();
+    businessUploadFormData.append('verificationStep', 'business');
+    
+    Object.entries(businessFiles).forEach(([key, file]) => {
+      if (file) businessUploadFormData.append(key, file);
+    });
+
+    const uploadResponse = await axios.post('/api/verify', businessUploadFormData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000
+    });
+
+    if (!uploadResponse.data.success) {
+      throw new Error(uploadResponse.data.error || 'Business document upload failed');
     }
-    if (!businessFiles.tinCertificate) {
-      toast.error('TIN Certificate is required');
-      return;
+
+    toast.success('Business documents uploaded!');
+
+    const finalRegistrationData = {
+      ...collectedData,
+      ...businessFormData,
+      businessType: formattedBusinessTypes, // Use the converted enum values
+      tinCertificateUrl: uploadResponse.data.tinCertificateUrl,
+      incorporationCertUrl: uploadResponse.data.incorporationCertUrl,
+      vatCertificateUrl: uploadResponse.data.vatCertificateUrl,
+      ssnitCertUrl: uploadResponse.data.ssnitCertUrl,
+      role: "PROVIDER",
+      isFullProviderRegistration: true,
+    };
+
+    const registerRes = await axios.post('/api/register', finalRegistrationData);
+    
+    if (!registerRes.data.success) {
+      throw new Error(registerRes.data.message || "Registration failed");
     }
 
-    setIsLoading(true);
-
-    try {
-      const businessUploadFormData = new FormData();
-      businessUploadFormData.append('verificationStep', 'business');
-      
-      Object.entries(businessFiles).forEach(([key, file]) => {
-        if (file) businessUploadFormData.append(key, file);
-      });
-
-      const uploadResponse = await axios.post('/api/verify', businessUploadFormData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 120000
-      });
-
-      if (!uploadResponse.data.success) {
-        throw new Error(uploadResponse.data.error || 'Business document upload failed');
-      }
-
-      toast.success('Business documents uploaded!');
-
-      const finalRegistrationData = {
-        ...collectedData,
-        ...businessFormData,
-        tinCertificateUrl: uploadResponse.data.tinCertificateUrl,
-        incorporationCertUrl: uploadResponse.data.incorporationCertUrl,
-        vatCertificateUrl: uploadResponse.data.vatCertificateUrl,
-        ssnitCertUrl: uploadResponse.data.ssnitCertUrl,
-        role: "PROVIDER",
-        isFullProviderRegistration: true,
-      };
-
-      const registerRes = await axios.post('/api/register', finalRegistrationData);
-      
-      if (!registerRes.data.success) {
-        throw new Error(registerRes.data.message || "Registration failed");
-      }
-
-      toast.success('Business verification submitted for review!');
-      router.push('/pending-approval');
-      onComplete();
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.error || error.message || 'Business verification failed';
-      toast.error(errorMsg);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+    toast.success('Business verification submitted for review!');
+    router.push('/pending-approval');
+    onComplete();
+  } catch (error: any) {
+    const errorMsg = error.response?.data?.error || error.message || 'Business verification failed';
+    toast.error(errorMsg);
+  } finally {
+    setIsLoading(false);
+  }
+};
   const nextStep = () => {
     if (currentStep === 'selfie' && selfieImageFile) {
       setCurrentStep('id');
