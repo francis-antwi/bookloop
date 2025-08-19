@@ -7,15 +7,16 @@ import ToasterProvider from "./providers/ToastProvider";
 import getCurrentUser from "./actions/getCurrentUser";
 import LoginModal from "./components/modals/LoginModal";
 import RentalModal from "./components/modals/RentalModal";
-import SearchModal from "./components/SearchModal";
+import SearchModal from "./components/modals/SearchModal"; // Fixed: added modals folder
 import SessionProviderWrapper from "./providers/SessionProviderWrapper";
 import Script from "next/script";
 import { getServerSession } from "next-auth";
 import { authOptions } from "./auth/authOptions";
+import { Metadata } from "next"; // Added proper type import
 
 const font = Nunito({ subsets: ["latin"] });
 
-export const metadata = {
+export const metadata: Metadata = { // Added proper typing
   title: "BookLoop Services",
   description:
     "BookLoop Services lets you book apartments, cars, event centers, restaurants, and appointments with ease. Explore flexible options, secure reservations, and real-time availability.",
@@ -41,7 +42,6 @@ export const metadata = {
     locale: "en_GH",
     type: "website",
   },
-
 };
 
 export default async function RootLayout({
@@ -49,20 +49,24 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // ✅ Get session via getServerSession (this should work with your authOptions)
+  // Get session via getServerSession
   const session = await getServerSession(authOptions);
 
-  // 🔍 Debug logging - remove in production
-  console.log("🔍 Layout session:", session);
-  console.log("🔍 Session user:", session?.user);
-
-  // ✅ Get current user from DB based on session
+  // Get current user from DB based on session
   let currentUser = null;
   try {
     currentUser = await getCurrentUser();
-    console.log("🔍 Current user from DB:", currentUser);
+    
+    // Only log in development
+    if (process.env.NODE_ENV === "development") {
+      console.log("🔍 Layout session:", session);
+      console.log("🔍 Session user:", session?.user);
+      console.log("🔍 Current user from DB:", currentUser);
+    }
   } catch (err) {
-    console.error("❌ Failed to fetch current user from DB:", err);
+    if (process.env.NODE_ENV === "development") {
+      console.error("❌ Failed to fetch current user from DB:", err);
+    }
   }
 
   return (
@@ -79,7 +83,7 @@ export default async function RootLayout({
             <div className="pb-20 pt-28">{children}</div>
           </Client>
 
-          {/* ✅ Tidio Chat Integration */}
+          {/* Tidio Chat Integration */}
           <Script
             src="//code.tidio.co/dph8r5uefv6snwp4etkml9rwp98eeed5.js"
             strategy="afterInteractive"
