@@ -4,7 +4,7 @@
 import bcrypt from "bcrypt";
 import prisma from "@/app/libs/prismadb";
 import { NextResponse } from "next/server";
-import { UserRole } from "@prisma/client";
+import { UserRole, ServiceCategory } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import authOptions from "@/app/auth/authOptions";
 
@@ -40,6 +40,34 @@ function parseDate(dateStr: string): Date | null {
   }
   console.log(`⚠️ [parseDate]: Failed to parse date: "${dateStr}". Returning null.`);
   return null;
+}
+
+// Function to validate and convert businessType to enum values
+function validateBusinessType(businessType: any): ServiceCategory[] {
+  if (!Array.isArray(businessType)) {
+    console.warn("⚠️ [validateBusinessType]: businessType is not an array:", businessType);
+    return [];
+  }
+
+  const validTypes: ServiceCategory[] = [];
+  
+  for (const type of businessType) {
+    // Check if the type is already a valid enum value
+    if (Object.values(ServiceCategory).includes(type as ServiceCategory)) {
+      validTypes.push(type as ServiceCategory);
+      continue;
+    }
+    
+    // Try to convert string to enum value
+    const normalizedType = type.toUpperCase().replace(/\s+/g, '_');
+    if (Object.values(ServiceCategory).includes(normalizedType as ServiceCategory)) {
+      validTypes.push(normalizedType as ServiceCategory);
+    } else {
+      console.warn(`⚠️ [validateBusinessType]: Invalid business type: ${type}`);
+    }
+  }
+  
+  return validTypes;
 }
 
 export async function POST(request: Request) {
@@ -145,6 +173,16 @@ export async function POST(request: Request) {
     const parsedExpiry = idExpiryDate ? parseDate(idExpiryDate) : null;
     const parsedIssue = idIssueDate ? parseDate(idIssueDate) : null;
 
+    // Validate and convert businessType to enum values
+    const validatedBusinessType = validateBusinessType(businessType);
+    if (businessType && validatedBusinessType.length === 0) {
+      console.warn("⚠️ [REGISTER]: No valid business types provided:", businessType);
+      return NextResponse.json({ 
+        error: "Invalid business types provided",
+        validTypes: Object.values(ServiceCategory)
+      }, { status: 400 });
+    }
+
     // Check if this is a full provider registration with verification data
     const hasVerificationData = !!(selfieImage || idImage || tinNumber || businessName);
     const isFullVerification = isFullProviderRegistration && hasVerificationData;
@@ -165,7 +203,7 @@ export async function POST(request: Request) {
       // Business verification checks
       if (!tinNumber) missing.push("tinNumber");
       if (!businessName) missing.push("businessName");
-      if (!businessType) missing.push("businessType");
+      if (validatedBusinessType.length === 0) missing.push("businessType");
       if (!tinCertificateUrl) missing.push("tinCertificateUrl");
 
       if (missing.length > 0) {
@@ -245,7 +283,7 @@ export async function POST(request: Request) {
     if (tinNumber !== undefined) { businessVerificationData.tinNumber = tinNumber; hasBusinessData = true; }
     if (registrationNumber !== undefined) { businessVerificationData.registrationNumber = registrationNumber; hasBusinessData = true; }
     if (businessName !== undefined) { businessVerificationData.businessName = businessName; hasBusinessData = true; }
-    if (businessType !== undefined) { businessVerificationData.businessType = businessType; hasBusinessData = true; }
+    if (validatedBusinessType.length > 0) { businessVerificationData.businessType = validatedBusinessType; hasBusinessData = true; }
     if (businessAddress !== undefined) { businessVerificationData.businessAddress = businessAddress; hasBusinessData = true; }
     if (tinCertificateUrl !== undefined) { businessVerificationData.tinCertificateUrl = tinCertificateUrl; hasBusinessData = true; }
     if (incorporationCertUrl !== undefined) { businessVerificationData.incorporationCertUrl = incorporationCertUrl; hasBusinessData = true; }
