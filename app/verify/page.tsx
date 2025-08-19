@@ -25,15 +25,27 @@ interface VerificationStepsProps {
 }
 
 enum ServiceCategory {
-  APARTMENTS = "Apartments",
-  CARS = "Cars",
-  EVENT_CENTERS = "Event Centers",
-  HOTEL_ROOMS = "Hotel Rooms",
-  TOUR_SERVICES = "Tour Services",
-  EVENT_TICKETS = "Event Tickets",
-  RESTAURANTS = "Restaurants",
-  APPOINTMENTS = "Appointments"
+  APARTMENTS = "APARTMENTS",
+  CARS = "CARS",
+  EVENT_CENTERS = "EVENT_CENTERS",
+  HOTEL_ROOMS = "HOTEL_ROOMS",
+  TOUR_SERVICES = "TOUR_SERVICES",
+  EVENT_TICKETS = "EVENT_TICKETS",
+  RESTAURANTS = "RESTAURANTS",
+  APPOINTMENTS = "APPOINTMENTS"
 }
+
+// Map for displaying user-friendly names
+const ServiceCategoryDisplay: Record<ServiceCategory, string> = {
+  [ServiceCategory.APARTMENTS]: "Apartments",
+  [ServiceCategory.CARS]: "Cars",
+  [ServiceCategory.EVENT_CENTERS]: "Event Centers",
+  [ServiceCategory.HOTEL_ROOMS]: "Hotel Rooms",
+  [ServiceCategory.TOUR_SERVICES]: "Tour Services",
+  [ServiceCategory.EVENT_TICKETS]: "Event Tickets",
+  [ServiceCategory.RESTAURANTS]: "Restaurants",
+  [ServiceCategory.APPOINTMENTS]: "Appointments"
+};
 
 interface BusinessFormData {
   tinNumber: string;
@@ -301,73 +313,70 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
       setIsLoading(false);
     }
   };
-const submitBusinessVerification = async () => {
-  if (!businessFormData.tinNumber || 
-      !businessFormData.businessName || 
-      businessFormData.businessType.length === 0) {
-    toast.error('Please fill in all required business information');
-    return;
-  }
-  if (!businessFiles.tinCertificate) {
-    toast.error('TIN Certificate is required');
-    return;
-  }
 
-  setIsLoading(true);
-
-  try {
-    // Convert business types to enum format
-    const formattedBusinessTypes = businessFormData.businessType.map(type => {
-      // Convert to uppercase and replace spaces with underscores
-      return type.toUpperCase().replace(/\s+/g, '_');
-    });
-
-    const businessUploadFormData = new FormData();
-    businessUploadFormData.append('verificationStep', 'business');
-    
-    Object.entries(businessFiles).forEach(([key, file]) => {
-      if (file) businessUploadFormData.append(key, file);
-    });
-
-    const uploadResponse = await axios.post('/api/verify', businessUploadFormData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 120000
-    });
-
-    if (!uploadResponse.data.success) {
-      throw new Error(uploadResponse.data.error || 'Business document upload failed');
+  const submitBusinessVerification = async () => {
+    if (!businessFormData.tinNumber || 
+        !businessFormData.businessName || 
+        businessFormData.businessType.length === 0) {
+      toast.error('Please fill in all required business information');
+      return;
+    }
+    if (!businessFiles.tinCertificate) {
+      toast.error('TIN Certificate is required');
+      return;
     }
 
-    toast.success('Business documents uploaded!');
+    setIsLoading(true);
 
-    const finalRegistrationData = {
-      ...collectedData,
-      ...businessFormData,
-      businessType: formattedBusinessTypes, // Use the converted enum values
-      tinCertificateUrl: uploadResponse.data.tinCertificateUrl,
-      incorporationCertUrl: uploadResponse.data.incorporationCertUrl,
-      vatCertificateUrl: uploadResponse.data.vatCertificateUrl,
-      ssnitCertUrl: uploadResponse.data.ssnitCertUrl,
-      role: "PROVIDER",
-      isFullProviderRegistration: true,
-    };
+    try {
+      const businessUploadFormData = new FormData();
+      businessUploadFormData.append('verificationStep', 'business');
+      
+      Object.entries(businessFiles).forEach(([key, file]) => {
+        if (file) businessUploadFormData.append(key, file);
+      });
 
-    const registerRes = await axios.post('/api/register', finalRegistrationData);
-    
-    if (!registerRes.data.success) {
-      throw new Error(registerRes.data.message || "Registration failed");
+      const uploadResponse = await axios.post('/api/verify', businessUploadFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 120000
+      });
+
+      if (!uploadResponse.data.success) {
+        throw new Error(uploadResponse.data.error || 'Business document upload failed');
+      }
+
+      toast.success('Business documents uploaded!');
+
+      const finalRegistrationData = {
+        ...collectedData,
+        ...businessFormData,
+        // Ensure businessType is properly formatted as enum values
+        businessType: businessFormData.businessType,
+        tinCertificateUrl: uploadResponse.data.tinCertificateUrl,
+        incorporationCertUrl: uploadResponse.data.incorporationCertUrl,
+        vatCertificateUrl: uploadResponse.data.vatCertificateUrl,
+        ssnitCertUrl: uploadResponse.data.ssnitCertUrl,
+        role: "PROVIDER",
+        isFullProviderRegistration: true,
+      };
+
+      const registerRes = await axios.post('/api/register', finalRegistrationData);
+      
+      if (!registerRes.data.success) {
+        throw new Error(registerRes.data.message || "Registration failed");
+      }
+
+      toast.success('Business verification submitted for review!');
+      router.push('/pending-approval');
+      onComplete();
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.error || error.message || 'Business verification failed';
+      toast.error(errorMsg);
+    } finally {
+      setIsLoading(false);
     }
+  };
 
-    toast.success('Business verification submitted for review!');
-    router.push('/pending-approval');
-    onComplete();
-  } catch (error: any) {
-    const errorMsg = error.response?.data?.error || error.message || 'Business verification failed';
-    toast.error(errorMsg);
-  } finally {
-    setIsLoading(false);
-  }
-};
   const nextStep = () => {
     if (currentStep === 'selfie' && selfieImageFile) {
       setCurrentStep('id');
@@ -776,7 +785,7 @@ const BusinessStep = ({
                     className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                   />
                   <label htmlFor={`category-${category}`} className="ml-2 text-sm text-gray-700">
-                    {category}
+                    {ServiceCategoryDisplay[category]}
                   </label>
                 </div>
               ))}
