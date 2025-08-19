@@ -261,8 +261,8 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
           <div className="w-16 h-16 bg-blue-500 rounded-full mx-auto mb-4 flex items-center justify-center">
             <FiShield className="text-white text-2xl" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Seller Verification</h1>
-          <p className="text-gray-600">Complete verification to start selling services</p>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Provider Verification</h1>
+          <p className="text-gray-600">Complete verification to start providing services</p>
         </div>
 
         {/* Progress Steps */}
