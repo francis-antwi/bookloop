@@ -128,7 +128,7 @@ export default function RecommendedListings({ currentUser }: RecommendedListings
 
   return (
     <div className="my-12">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between">
         <h2 className="text-2xl font-semibold text-gray-900">Recommended For You</h2>
         <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
           {recommendations.length} {recommendations.length === 1 ? 'recommendation' : 'recommendations'}
