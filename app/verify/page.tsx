@@ -370,8 +370,6 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
       router.push('/pending-approval');
       onComplete();
     } catch (error: any) {
-      const errorMsg = error.response?.data?.error || error.message || 'Business verification failed';
-      toast.error(errorMsg);
     } finally {
       setIsLoading(false);
     }
