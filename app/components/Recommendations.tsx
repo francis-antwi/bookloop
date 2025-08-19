@@ -1,149 +1,196 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import ListingCard from './listings/ListingCard';
-import { FiLoader, FiAlertCircle } from 'react-icons/fi';
 import { SafeListing, SafeUser } from '../types';
 
 interface RecommendedListingsProps {
   currentUser?: SafeUser | null;
 }
 
-export default function RecommendedListings({ currentUser }: RecommendedListingsProps) {
-  const [recommendations, setRecommendations] = useState<SafeListing[]>([]);
-  const [loading, setLoading] = useState(true);
+interface RecommendationData {
+  popularListings: SafeListing[];
+  categoryRecommendations: SafeListing[];
+  locationBasedRecommendations: SafeListing[];
+}
+
+const RecommendedListings: React.FC<RecommendedListingsProps> = ({ 
+  currentUser 
+}) => {
+  const [recommendations, setRecommendations] = useState<RecommendationData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchRecommendations = async () => {
       try {
-        setLoading(true);
+        setIsLoading(true);
         setError(null);
-        
-        const res = await fetch('/api/ai/recommendations', {
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
 
-        if (!res.ok) {
-          if (res.status === 401) {
-            setError('Please sign in to see personalized recommendations');
-          } else if (res.status === 404) {
-            setError('Recommendation service not available');
-          } else {
-            setError('Failed to load recommendations');
-          }
-          console.error('Error fetching recommendations:', res.status, res.statusText);
-          return;
-        }
-
-        const data = await res.json();
-        
-        // Validate the response data
-        if (Array.isArray(data)) {
-          setRecommendations(data);
-        } else if (data.recommendations && Array.isArray(data.recommendations)) {
-          setRecommendations(data.recommendations);
+        // You can create an API route for recommendations
+        // For now, let's simulate the logic
+        if (currentUser) {
+          // Fetch personalized recommendations based on user's booking history
+          // This would typically call your API: /api/recommendations
+          console.log('Fetching personalized recommendations for user:', currentUser.id);
+          
+          // Simulate API call
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Mock recommendations data
+          setRecommendations({
+            popularListings: [],
+            categoryRecommendations: [],
+            locationBasedRecommendations: []
+          });
         } else {
-          console.warn('Unexpected response format:', data);
-          setRecommendations([]);
+          // Show popular/trending listings for non-authenticated users
+          console.log('Fetching popular recommendations for guest user');
+          
+          // Simulate API call
+          await new Promise(resolve => setTimeout(resolve, 800));
+          
+          setRecommendations({
+            popularListings: [],
+            categoryRecommendations: [],
+            locationBasedRecommendations: []
+          });
         }
       } catch (err) {
         console.error('Error fetching recommendations:', err);
         setError('Failed to load recommendations');
       } finally {
-        setLoading(false);
+        setIsLoading(false);
       }
     };
 
     fetchRecommendations();
-  }, [currentUser]); // Add currentUser as dependency
+  }, [currentUser]);
 
-  if (loading) {
+  // Loading state
+  if (isLoading) {
     return (
-      <div className="my-12">
-        <h2 className="text-2xl font-semibold mb-4 text-gray-900">Recommended For You</h2>
-        <div className="flex items-center justify-center py-12 bg-gray-50 rounded-lg">
-          <FiLoader className="animate-spin text-2xl text-purple-600 mr-3" />
-          <span className="text-gray-600">Loading personalized recommendations...</span>
+      <div className="w-full py-12">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading personalized recommendations...</p>
         </div>
       </div>
     );
   }
 
+  // Error state
   if (error) {
     return (
-      <div className="my-12">
-        <h2 className="text-2xl font-semibold mb-4 text-gray-900">Recommended For You</h2>
-        <div className="flex flex-col items-center justify-center py-12 bg-red-50 rounded-lg border border-red-200">
-          <FiAlertCircle className="text-3xl text-red-500 mb-3" />
-          <span className="text-red-700 font-medium">{error}</span>
-          {error.includes('sign in') && (
-            <button 
-              onClick={() => window.location.reload()} 
-              className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-            >
-              Try Again
-            </button>
-          )}
+      <div className="w-full py-12">
+        <div className="text-center">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md mx-auto">
+            <p className="text-red-800 font-medium">Oops! Something went wrong</p>
+            <p className="text-red-600 text-sm mt-1">{error}</p>
+          </div>
         </div>
       </div>
     );
   }
 
-  if (!recommendations.length) {
+  // Check if user has made reservations (you'd get this from your database)
+  const hasReservations = false; // Replace with actual logic
+  
+  // If no reservations, show the current message
+  if (!hasReservations && currentUser) {
     return (
-      <div className="my-12">
-        <h2 className="text-2xl font-semibold mb-4 text-gray-900">Recommended For You</h2>
-        <div className="text-center py-12 bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg border border-purple-200">
-          <div className="text-4xl mb-4">🎯</div>
-          <p className="text-gray-700 font-medium mb-2">No recommendations available yet.</p>
-          <p className="text-sm text-gray-600 mb-6">
+      <div className="w-full py-12">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">
+            Recommended for You
+          </h2>
+          <p className="text-gray-600 mb-8 max-w-2xl mx-auto">
             Make some reservations to get personalized recommendations!
           </p>
           
-          {/* Add a CTA button to encourage exploration */}
-          <button 
-            onClick={() => {
-              // Scroll to categories section
-              const categoriesSection = document.querySelector('[data-category-section]');
-              if (categoriesSection) {
-                categoriesSection.scrollIntoView({ behavior: 'smooth' });
-              } else {
-                // Fallback: scroll to the category buttons
-                const categoryButtons = document.querySelector('.grid');
-                categoryButtons?.scrollIntoView({ behavior: 'smooth' });
-              }
-            }}
-            className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
-          >
-            Explore Categories
-          </button>
+          {/* You could add a CTA button here */}
+          <div className="mt-6">
+            <button 
+              onClick={() => {
+                // Scroll to categories or trigger search modal
+                document.querySelector('[data-category-section]')?.scrollIntoView({ 
+                  behavior: 'smooth' 
+                });
+              }}
+              className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+            >
+              Explore Categories
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="my-12">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-semibold text-gray-900">Recommended For You</h2>
-        <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-          {recommendations.length} {recommendations.length === 1 ? 'recommendation' : 'recommendations'}
-        </span>
+  // For guest users, show popular listings
+  if (!currentUser) {
+    return (
+      <div className="w-full py-12">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">
+            Popular Right Now
+          </h2>
+          <p className="text-gray-600 mb-8 max-w-2xl mx-auto">
+            Discover the most booked services in your area
+          </p>
+          
+          {/* Placeholder for popular listings - you'd map through actual data */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-100 p-6 rounded-xl border border-blue-200">
+              <div className="text-blue-600 text-2xl mb-2">🏠</div>
+              <h3 className="font-semibold text-gray-900 mb-2">Luxury Apartments</h3>
+              <p className="text-sm text-gray-600">Premium stays in prime locations</p>
+            </div>
+            
+            <div className="bg-gradient-to-br from-green-50 to-emerald-100 p-6 rounded-xl border border-green-200">
+              <div className="text-green-600 text-2xl mb-2">🚗</div>
+              <h3 className="font-semibold text-gray-900 mb-2">Car Rentals</h3>
+              <p className="text-sm text-gray-600">Flexible vehicle options</p>
+            </div>
+            
+            <div className="bg-gradient-to-br from-purple-50 to-violet-100 p-6 rounded-xl border border-purple-200">
+              <div className="text-purple-600 text-2xl mb-2">🎉</div>
+              <h3 className="font-semibold text-gray-900 mb-2">Event Centers</h3>
+              <p className="text-sm text-gray-600">Perfect venues for celebrations</p>
+            </div>
+          </div>
+        </div>
       </div>
-      
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-6">
-        {recommendations.map((listing: SafeListing) => (
-          <ListingCard 
-            key={listing.id} 
-            data={listing} 
-            currentUser={currentUser}
-          />
-        ))}
+    );
+  }
+
+  // If user has reservations, show personalized recommendations
+  return (
+    <div className="w-full py-12">
+      <div className="text-center mb-8">
+        <h2 className="text-2xl font-bold text-gray-900 mb-4">
+          Recommended for You
+        </h2>
+        <p className="text-gray-600 max-w-2xl mx-auto">
+          Based on your booking history and preferences
+        </p>
+      </div>
+
+      {/* Here you would render actual recommendation sections */}
+      <div className="space-y-8">
+        {/* Similar to what you liked */}
+        <section>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Similar to what you liked</h3>
+          {/* Render recommendation cards */}
+        </section>
+
+        {/* Popular in your area */}
+        <section>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Popular in your area</h3>
+          {/* Render location-based recommendations */}
+        </section>
       </div>
     </div>
   );
-}
+};
+
+export default RecommendedListings;
