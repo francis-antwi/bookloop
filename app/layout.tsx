@@ -7,7 +7,7 @@ import ToasterProvider from "./providers/ToastProvider";
 import getCurrentUser from "./actions/getCurrentUser";
 import LoginModal from "./components/modals/LoginModal";
 import RentalModal from "./components/modals/RentalModal";
-import SearchModal from "./components/modals/SearchModal"; // Fixed: added modals folder
+import SearchModal from "./components/SearchModal";
 import SessionProviderWrapper from "./providers/SessionProviderWrapper";
 import Script from "next/script";
 import { getServerSession } from "next-auth";
