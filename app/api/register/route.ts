@@ -152,7 +152,10 @@ export async function POST(request: Request) {
 
     // Check for existing users
     const [existingUserByEmail, existingUserByPhone] = await Promise.all([
-      userEmail ? prisma.user.findUnique({ where: { email: userEmail } }) : null,
+      userEmail ? prisma.user.findUnique({ 
+        where: { email: userEmail },
+        include: { businessVerification: true }
+      }) : null,
       contactPhone ? prisma.user.findUnique({ where: { contactPhone } }) : null
     ]);
 
@@ -237,12 +240,12 @@ export async function POST(request: Request) {
     // Set verification status based on role and registration type
     if (actualRole === UserRole.PROVIDER) {
       if (isFullVerification) {
-        // Complete provider registration
+        // Complete provider registration - AUTO-APPROVE categories
         userData.isFaceVerified = (typeof faceConfidence === 'number' && faceConfidence >= 0.5);
-        userData.verified = false; // Still needs admin approval
-        userData.requiresApproval = true;
-        userData.status = "PENDING_REVIEW";
-        userData.businessVerified = false;
+        userData.verified = true; // Auto-verified since categories are auto-approved
+        userData.requiresApproval = false; // No approval needed
+        userData.status = "ACTIVE"; // Immediately active
+        userData.businessVerified = true; // Business is verified
       } else {
         // Partial provider registration (basic info only)
         userData.isFaceVerified = false;
@@ -277,13 +280,17 @@ export async function POST(request: Request) {
     if (idType !== undefined) userData.idType = idType;
     if (rawText !== undefined) userData.rawText = rawText;
 
-    // Prepare business verification data
+    // Prepare business verification data - AUTO-APPROVE selected categories
     const businessVerificationData: any = {};
     let hasBusinessData = false;
     if (tinNumber !== undefined) { businessVerificationData.tinNumber = tinNumber; hasBusinessData = true; }
     if (registrationNumber !== undefined) { businessVerificationData.registrationNumber = registrationNumber; hasBusinessData = true; }
     if (businessName !== undefined) { businessVerificationData.businessName = businessName; hasBusinessData = true; }
-    if (validatedBusinessType.length > 0) { businessVerificationData.businessType = validatedBusinessType; hasBusinessData = true; }
+    if (validatedBusinessType.length > 0) { 
+      businessVerificationData.businessType = validatedBusinessType; 
+      businessVerificationData.allowedCategories = validatedBusinessType; // AUTO-APPROVE: Set allowedCategories to match businessType
+      hasBusinessData = true; 
+    }
     if (businessAddress !== undefined) { businessVerificationData.businessAddress = businessAddress; hasBusinessData = true; }
     if (tinCertificateUrl !== undefined) { businessVerificationData.tinCertificateUrl = tinCertificateUrl; hasBusinessData = true; }
     if (incorporationCertUrl !== undefined) { businessVerificationData.incorporationCertUrl = incorporationCertUrl; hasBusinessData = true; }
@@ -292,7 +299,8 @@ export async function POST(request: Request) {
     
     if (hasBusinessData) {
       businessVerificationData.submittedAt = new Date();
-      businessVerificationData.verified = false;
+      businessVerificationData.verified = true; // Auto-verify since categories are auto-approved
+      businessVerificationData.verificationNotes = "Auto-approved during registration";
     }
 
     // Handle Google auth user update
@@ -399,11 +407,17 @@ export async function POST(request: Request) {
 function getSuccessMessage(role: UserRole, isFullVerification: boolean, isUpdate: boolean): string {
   if (role === UserRole.PROVIDER) {
     if (isFullVerification) {
-      return isUpdate ? "Provider verification submitted successfully. Awaiting admin approval." : "Provider account created with verification. Awaiting admin approval.";
+      return isUpdate 
+        ? "Provider verification completed successfully! Your business categories have been auto-approved." 
+        : "Provider account created successfully! Your business categories have been auto-approved.";
     } else {
-      return isUpdate ? "Provider account updated. Please complete verification." : "Provider account created. Please complete verification.";
+      return isUpdate 
+        ? "Provider account updated. Please complete verification." 
+        : "Provider account created. Please complete verification.";
     }
   } else {
-    return isUpdate ? "Customer account updated successfully." : "Customer account created successfully.";
+    return isUpdate 
+      ? "Customer account updated successfully." 
+      : "Customer account created successfully.";
   }
 }
