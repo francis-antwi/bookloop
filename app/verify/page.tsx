@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { 
   Upload, 
   Check, 
@@ -51,12 +51,21 @@ interface IdentityVerificationStatus {
   error?: string;
 }
 
-// Real Camera Component
+// Fixed Camera Component
 const RealCamera = ({ onCapture }: { onCapture: (blob: Blob) => void }) => {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(false);
-  const videoRef = useState<HTMLVideoElement | null>(null)[0];
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  
+  // Clean up the camera stream when component unmounts
+  useEffect(() => {
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [stream]);
   
   const startCamera = async () => {
     try {
@@ -66,14 +75,20 @@ const RealCamera = ({ onCapture }: { onCapture: (blob: Blob) => void }) => {
       setStream(mediaStream);
       setIsCameraActive(true);
       
-      if (videoRef) {
-        videoRef.srcObject = mediaStream;
+      // Set the stream to the video element
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+        // Play the video to ensure it starts
+        videoRef.current.play().catch(err => {
+          console.error("Error playing video:", err);
+        });
       }
     } catch (error) {
+      console.error("Camera access error:", error);
       alert('Camera access denied or not available');
     }
   };
-
+  
   const stopCamera = () => {
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
@@ -81,17 +96,22 @@ const RealCamera = ({ onCapture }: { onCapture: (blob: Blob) => void }) => {
       setIsCameraActive(false);
     }
   };
-
+  
   const capturePhoto = () => {
-    if (!videoRef) return;
+    if (!videoRef.current) return;
     
     setIsCapturing(true);
     const canvas = document.createElement('canvas');
-    canvas.width = videoRef.videoWidth;
-    canvas.height = videoRef.videoHeight;
+    canvas.width = videoRef.current.videoWidth;
+    canvas.height = videoRef.current.videoHeight;
     
-    const ctx = canvas.getContext('2d')!;
-    ctx.drawImage(videoRef, 0, 0);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      setIsCapturing(false);
+      return;
+    }
+    
+    ctx.drawImage(videoRef.current, 0, 0);
     
     canvas.toBlob((blob) => {
       if (blob) {
@@ -101,7 +121,7 @@ const RealCamera = ({ onCapture }: { onCapture: (blob: Blob) => void }) => {
       setIsCapturing(false);
     }, 'image/jpeg', 0.8);
   };
-
+  
   return (
     <div className="bg-gray-100 rounded-lg p-4 text-center">
       {!isCameraActive ? (
@@ -119,12 +139,7 @@ const RealCamera = ({ onCapture }: { onCapture: (blob: Blob) => void }) => {
       ) : (
         <div className="space-y-4">
           <video
-            ref={(ref) => {
-              if (ref && stream) {
-                ref.srcObject = stream;
-                ref.play();
-              }
-            }}
+            ref={videoRef}
             className="w-full max-w-sm mx-auto rounded-lg"
             autoPlay
             playsInline
@@ -157,7 +172,6 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
   const [idImageFile, setIdImageFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [identityVerificationStatus, setIdentityVerificationStatus] = useState<IdentityVerificationStatus | null>(null);
-
   const [businessFormData, setBusinessFormData] = useState<BusinessFormData>({
     tinNumber: '',
     registrationNumber: '',
@@ -166,7 +180,6 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
     businessAddress: '',
     contactPhone: '',
   });
-
   const [businessFiles, setBusinessFiles] = useState<BusinessFiles>({
     tinCertificate: null,
     incorporationCert: null,
@@ -240,10 +253,8 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
       alert('Please complete all identity verification steps');
       return;
     }
-
     setIsLoading(true);
     setIdentityVerificationStatus(null);
-
     try {
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 2000));
@@ -253,11 +264,9 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
         success: true, 
         confidence: 95
       });
-
       setTimeout(() => {
         setCurrentStep('business');
       }, 1500);
-
     } catch (error: any) {
       setIdentityVerificationStatus({ success: false, error: 'Verification failed' });
     } finally {
@@ -276,9 +285,7 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
       alert('TIN Certificate is required');
       return;
     }
-
     setIsLoading(true);
-
     try {
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 2000));
@@ -367,7 +374,6 @@ const VerificationSteps = ({ onComplete }: VerificationStepsProps) => {
             </div>
           </div>
         )}
-
         {identityVerificationStatus?.success === true && currentStep === 'id' && (
           <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
             <div className="flex items-start gap-3">
