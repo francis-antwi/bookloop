@@ -76,7 +76,7 @@ const ListingCard: React.FC<ListingCardProps> = ({
       onClick={() => router.push(`/listings/${data.id}`)}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className="group cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl  z-0"
+      className="group cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl mt-20 z-0"
     >
       <div className="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100">
         {/* Image Section */}
