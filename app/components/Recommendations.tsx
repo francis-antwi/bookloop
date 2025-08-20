@@ -63,7 +63,7 @@ export default function RecommendedListings({ currentUser }: RecommendedListings
 
   if (loading) {
     return (
-      <div className="my-12">
+      <div className="my-10">
         <h2 className="text-2xl font-semibold mb-4 text-gray-900">Recommended For You</h2>
         <div className="flex items-center justify-center py-12 bg-gray-50 rounded-lg">
           <FiLoader className="animate-spin text-2xl text-purple-600 mr-3" />
@@ -75,7 +75,7 @@ export default function RecommendedListings({ currentUser }: RecommendedListings
 
   if (error) {
     return (
-      <div className="my-12">
+      <div className="my-10">
         <h2 className="text-2xl font-semibold mb-4 text-gray-900">Recommended For You</h2>
         <div className="flex flex-col items-center justify-center py-12 bg-red-50 rounded-lg border border-red-200">
           <FiAlertCircle className="text-3xl text-red-500 mb-3" />
@@ -100,7 +100,7 @@ export default function RecommendedListings({ currentUser }: RecommendedListings
         <div className="text-center py-12 bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg border border-purple-200">
           <div className="text-4xl mb-4">🎯</div>
           <p className="text-gray-700 font-medium mb-2">No recommendations available yet.</p>
-          <p className="text-sm text-gray-600 mb-6">
+          <p className="text-sm text-gray-600 mb-2">
             Make some reservations to get personalized recommendations!
           </p>
           
@@ -127,8 +127,8 @@ export default function RecommendedListings({ currentUser }: RecommendedListings
   }
 
   return (
-    <div className="my-12">
-      <div className="flex items-center justify-between mb-6">
+    <div className="my-10">
+      <div className="flex items-center justify-between mb-2">
         <h2 className="text-2xl font-semibold text-gray-900">Recommended For You</h2>
         <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
           {recommendations.length} {recommendations.length === 1 ? 'recommendation' : 'recommendations'}
