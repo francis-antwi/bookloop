@@ -71,7 +71,7 @@ export default function RecommendedListings() {
 
   if (!recommendations.length) {
     return (
-      <div className="my-12">
+      <div className="my-12 mt-15">
         <h2 className="text-2xl font-semibold mb-4">Recommended For You</h2>
         <div className="text-center py-8 text-gray-500">
           <p>No recommendations available yet.</p>
